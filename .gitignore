@@ -26,3 +26,6 @@ secrets*
 artifacts/
 dist/
 build/
+
+# Game saves
+saves/

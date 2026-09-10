@@ -2,16 +2,16 @@
 
 Rule: a phase is done only when every checkpoint is checked **and verified by actually running the thing**. Don't start the next phase before that (`/phase-gate`). Details in docs/PLAN.md §6.
 
-## Phase 0 — Scaffold ← CURRENT
+## Phase 0 — Scaffold (done 2026-09-11)
 requirements.txt (pygame-ce, numpy, opensimplex, pytest), run.bat, settings.py, empty packages,
 conftest.py (SDL dummy driver), CLAUDE.md commands updated.
 - [x] Folder scaffold: docs, skills, git
 - [x] Scope confirmed with John (docs/PLAN.md, idea.txt)
 - [x] Stack decided: Python 3.12 + pygame-ce + numpy + opensimplex
-- [ ] python main.py opens a window and quits cleanly
-- [ ] pytest passes (placeholder test)
+- [x] python main.py opens a window and quits cleanly
+- [x] pytest passes (placeholder test)
 
-## Phase 1 — Walkable skeleton
+## Phase 1 — Walkable skeleton ← CURRENT
 Terrain/Chunk/Generator (dark-green checker + shade noise, deposits 1-9 as digits, spawn clearing),
 Camera pan (WASD + middle-drag) and cursor-anchored discrete zoom, per-zoom cached chunk blits,
 keep/unload hysteresis, F3 debug overlay.

@@ -8,7 +8,7 @@ Design is finalized and approved — @docs/PLAN.md is the authority.
 
 ## On "start" / "continue" / "go"
 1. Read HANDOFF.md, docs/PLAN.md, docs/PHASES.md — in that order.
-2. Resume at the first unchecked checkpoint in docs/PHASES.md (currently Phase 0).
+2. Resume at the first unchecked checkpoint in docs/PHASES.md (the phase marked ← CURRENT).
 3. Tick checkboxes and refresh HANDOFF.md as work completes.
 4. Stop and demo at each phase boundary before starting the next phase (`/phase-gate`).
 
@@ -31,9 +31,12 @@ Design is finalized and approved — @docs/PLAN.md is the authority.
 - Gameplay never writes terrain; nest destruction goes through the registry.
 
 ## Architecture map
-No code yet. Add one line per file as files are created, stating what that file owns.
-Planned layout: main.py / game.py / settings.py + world/ + sim/ + render/ + ui/ + tests/
-(see @docs/PLAN.md §1).
+Add one line per file as files are created, stating what that file owns (layout: @docs/PLAN.md §1).
+- `main.py` — entry point: pygame init, window, `--seed/--frames/--fullscreen` flags, launches the loop
+- `settings.py` — every tunable (grid, timestep, zoom, economy, belts, leveling, gen, combat, colors); pygame-free
+- `conftest.py` — forces SDL dummy drivers so pytest runs headless
+- `world/tiles.py` — tile-id registry (ground shades 0-5, DEPOSIT_1..9 = 11..19, NEST_GROUND/CORE) + predicates
+- `tests/test_smoke.py` — settings sanity, tile ids, headless window open/quit
 
 ## Project rules
 - Discover a trap → log it in @docs/GOTCHAS.md immediately (`/gotcha`).

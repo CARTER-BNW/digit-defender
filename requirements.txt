@@ -1,1 +1,5 @@
 # Keep deps minimal — add as needed
+pygame-ce>=2.5
+numpy>=1.26
+opensimplex>=0.4
+pytest>=8
