@@ -50,20 +50,20 @@ formulas, structure info panel (level, invested, hp bar, next threshold), damage
 - [x] Side-rule color coding in ghost preview (input green / output red / feed yellow) — also on the selected structure
 - [ ] Design calls confirmed with John: feed-side rules, void-<=0 results (implemented per PLAN; John to confirm or change)
 
-## Phase 5 — Combat ← CURRENT
+## Phase 5 — Combat (built 2026-09-11, verified by script; John to play-test)
 5a Walls + towers (belt-fed ammo, number lasers) + debug enemy -> kill it
 5b Waves: timer, budget scaling, spawn ring, greedy+bump pathing, damage, hub death = game over screen
 5c Flow-field pathing (shared BFS from hub); enemies route around walls, chew through when enclosed
 5d Spawners + units (ranged/melee/heavy; rally point). RANGED/HEAVY SHOTS DEBIT BALANCE by fired value;
    balance too low -> hold fire; melee free
 5e Nests: region-gen visuals, aggro raids, destruction bounty, destroyed-set persists
-- [ ] Survive 5 waves with walls+towers
-- [ ] Lose on purpose -> game over -> reload works
-- [ ] Ranged units drain balance while firing; stop at 0
-- [ ] Destroy a nest; stays dead after reload
-- [ ] Save mid-wave loads sanely (transient units dropped, timer intact)
-- [ ] test_combat green
+- [x] Survive 5 waves with walls+towers (scripted: wall ring + 4 belt-fed towers, 28 kills, hub untouched, 1 wall lost)
+- [x] Lose on purpose -> game over -> reload works (overlay, [L] reloads the last save; dead state never saved)
+- [x] Ranged units drain balance while firing; stop at 0
+- [x] Destroy a nest; stays dead after reload (bounty paid, rubble rendered, no more raids)
+- [x] Save mid-wave loads sanely (transient units dropped, timer intact)
+- [x] test_combat green (12 tests; 91 total)
 
-## Phase 6 — Polish (stretch)
+## Phase 6 — Polish (stretch) ← CURRENT
 Belt-item render interpolation, sounds, minimap, stats graphs, drag-place belts, copy/paste
 blueprints, pause/speed controls, balance pass.

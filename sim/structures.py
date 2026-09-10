@@ -21,7 +21,8 @@ Every structure has to_dict()/from_dict() from day one (save/load).
 from collections import deque
 
 from settings import (COSTS, ITEM_SPACING, MINER_BASE_PERIOD, MACHINE_BASE_PERIOD,
-                      MACHINE_BUFFER, TOWER_AMMO_MAX)
+                      MACHINE_BUFFER, TOWER_AMMO_MAX, TOWER_RANGE, TOWER_BASE_PERIOD,
+                      TOWER_DMG_LEVEL_MULT, SPAWNER_BASE_PERIOD, SPAWNER_UNIT_CAP)
 from sim import leveling
 
 N, E, S, W = 0, 1, 2, 3
@@ -388,6 +389,29 @@ class Tower(Structure):
     def label(self):
         return str(len(self.ammo)) if self.ammo else None
 
+    @property
+    def period(self):
+        return leveling.period(TOWER_BASE_PERIOD, self.invested)
+
+    def damage_for(self, value):
+        return int(round(value * (1 + TOWER_DMG_LEVEL_MULT * (self.level - 1))))
+
+    def tick(self, factory):
+        """Fire the next ammo number at the nearest enemy in range."""
+        if self.timer > 0:
+            self.timer -= 1
+            return
+        combat = factory.combat
+        if combat is None or not self.ammo:
+            return
+        cx, cy = self.x + 0.5, self.y + 0.5
+        enemy = combat.nearest_enemy(cx, cy, TOWER_RANGE)
+        if enemy is None:
+            return
+        value = self.ammo.popleft()
+        combat.hit_unit(enemy, self.damage_for(value), source=(cx, cy), value=value, side=1)
+        self.timer = self.period
+
     def to_dict(self):
         d = super().to_dict()
         d["ammo"] = list(self.ammo)
@@ -400,25 +424,59 @@ class Tower(Structure):
 
 
 class Spawner(Structure):
-    """Spawns player units at its front tile on a timer (Phase 5)."""
-    __slots__ = ("timer",)
+    """Spawns player units at its front tile on a timer, up to a cap that
+    grows with level; units gather at the rally point (right-click)."""
+    __slots__ = ("timer", "rally")
     UNIT = None
     SIDE_ROLES = (ROLE_OUT, ROLE_FEED, ROLE_FEED, ROLE_FEED)
 
     def __init__(self, x, y, direction=S):
         super().__init__(x, y, direction)
-        self.timer = 0
+        self.timer = SPAWNER_BASE_PERIOD // 4
+        self.rally = None
 
     def label(self):
         return self.UNIT[0].upper()
 
+    @property
+    def period(self):
+        return leveling.period(SPAWNER_BASE_PERIOD, self.invested)
+
+    @property
+    def cap(self):
+        return SPAWNER_UNIT_CAP + (self.level - 1)
+
+    def rally_point(self):
+        if self.rally is not None:
+            return tuple(self.rally)
+        fx, fy = self.front_tile()
+        dx, dy = DIR_VEC[self.direction]
+        return (fx + 0.5 + dx, fy + 0.5 + dy)
+
+    def tick(self, factory):
+        combat = factory.combat
+        if combat is None:
+            return
+        if self.timer > 0:
+            self.timer -= 1
+            return
+        if combat.count_units_of(self) >= self.cap:
+            return
+        fx, fy = self.front_tile()
+        combat.spawn_unit(self.UNIT, fx + 0.5, fy + 0.5, level=self.level, owner=self,
+                          rally=self.rally_point())
+        self.timer = self.period
+
     def to_dict(self):
         d = super().to_dict()
         d["timer"] = self.timer
+        d["rally"] = list(self.rally) if self.rally is not None else None
         return d
 
     def _load_extra(self, d):
         self.timer = int(d.get("timer", 0))
+        r = d.get("rally")
+        self.rally = (float(r[0]), float(r[1])) if r else None
 
 
 class SpawnerRanged(Spawner):

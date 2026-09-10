@@ -6,11 +6,15 @@ whole ticks; rendering runs at FPS.
 import pygame
 
 from settings import (FPS, TICK_DT, MAX_TICKS_PER_FRAME, CAMERA_SPEED,
-                      CAMERA_FAST_MULT, WINDOW_W, WINDOW_H, TILE_SIZE, AUTOSAVE_S)
+                      CAMERA_FAST_MULT, WINDOW_W, WINDOW_H, TILE_SIZE, AUTOSAVE_S,
+                      CHUNK_SIZE)
 from world.terrain import Terrain
 from world import persistence
 from sim.factory import Factory
 from sim.nests import NestRegistry
+from sim.combat import Combat
+from sim.structures import Spawner
+from sim import nests as nestmod
 from sim.structures import E, DIR_VEC, Belt
 from render.camera import Camera
 from render.renderer import Renderer
@@ -37,6 +41,9 @@ class Game:
         else:
             self.factory = self._new_factory()
         self.nests = NestRegistry.from_dict(enemies or {})
+        wave = (meta or {}).get("wave")
+        self.combat = Combat(self.factory, seed, nests=self.nests, wave=wave,
+                             raids=(wave or {}).get("raids"))
         self.autosave_s = AUTOSAVE_S
         self.autosave_t = 0.0
         w, h = screen.get_size()
@@ -46,6 +53,7 @@ class Game:
             self.camera.x, self.camera.y = float(cam[0]), float(cam[1])
             self.camera.zoom_index = max(0, min(len(__import__("settings").ZOOM_LEVELS) - 1, int(cam[2])))
         self.renderer = Renderer(screen)
+        self.renderer.nests = self.nests
         self.hud = Hud(screen)
         self.clock = pygame.time.Clock()
         self.running = True
@@ -91,8 +99,8 @@ class Game:
         return True
 
     def wave_state(self):
-        """Serializable wave timer (Phase 5)."""
-        return None
+        """Serializable wave timer + raid counters (units are transient)."""
+        return self.combat.to_dict()
 
     @property
     def tick_count(self):
@@ -109,8 +117,8 @@ class Game:
             self.frame += 1
             if max_frames is not None and self.frame >= max_frames:
                 self.running = False
-        if self.meta is not None:
-            self.save()
+        if self.meta is not None and not self.game_over:
+            self.save()                          # never overwrite a save with a dead base
         return self.result
 
     def handle_events(self):
@@ -131,8 +139,16 @@ class Game:
             elif event.button == 1:
                 self._left_click(event.pos)
             elif event.button == 3:
-                self.set_tool(None)
-                self.selected = None
+                if self.tool is None and isinstance(self.selected, Spawner):
+                    wx, wy = self.camera.screen_to_world(*event.pos)
+                    self.selected.rally = (wx / TILE_SIZE, wy / TILE_SIZE)
+                    for u in self.combat.units:
+                        if u.owner is self.selected:
+                            u.rally = self.selected.rally
+                    self.hud.message("Rally point set", 1.2)
+                else:
+                    self.set_tool(None)
+                    self.selected = None
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 2:
                 self.dragging = False
@@ -151,6 +167,14 @@ class Game:
 
     def _key_down(self, event):
         key = event.key
+        if self.game_over:
+            if key == pygame.K_l:
+                self.result = "reload"
+                self.running = False
+            elif key == pygame.K_ESCAPE:
+                self.result = "menu"
+                self.running = False
+            return
         if key == pygame.K_ESCAPE:
             if self.tool is not None:
                 self.set_tool(None)
@@ -178,6 +202,11 @@ class Game:
             self.pick()
         elif key == pygame.K_h:
             self.repair()
+        elif key == pygame.K_F6:                 # debug: spawn an enemy at the cursor
+            tx, ty = self.hover_tile
+            self.combat.spawn_enemy("grunt", tx + 0.5, ty + 0.5)
+        elif key == pygame.K_F7:                 # debug: next wave now
+            self.combat.wave.next_at_tick = self.factory.tick_count
 
     # ---- build mode ------------------------------------------------------
 
@@ -282,9 +311,11 @@ class Game:
             if n == MAX_TICKS_PER_FRAME:
                 self.acc = 0.0
         for ev in self.factory.events:
-            if ev[0] == "target":
-                self.hud.message(f"Target {ev[1]} delivered: +{ev[2]} bonus!")
+            self._on_event(ev)
         self.factory.events.clear()
+        if self.factory.hub_destroyed and not self.game_over:
+            self.game_over = True
+            self.set_tool(None)
         self.hud.update(dt)
         if self.meta is not None:
             self.autosave_t += dt
@@ -296,6 +327,25 @@ class Game:
 
     def tick(self):
         self.factory.tick()
+
+    def _on_event(self, ev):
+        kind = ev[0]
+        if kind == "target":
+            self.hud.message(f"Target {ev[1]} delivered: +{ev[2]} bonus!")
+        elif kind == "wave":
+            self.hud.message(f"Wave {ev[1]}: {ev[2]} enemies incoming!", 4)
+        elif kind == "raid":
+            self.hud.message(f"Nest raid: {ev[3]} enemies!", 4)
+        elif kind == "nest_aggro":
+            self.hud.message("A nest noticed your base...", 4)
+        elif kind == "nest_destroyed":
+            self.hud.message(f"Nest destroyed! Bounty +{ev[5]}", 5)
+            cx, cy = ev[3] // CHUNK_SIZE, ev[4] // CHUNK_SIZE
+            chunk = self.terrain.peek_chunk(cx, cy)
+            if chunk is not None:
+                chunk.invalidate()
+        elif kind == "destroyed":
+            self.hud.message(f"{ev[1]} at ({ev[2]}, {ev[3]}) destroyed", 2)
 
     def _pan_keys(self, dt):
         keys = pygame.key.get_pressed()
@@ -324,9 +374,12 @@ class Game:
         return self.tool, tx, ty, self.build_dir, ok, COSTS.get(self.tool, 0)
 
     def debug_lines(self):
-        f = self.factory
+        f, c = self.factory, self.combat
         return [f"structures {f.count()}  belts {len(f.belts)}  miners {len(f.miners)}  "
-                f"machines {len(f.machines)}  delivered {f.stats['delivered']}  voided {f.stats['voided']}"]
+                f"machines {len(f.machines)}  delivered {f.stats['delivered']}  voided {f.stats['voided']}",
+                f"enemies {len(c.enemies)}  units {len(c.units)}  kills {c.stats['kills']}  wave {c.wave.number} "
+                f"in {c.seconds_to_wave():.0f}s  nests known {len(c.known_nests)} active {len(c.active_nests)}  "
+                f"[F6] spawn enemy  [F7] wave now"]
 
     def toggle_fullscreen(self):
         self.fullscreen = not self.fullscreen

@@ -27,6 +27,11 @@ _Last updated: 2026-09-11 (v3) by Claude_
   sprites, health bars for damaged structures (Factory.damaged), Factory.damage/repair. 77 tests green.
 - Phase 4 verification (scratch verify_phase4.py): head-on feed -> belt Lv4 at 2.57 tiles/s; back-fed adder 40 -> 23 ticks/op; repair 120 hp = 24.
 - Housekeeping: config.json (machine prefs) untracked + gitignored.
+- Phase 5: sim/combat.py + sim/pathing.py (enemies grunt/brute/runner, waves seeded per number with budget 20*1.25^n and a spawn ring,
+  greedy v1 + hub flow field v2, towers fire belt ammo at dmg value*(1+0.5*(lvl-1)), spawners cap 3+lvl units with rally points
+  (RMB on a selected spawner), ranged/heavy shots debit balance, nests aggro within 48 tiles -> raids every 45 s, core kill pays 500*tier
+  and renders rubble), render/combat.py, HUD wave countdown + game-over overlay ([L] reload / [Esc] menu), F6 spawn enemy / F7 wave now (debug).
+- Phase 5 verification (scratch verify_phase5.py): all six checkpoints pass by script (see PHASES.md). 91 tests green.
 - **For John to decide:** feed-side rules (belt head-on = feed, machine back = feed, tower front = ammo) and voiding of <= 0 results — implemented per PLAN,
   the Phase 4 checkbox stays open until you confirm.
 - **For John to eyeball:** zoom feel, checker contrast, deposit colors, belt/item sprites, HUD layout, menu, early-game pacing.

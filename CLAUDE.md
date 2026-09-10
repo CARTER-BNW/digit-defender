@@ -49,6 +49,9 @@ Add one line per file as files are created, stating what that file owns (layout:
 - `sim/leveling.py` — pure formulas: level/thresholds, belt_speed, period, max_hp
 - `sim/economy.py` — Target + seeded make_target, build_cost/demolish_refund
 - `sim/serialize.py` — structure records <-> objects (stable (y,x) order)
+- `sim/combat.py` — Combat: Unit (enemies + player units), WaveState, seeded waves (budget/ring/angle), nest aggro/raids/bounty, tower+unit attacks (ranged shots debit balance), beams; ticks from Factory.tick
+- `sim/pathing.py` — greedy_step (v1) + FlowField (Dijkstra from the hub over the base bbox, wall/structure costs, throttled rebuild)
+- `render/combat.py` — enemies/units/beams/rally flag/nest hp bars, off-screen enemy + wave-direction edge arrows
 - `render/structures.py` — cached sprites per (kind,dir,tile px,label), batched blits of structures + belt items, ghost/side-role/selection/health-bar drawing
 - `ui/hud.py` — balance, targets, toolbar (TOOLS/HOTKEYS), hover/selection info line, messages
 - `ui/menu.py` — world-select menu (Continue / New World name+seed / recent worlds / Fullscreen / Quit), blocking loop, max_frames for smoke runs

@@ -52,6 +52,7 @@ class Factory:
         self.events = []                # transient notifications for the UI (cleared by reader)
         self.damaged = set()            # structures with hp < max_hp (health bars)
         self.hub_destroyed = False
+        self.combat = None              # sim.combat.Combat when attached (Phase 5)
         while len(self.targets) < TARGET_COUNT:
             self.targets.append(self._new_target())
 
@@ -252,10 +253,12 @@ class Factory:
             m.tick(self)
         for b in self.belts_ordered:
             b.tick(self)
-        for t in self.towers:
-            t.tick(self)
         for s in self.spawners:
             s.tick(self)
+        for t in self.towers:
+            t.tick(self)
+        if self.combat is not None:
+            self.combat.tick()
         self.tick_count += 1
 
     def rebuild_links(self):

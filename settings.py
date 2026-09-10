@@ -89,6 +89,22 @@ WAVE_BUDGET_BASE = 20
 WAVE_BUDGET_GROWTH = 1.25           # budget = BASE * GROWTH**n
 WAVE_SPAWN_MARGIN = 12              # tiles beyond the structure bounding box
 WAVE_MIN_RADIUS = 30                # tiles from origin, minimum
+TOWER_RANGE = 6                     # tiles
+TOWER_BASE_PERIOD = 20              # ticks between shots (level shortens it)
+TOWER_DMG_LEVEL_MULT = 0.5          # dmg = ammo value * (1 + mult * (level - 1))
+SPAWNER_BASE_PERIOD = 200           # ticks between unit spawns (10 s)
+SPAWNER_UNIT_CAP = 3                # live units per spawner at level 1 (+1 per level)
+UNIT_LEVEL_MULT = 0.25              # unit hp/dmg * (1 + mult * (spawner level - 1))
+UNIT_AGGRO_TILES = 12               # units chase enemies this close
+ENEMY_ATTACK_RANGE = 1.2            # tiles (melee contact)
+FLOW_COST_WALL = 40
+FLOW_COST_STRUCT = 15
+FLOW_MARGIN = 12                    # tiles around the structure bounding box
+FLOW_REFRESH_TICKS = 40             # recompute at most this often
+NEST_RAID_PERIOD_S = 45
+NEST_RAID_SIZE = 3                  # enemies per raid per tier
+NEST_BOUNTY = 500                   # balance per tier when a core dies
+WAVE_MIX = {"grunt": 60, "runner": 25, "brute": 15}   # weights; brutes from wave 3
 # Player units. Ranged/heavy shots debit balance by "shot" value per shot;
 # melee is free (docs/PLAN.md section 0, rule 6).
 UNIT_STATS = {

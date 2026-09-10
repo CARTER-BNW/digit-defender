@@ -77,11 +77,14 @@ class Hud:
             y = 32 + i * 22
             screen.blit(numbers.text(numbers.fmt(t.value), 18, (255, 230, 120)), (w - 220, y))
             screen.blit(numbers.text(f"+{numbers.fmt(t.reward)}", 16, (140, 255, 140)), (w - 120, y + 1))
+        self._draw_wave(game)
         self._draw_toolbar(game)
         self._draw_hover(game)
         if game.selected is not None:
             self._draw_panel(game, game.selected)
         self._draw_messages()
+        if game.game_over:
+            self._draw_game_over(game)
 
     def _panel(self, rect):
         r = pygame.Rect(rect)
@@ -148,7 +151,7 @@ class Hud:
         """Selected-structure panel: level, invested, next threshold, hp,
         rate, buffers, actions. Every number comes from sim.leveling."""
         w, h = self.screen.get_size()
-        pw, ph = 300, 190
+        pw, ph = 372, 190
         x0, y0 = w - pw - 8, 8 + 24 + 22 * len(game.factory.targets) + 10
         self._panel((x0, y0, pw, ph))
         blit = self.screen.blit
@@ -190,9 +193,34 @@ class Hud:
         refund = int(COSTS.get(s.KIND, 0) * 0.5)
         actions = f"[R] rotate   [X] demolish +{refund}   {repair}" if not isinstance(s, Hub) else "the hub cannot be moved"
         blit(numbers.text(actions, 13, (255, 230, 120)), (x0 + 10, y0 + 124))
-        roles = "sides: " + ", ".join(f"{'front right back left'.split()[i]}={r}" for i, r in enumerate(type(s).SIDE_ROLES))
+        roles = "sides F/R/B/L: " + " / ".join(str(r) for r in type(s).SIDE_ROLES)
         blit(numbers.text(roles, 12, (170, 190, 170)), (x0 + 10, y0 + 146))
-        blit(numbers.text("in = cargo/operand   out = output   feed = levels it up", 12, (170, 190, 170)), (x0 + 10, y0 + 164))
+        blit(numbers.text("in = cargo or operand, out = output, feed = levels it up", 12, (170, 190, 170)), (x0 + 10, y0 + 164))
+
+    def _draw_wave(self, game):
+        c = game.combat
+        w = self.screen.get_width()
+        secs = c.seconds_to_wave()
+        urgent = secs <= 30
+        text = f"Wave {c.wave.number + 1} in {int(secs // 60)}:{int(secs % 60):02d}"
+        if c.enemies:
+            text += f"   enemies {len(c.enemies)}"
+        surf = numbers.text(text, 20, (255, 90, 90) if urgent else (220, 230, 220))
+        self._panel((w // 2 - surf.get_width() // 2 - 10, 8, surf.get_width() + 20, 32))
+        self.screen.blit(surf, (w // 2 - surf.get_width() // 2, 14))
+
+    def _draw_game_over(self, game):
+        w, h = self.screen.get_size()
+        dim = pygame.Surface((w, h), pygame.SRCALPHA)
+        dim.fill((40, 0, 0, 170))
+        self.screen.blit(dim, (0, 0))
+        title = numbers.text("HUB DESTROYED", 56, (255, 80, 80))
+        self.screen.blit(title, (w // 2 - title.get_width() // 2, h // 2 - 80))
+        c = game.combat
+        line = numbers.text(f"survived {c.wave.number} waves, {c.stats['kills']} kills, tick {game.factory.tick_count}", 20)
+        self.screen.blit(line, (w // 2 - line.get_width() // 2, h // 2 - 10))
+        keys = numbers.text("[L] load last save      [Esc] back to menu", 24, (255, 230, 120))
+        self.screen.blit(keys, (w // 2 - keys.get_width() // 2, h // 2 + 40))
 
     def _draw_messages(self):
         w = self.screen.get_width()

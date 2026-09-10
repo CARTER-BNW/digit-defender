@@ -13,6 +13,8 @@ from settings import (CHUNK_SIZE, CHUNK_PX, TILE_SIZE, COLORS, GROUND_SHADES,
 from world.tiles import GROUND_MAX, deposit_value, NEST_GROUND, NEST_CORE
 from render import numbers
 from render import structures as rstruct
+from render import combat as rcombat
+from sim import nests as nestmod
 
 
 class Renderer:
@@ -23,6 +25,7 @@ class Renderer:
         numbers.reset()
         self.font = numbers.font(16)
         self.surfaces_built = 0        # lifetime count (overlay / tests)
+        self.nests = None              # NestRegistry: destroyed nests render as rubble
 
     # ---- frame -----------------------------------------------------------
 
@@ -51,9 +54,14 @@ class Renderer:
             rstruct.draw_health_bars(screen, camera, factory)
             if getattr(game, "selected", None) is not None:
                 rstruct.draw_selection(screen, camera, game.selected)
+            combat = factory.combat
+            if combat is not None:
+                rcombat.draw_combat(screen, camera, combat, getattr(game, "selected", None))
             ghost = game.ghost() if hasattr(game, "ghost") else None
             if ghost is not None:
                 rstruct.draw_ghost(screen, camera, *ghost)
+            if combat is not None:
+                rcombat.draw_offscreen_indicators(screen, camera, combat)
         if self.debug:
             self._overlay(game)
 
@@ -74,6 +82,8 @@ class Renderer:
         fill = surf.fill
         show_text = zoom >= TEXT_MIN_ZOOM
         digit_px = max(6, int(tp * 0.7))
+        rubble = (self.nests is not None and
+                  self.nests.is_destroyed(*nestmod.region_of_chunk(chunk.cx, chunk.cy)))
         for i, tile in enumerate(tiles):
             lx, ly = i % CHUNK_SIZE, i // CHUNK_SIZE
             rect = (lx * tp, ly * tp, tp, tp)
@@ -91,9 +101,9 @@ class Renderer:
                     pad = max(1, tp // 4)
                     fill(color, (lx * tp + pad, ly * tp + pad, tp - 2 * pad, tp - 2 * pad))
             elif tile == NEST_GROUND:
-                fill(COLORS["nest_ground"], rect)
+                fill((48, 44, 40) if rubble else COLORS["nest_ground"], rect)
             elif tile == NEST_CORE:
-                fill(COLORS["nest_core"], rect)
+                fill((70, 62, 56) if rubble else COLORS["nest_core"], rect)
             else:
                 fill((255, 0, 255), rect)   # unknown id: loud
         return surf

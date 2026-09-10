@@ -86,3 +86,31 @@ def test_surface_cache_is_evicted_offscreen(game):
     x0, y0, x1, y1 = game.camera.visible_chunk_range()
     assert cached <= (x1 - x0 + 3) * (y1 - y0 + 3)
     assert game.renderer.surfaces_built == cached   # nothing rendered twice
+
+
+def test_game_over_overlay_and_reload_result(game):
+    frames(game, 2)
+    game.factory.hub.hp = 1
+    game.combat.spawn_enemy("brute", 2.5, 0.5)
+    for _ in range(400):
+        game.update(1 / 60)
+    assert game.game_over and game.factory.hub_destroyed
+    frames(game, 2)                                   # overlay draws without error
+    tc = game.tick_count
+    game.update(1 / 60)
+    assert game.tick_count == tc                      # sim frozen
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_l, mod=0, unicode="l"))
+    assert not game.running and game.result == "reload"
+
+
+def test_rally_right_click_on_selected_spawner(game):
+    frames(game, 1)
+    sp = game.factory.place("spawner_melee", 4, 4, 2, free=True)
+    game.selected = sp
+    pos = game.camera.tile_to_screen(9, 9)
+    game.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=3, pos=(pos[0] + 16, pos[1] + 16)))
+    assert sp.rally is not None and abs(sp.rally[0] - 9.5) < 0.01 and abs(sp.rally[1] - 9.5) < 0.01
+    game.selected = None
+    game.set_tool("belt")
+    game.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=3, pos=(10, 10)))
+    assert game.tool is None                          # plain right-click still cancels
