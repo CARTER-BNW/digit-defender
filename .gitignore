@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Node
+node_modules/
+
+# Logs
+*.log
+logs/
+
+# Data dumps — never commit
+*.csv
+*.parquet
+data/
+
+# Secrets / local config
+.env
+secrets*
+.claude/settings.local.json
+
+# Build / ML artifacts
+artifacts/
+dist/
+build/
