@@ -18,6 +18,13 @@ def test_tile_ids():
     assert tiles.is_nest(tiles.NEST_CORE) and not tiles.is_buildable(tiles.NEST_GROUND)
 
 
-def test_main_opens_and_quits_headless():
+def test_main_opens_and_quits_headless(tmp_path):
     import main  # conftest forces the SDL dummy driver
-    assert main.main(["--frames", "3"]) == 0
+    from world import persistence
+    persistence.set_saves_dir(tmp_path / "saves")
+    try:
+        assert main.main(["--frames", "3"]) == 0                       # menu only
+        assert main.main(["--world", "smoke", "--seed", "7", "--frames", "3"]) == 0
+        assert (tmp_path / "saves" / "smoke" / "structures.json").exists()
+    finally:
+        persistence.set_saves_dir(persistence.ROOT / "saves")

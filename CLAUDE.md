@@ -32,11 +32,11 @@ Design is finalized and approved — @docs/PLAN.md is the authority.
 
 ## Architecture map
 Add one line per file as files are created, stating what that file owns (layout: @docs/PLAN.md §1).
-- `main.py` — entry point: pygame init, window, `--seed/--frames/--fullscreen` flags, launches the loop
+- `main.py` — entry point: pygame init, config, menu loop; `--world NAME [--seed]` skips the menu, `--frames N` auto-quit, `--autosave S`, `--fullscreen`
 - `settings.py` — every tunable (grid, timestep, zoom, economy, belts, leveling, gen, combat, colors); pygame-free
 - `conftest.py` — forces SDL dummy drivers so pytest runs headless
 - `world/tiles.py` — tile-id registry (ground shades 0-5, DEPOSIT_1..9 = 11..19, NEST_GROUND/CORE) + predicates
-- `game.py` — Game: event loop, fixed-timestep accumulator (tick cap 4) driving factory.tick, pan (WASD/arrows/Shift, middle-drag), wheel zoom at cursor, build mode (hotkeys/toolbar, R rotate, LMB place + drag-paint belts with auto-turn, X demolish, Q pick, RMB/Esc cancel, click select), F3/F11, terrain streaming
+- `game.py` — Game: Game.load(screen, meta)/save() (autosave every AUTOSAVE_S + on exit; Esc -> menu), event loop, fixed-timestep accumulator (tick cap 4) driving factory.tick, pan (WASD/arrows/Shift, middle-drag), wheel zoom at cursor, build mode (hotkeys/toolbar, R rotate, LMB place + drag-paint belts with auto-turn, X demolish, Q pick, RMB/Esc cancel, click select), F3/F11, terrain streaming
 - `world/chunk.py` — __slots__ Chunk: flat tile list, dirty/modified flags, opaque render cache (surface, surface_zoom); pygame-free
 - `world/terrain.py` — Terrain: chunk dict owner, lazy generate, get_tile/deposit_at via divmod, update(keep, unload) hysteresis, loader/saver hooks
 - `world/generator.py` — pure generate_chunk(seed,cx,cy): noise-shaded global checker, per-chunk digit blobs (forced 1/2/3 near origin, spawn clearing), nest stamping
@@ -51,6 +51,8 @@ Add one line per file as files are created, stating what that file owns (layout:
 - `sim/serialize.py` — structure records <-> objects (stable (y,x) order)
 - `render/structures.py` — cached sprites per (kind,dir,tile px,label), batched blits of structures + belt items, ghost/side-role/selection/health-bar drawing
 - `ui/hud.py` — balance, targets, toolbar (TOOLS/HOTKEYS), hover/selection info line, messages
+- `ui/menu.py` — world-select menu (Continue / New World name+seed / recent worlds / Fullscreen / Quit), blocking loop, max_frames for smoke runs
+- `world/persistence.py` — saves/<slug>/{meta,structures,enemies}.json + chunks/*.bin, atomic write_json (.tmp -> .bak rotation), read_json .bak fallback, world registry (slugify/create/list/find_or_create), config.json, save_world/load_world
 - `tests/` — test_smoke, test_generator, test_camera, test_terrain, test_game (headless pan/zoom/streaming), test_belts, test_machines, test_economy, test_leveling
 
 ## Project rules

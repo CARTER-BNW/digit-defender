@@ -18,7 +18,12 @@ _Last updated: 2026-09-11 (v3) by Claude_
 - Perf work: batched Surface.blits + convert_alpha sprites (16.6 -> 11 ms/frame), CHUNK_GEN_BUDGET=24 chunks/frame (visible first) removes the zoom-out freeze.
 - Balancing note (2d): income is face value only (~1.5/s per miner line of 3s); adders at 500 take minutes. Targets start 4-12 (TARGET_BASE 4, x1.25 per completion,
   reward value*5+20). Feels slow-but-fair on paper; needs a play test.
-- **For John to eyeball:** zoom feel, checker contrast, deposit colors, belt/item sprites, HUD layout, early-game pacing.
+- Phase 3: world/persistence.py (atomic .tmp -> .bak -> replace, .bak fallback on corrupt/missing, chunk .bin, world registry, config.json),
+  ui/menu.py (Continue / New World / recent list / Fullscreen / Quit), main.py menu loop + --world/--autosave flags, Game.load/save,
+  autosave 60 s + on exit, Esc returns to the menu. 73 tests green incl. determinism round-trip and corrupt-file fallback.
+- Phase 3 verification (scratch verify_phase3.py): in-process reload identical + camera restored; real relaunch (subprocess main.py --world)
+  advanced ticks 124 -> 164; taskkill /F mid-run with 2 s autosave -> loads at tick 119, no .tmp leftovers; two worlds isolated.
+- **For John to eyeball:** zoom feel, checker contrast, deposit colors, belt/item sprites, HUD layout, menu, early-game pacing.
 
 ## v2 (2026-09-11): Design complete — plan approved
 - Scope confirmed with John: Beltmatic-like infinite grid factory (mine digits 1-9, math machines,

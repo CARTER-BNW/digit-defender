@@ -33,15 +33,15 @@ HUD; 3 active target numbers with rewards. Every structure ships with to_dict/fr
 - [x] test_belts / test_machines / test_economy green (66 tests total)
 - [x] 2000-belt synthetic world >= 60 fps (1920x1080 fullscreen, all 2000 belts + 4000 items visible: 10.7 ms/frame at 0.25, 11.0 ms at 1.0; sim tick 1.2 ms)
 
-## Phase 3 — Save/load ← CURRENT
+## Phase 3 — Save/load (done 2026-09-11)
 persistence + serialize (meta.json, chunks/*.bin, structures.json, enemies.json; atomic tmp+replace),
 world-select menu (create/seed/resume, recent-first), autosave 60s + on quit.
-- [ ] Quit mid-flow, relaunch, resume: item progress, balance, targets, camera intact
-- [ ] Determinism round-trip test green (save@100+load+100 == twin@200)
-- [ ] Process kill -> last autosave loads, no corrupt files
-- [ ] Two worlds don't cross-contaminate
+- [x] Quit mid-flow, relaunch, resume: item progress, balance, targets, camera intact (in-process reload identical; real relaunch via main.py --world advanced 124 -> 164 ticks)
+- [x] Determinism round-trip test green (save@100+load+100 == twin@200)
+- [x] Process kill -> last autosave loads, no corrupt files (taskkill /F at 7.5 s with --autosave 2: loaded tick 119, no .tmp leftovers)
+- [x] Two worlds don't cross-contaminate
 
-## Phase 4 — Improvement / leveling
+## Phase 4 — Improvement / leveling ← CURRENT
 Feed rule live (head-on = feed / side = merge / tail = cargo; machine back = feed), leveling.py
 formulas, structure info panel (level, invested, hp bar, next threshold), damage bars, repair action.
 - [ ] Feed line visibly speeds a belt; side entry still merges

@@ -6,9 +6,11 @@ whole ticks; rendering runs at FPS.
 import pygame
 
 from settings import (FPS, TICK_DT, MAX_TICKS_PER_FRAME, CAMERA_SPEED,
-                      CAMERA_FAST_MULT, WINDOW_W, WINDOW_H, TILE_SIZE)
+                      CAMERA_FAST_MULT, WINDOW_W, WINDOW_H, TILE_SIZE, AUTOSAVE_S)
 from world.terrain import Terrain
+from world import persistence
 from sim.factory import Factory
+from sim.nests import NestRegistry
 from sim.structures import E, DIR_VEC, Belt
 from render.camera import Camera
 from render.renderer import Renderer
@@ -16,14 +18,33 @@ from ui.hud import Hud, HOTKEYS, TOOL_NAMES
 
 
 class Game:
-    def __init__(self, screen, seed, save_dir=None, factory=None):
+    def __init__(self, screen, seed, save_dir=None, factory=None, meta=None,
+                 state=None, enemies=None):
         self.screen = screen
         self.seed = seed
         self.save_dir = save_dir
+        self.meta = meta                     # world meta dict when persistent
         self.terrain = Terrain(seed, save_dir)
-        self.factory = factory if factory is not None else self._new_factory()
+        if save_dir is not None:
+            self.terrain.loader = lambda cx, cy: persistence.load_chunk(save_dir, cx, cy)
+            self.terrain.saver = lambda ch: persistence.save_chunk(save_dir, ch.cx, ch.cy, ch.tiles)
+        if factory is not None:
+            self.factory = factory
+        elif state is not None:
+            self.factory = Factory.from_dict(state, seed=seed, terrain=self.terrain)
+            if self.factory.hub is None:
+                self.factory.create_hub(0, 0)
+        else:
+            self.factory = self._new_factory()
+        self.nests = NestRegistry.from_dict(enemies or {})
+        self.autosave_s = AUTOSAVE_S
+        self.autosave_t = 0.0
         w, h = screen.get_size()
         self.camera = Camera(w, h, x=TILE_SIZE / 2, y=TILE_SIZE / 2)   # hub centre
+        cam = (meta or {}).get("camera")
+        if cam:
+            self.camera.x, self.camera.y = float(cam[0]), float(cam[1])
+            self.camera.zoom_index = max(0, min(len(__import__("settings").ZOOM_LEVELS) - 1, int(cam[2])))
         self.renderer = Renderer(screen)
         self.hud = Hud(screen)
         self.clock = pygame.time.Clock()
@@ -47,6 +68,32 @@ class Game:
         f.create_hub(0, 0)
         return f
 
+    # ---- persistence -----------------------------------------------------
+
+    @classmethod
+    def load(cls, screen, meta):
+        """Resume a saved world (or start a freshly created one)."""
+        saved_meta, structures, enemies = persistence.load_world(meta["slug"])
+        meta = saved_meta or meta
+        state = None
+        if structures is not None:
+            state = persistence.factory_state_from_meta(meta, structures)
+        return cls(screen, int(meta["seed"]), save_dir=persistence.world_dir(meta["slug"]),
+                   meta=meta, state=state, enemies=enemies)
+
+    def save(self):
+        if self.meta is None:
+            return False
+        persistence.save_world(self.meta, self.factory, self.camera, self.nests,
+                               wave=self.wave_state())
+        self.terrain.save_modified()
+        self.autosave_t = 0.0
+        return True
+
+    def wave_state(self):
+        """Serializable wave timer (Phase 5)."""
+        return None
+
     @property
     def tick_count(self):
         return self.factory.tick_count
@@ -62,6 +109,8 @@ class Game:
             self.frame += 1
             if max_frames is not None and self.frame >= max_frames:
                 self.running = False
+        if self.meta is not None:
+            self.save()
         return self.result
 
     def handle_events(self):
@@ -108,6 +157,7 @@ class Game:
             elif self.selected is not None:
                 self.selected = None
             else:
+                self.result = "menu"
                 self.running = False
         elif key == pygame.K_F3:
             self.renderer.debug = not self.renderer.debug
@@ -218,6 +268,11 @@ class Game:
                 self.hud.message(f"Target {ev[1]} delivered: +{ev[2]} bonus!")
         self.factory.events.clear()
         self.hud.update(dt)
+        if self.meta is not None:
+            self.autosave_t += dt
+            if self.autosave_t >= self.autosave_s:
+                self.save()
+                self.hud.message("Autosaved", 1.5)
         keep, unload = self.camera.keep_unload_rects()
         self.terrain.update(keep, unload, self.camera.visible_chunk_range())
 

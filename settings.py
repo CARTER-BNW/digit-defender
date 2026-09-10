@@ -13,6 +13,10 @@ CHUNK_PX = CHUNK_SIZE * TILE_SIZE   # 512
 WINDOW_W, WINDOW_H = 1280, 720
 FPS = 60
 
+# --- saves --------------------------------------------------------------------
+SAVE_VERSION = 1
+AUTOSAVE_S = 60                     # seconds between autosaves (also saves on quit)
+
 # --- fixed timestep -----------------------------------------------------------
 TICK_RATE = 20                      # sim ticks per second
 TICK_DT = 1.0 / TICK_RATE           # 50 ms
