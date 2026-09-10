@@ -1,0 +1,56 @@
+
+Features
+
+0. layout 
+
+background of dif shades of Darkgreen squares
+the map will be grided like beltmatic.
+number mines to only gen is 1 to 9. 
+
+
+1. player starts with a numbered balance of like 1000 
+	uses this ballance to create / improve / repair 
+
+
+2. building and creating things costs 
+	when creating / improving / repairing it will use up the number balance
+	
+	Creating: 
+		conveyerbelts cost 2
+		walls cost 5
+		Towers cost 20
+		Miners (extractors) cost 10
+		Adder / subtractors cost 500 
+		divieders / multipliers 1000
+		Long ranged units Spawner
+		Close Range units Spawner
+		Heavy Range units Spawner
+		
+	Combat Units:  
+		Long ranged units cost 50
+		Close Range units cost 50
+		Heavy Range units 150
+		
+		Long ranged units will fire numbers (like a laser)  (start with 1)  
+		each new level of unit will increases health and firerate and damage
+		
+		Close Range units will only have health and damge
+		
+		Heavy Range units will fire numbers (like a laser) 
+		starting with 100
+		
+		
+	
+	improving
+		adding more numbers to conveyerbelts increases speed by .01 every 100 numbers added  (when it reaches 100 the increases speed by .01 to that square) it becomes level 2 belt every time it reachs an interger eg lvl 2 at 100, lvl 3 at 300
+		this will also be the health bar of the conveyerbelt
+
+		adding more numbers to structers also increases spawner speeds (unit creations), towers (fire rate), (miners) extraction rate, Adder etc proccessing rate. 
+		health of these structures will be the total number. 
+	
+		note, higher spawner buildings will create stronger units. 
+		
+
+		
+	
+
