@@ -23,6 +23,12 @@ _Last updated: 2026-09-11 (v3) by Claude_
   autosave 60 s + on exit, Esc returns to the menu. 73 tests green incl. determinism round-trip and corrupt-file fallback.
 - Phase 3 verification (scratch verify_phase3.py): in-process reload identical + camera restored; real relaunch (subprocess main.py --world)
   advanced ticks 124 -> 164; taskkill /F mid-run with 2 s autosave -> loads at tick 119, no .tmp leftovers; two worlds isolated.
+- Phase 4: selected-structure panel (level, fed, next threshold, hp bar, speed/period, buffers, side roles, [H] repair), level badge on
+  sprites, health bars for damaged structures (Factory.damaged), Factory.damage/repair. 77 tests green.
+- Phase 4 verification (scratch verify_phase4.py): head-on feed -> belt Lv4 at 2.57 tiles/s; back-fed adder 40 -> 23 ticks/op; repair 120 hp = 24.
+- Housekeeping: config.json (machine prefs) untracked + gitignored.
+- **For John to decide:** feed-side rules (belt head-on = feed, machine back = feed, tower front = ammo) and voiding of <= 0 results — implemented per PLAN,
+  the Phase 4 checkbox stays open until you confirm.
 - **For John to eyeball:** zoom feel, checker contrast, deposit colors, belt/item sprites, HUD layout, menu, early-game pacing.
 
 ## v2 (2026-09-11): Design complete — plan approved

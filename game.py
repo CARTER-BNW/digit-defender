@@ -176,6 +176,8 @@ class Game:
             self.demolish(self.hover_tile)
         elif key == pygame.K_q:
             self.pick()
+        elif key == pygame.K_h:
+            self.repair()
 
     # ---- build mode ------------------------------------------------------
 
@@ -235,6 +237,22 @@ class Game:
                     self.factory.dirty_links = True
         self.try_place(tile)
         self.last_paint = tile
+
+    def repair(self):
+        target = self.selected or self.factory.structure_at(*self.hover_tile)
+        if target is None:
+            return 0
+        missing = target.max_hp - target.hp
+        if missing <= 0:
+            self.hud.message("Already at full hp", 1.5)
+            return 0
+        cost = self.factory.repair(target)
+        if cost:
+            self.hud.message(f"Repaired for {cost}", 1.5)
+        else:
+            from settings import REPAIR_COST_PER_HP
+            self.hud.message(f"Repair needs {int(missing * REPAIR_COST_PER_HP + 0.999)}", 1.5)
+        return cost
 
     def demolish(self, tile):
         s = self.factory.remove(*tile)

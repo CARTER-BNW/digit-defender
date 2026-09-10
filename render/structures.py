@@ -47,8 +47,20 @@ def _arrow(surf, cx, cy, direction, size, color):
 
 
 @lru_cache(maxsize=4096)
-def sprite(kind, direction, tp, label=None):
-    """Surface for one structure: tp px per tile (hub is 3 tiles)."""
+def sprite(kind, direction, tp, label=None, level=1):
+    """Surface for one structure: tp px per tile (hub is 3 tiles). Levels
+    above 1 get a small badge in the top-right corner."""
+    surf = _sprite(kind, direction, tp, label)
+    if level > 1 and tp >= 16:
+        surf = surf.copy()
+        badge = numbers.text(str(level), max(8, tp // 3), (255, 230, 120))
+        surf.blit(badge, (surf.get_width() - badge.get_width() - 1, 0))
+        surf = _convert(surf)
+    return surf
+
+
+@lru_cache(maxsize=2048)
+def _sprite(kind, direction, tp, label=None):
     cls = KINDS[kind]
     size = tp * cls.SIZE
     base = COLORS.get(kind, (200, 0, 200))
@@ -124,12 +136,12 @@ def draw_structures(screen, camera, factory, chunk_rect):
                         continue
                     drawn_big.add(id(s))
                     r = s.SIZE // 2
-                    blits.append((sprite(s.KIND, s.direction, tp, s.label()),
+                    blits.append((sprite(s.KIND, s.direction, tp, s.label(), s.level),
                                   ((s.x - r) * tp + ox, (s.y - r) * tp + oy)))
                     continue
                 sx = s.x * tp + ox
                 sy = s.y * tp + oy
-                blits.append((sprite(s.KIND, s.direction, tp, s.label()), (sx, sy)))
+                blits.append((sprite(s.KIND, s.direction, tp, s.label(), s.level), (sx, sy)))
                 if s.KIND == "belt" and s.items:
                     dx, dy = DIR_VEC[s.direction]
                     cxp = sx + half - hw

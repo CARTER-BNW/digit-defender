@@ -29,3 +29,8 @@ build/
 
 # Game saves
 saves/
+
+# Machine-local prefs written by the game
+config.json
+config.json.bak
+config.json.tmp

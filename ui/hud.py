@@ -1,9 +1,10 @@
 """HUD: balance, targets, build toolbar with hotkeys, hover info, messages."""
 import pygame
 
-from settings import COLORS, COSTS
+from settings import COLORS, COSTS, REPAIR_COST_PER_HP, TICK_RATE
 from render import numbers
-from sim.structures import KINDS, Belt, Miner, MathMachine, Tower
+from sim import leveling
+from sim.structures import KINDS, Belt, Miner, MathMachine, Tower, Spawner, Hub
 
 # toolbar order and hotkeys (Phase 5 appends spawners)
 TOOLS = [("belt", "1"), ("miner", "2"), ("adder", "3"), ("subtractor", "4"),
@@ -78,6 +79,8 @@ class Hud:
             screen.blit(numbers.text(f"+{numbers.fmt(t.reward)}", 16, (140, 255, 140)), (w - 120, y + 1))
         self._draw_toolbar(game)
         self._draw_hover(game)
+        if game.selected is not None:
+            self._draw_panel(game, game.selected)
         self._draw_messages()
 
     def _panel(self, rect):
@@ -140,6 +143,56 @@ class Hud:
         for line in lines:
             self.screen.blit(numbers.text(line, 14), (12, y))
             y += 18
+
+    def _draw_panel(self, game, s):
+        """Selected-structure panel: level, invested, next threshold, hp,
+        rate, buffers, actions. Every number comes from sim.leveling."""
+        w, h = self.screen.get_size()
+        pw, ph = 300, 190
+        x0, y0 = w - pw - 8, 8 + 24 + 22 * len(game.factory.targets) + 10
+        self._panel((x0, y0, pw, ph))
+        blit = self.screen.blit
+        name = TOOL_NAMES.get(s.KIND, s.KIND)
+        blit(numbers.text(f"{name}  ({s.x}, {s.y})  facing {'NESW'[s.direction]}", 15), (x0 + 10, y0 + 8))
+        blit(numbers.text(f"Level {s.level}", 22, (255, 230, 120)), (x0 + 10, y0 + 28))
+        nxt = leveling.next_threshold(s.invested)
+        if nxt is None:
+            nxt_txt = "max level"
+        else:
+            nxt_txt = f"next at {numbers.fmt(nxt)}  ({numbers.fmt(nxt - s.invested)} to go)"
+        blit(numbers.text(f"fed {numbers.fmt(s.invested)}   {nxt_txt}", 14, (200, 220, 200)), (x0 + 10, y0 + 56))
+        # hp bar
+        bx, by, bw, bh = x0 + 10, y0 + 80, pw - 20, 12
+        pygame.draw.rect(self.screen, COLORS["hp_bar_bg"], (bx, by, bw, bh))
+        frac = max(0.0, min(1.0, s.hp / s.max_hp)) if s.max_hp else 0
+        pygame.draw.rect(self.screen, COLORS["hp_bar"] if frac > 0.5 else (230, 160, 60) if frac > 0.25 else (230, 70, 60),
+                         (bx, by, int(bw * frac), bh))
+        blit(numbers.text(f"hp {numbers.fmt(s.hp)} / {numbers.fmt(s.max_hp)}", 13), (bx + 4, by - 1))
+        # rate line
+        if isinstance(s, Belt):
+            rate = f"speed {s.speed:.4f} tiles/tick  ({s.speed * TICK_RATE:.2f} tiles/s)   items {len(s.items)}"
+        elif isinstance(s, Miner):
+            rate = f"mines a {s.value} every {s.period} ticks ({s.period / TICK_RATE:.2f} s)"
+        elif isinstance(s, MathMachine):
+            rate = f"{s.period} ticks/op   A{list(s.in_a)} B{list(s.in_b)} out {s.out if s.out is not None else '-'}"
+        elif isinstance(s, Tower):
+            rate = f"fires every {leveling.period(20, s.invested)} ticks   ammo {list(s.ammo)}"
+        elif isinstance(s, Spawner):
+            rate = f"spawns every {s.period if hasattr(s, 'period') else '?'} ticks"
+        elif isinstance(s, Hub):
+            rate = "everything delivered here is income"
+        else:
+            rate = "blocks enemies"
+        blit(numbers.text(rate, 13, (200, 220, 200)), (x0 + 10, y0 + 100))
+        # actions
+        missing = s.max_hp - s.hp
+        repair = f"[H] repair {int(missing * REPAIR_COST_PER_HP + 0.999)}" if missing > 0 else "[H] repair (full)"
+        refund = int(COSTS.get(s.KIND, 0) * 0.5)
+        actions = f"[R] rotate   [X] demolish +{refund}   {repair}" if not isinstance(s, Hub) else "the hub cannot be moved"
+        blit(numbers.text(actions, 13, (255, 230, 120)), (x0 + 10, y0 + 124))
+        roles = "sides: " + ", ".join(f"{'front right back left'.split()[i]}={r}" for i, r in enumerate(type(s).SIDE_ROLES))
+        blit(numbers.text(roles, 12, (170, 190, 170)), (x0 + 10, y0 + 146))
+        blit(numbers.text("in = cargo/operand   out = output   feed = levels it up", 12, (170, 190, 170)), (x0 + 10, y0 + 164))
 
     def _draw_messages(self):
         w = self.screen.get_width()

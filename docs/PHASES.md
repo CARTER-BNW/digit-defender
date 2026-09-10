@@ -41,16 +41,16 @@ world-select menu (create/seed/resume, recent-first), autosave 60s + on quit.
 - [x] Process kill -> last autosave loads, no corrupt files (taskkill /F at 7.5 s with --autosave 2: loaded tick 119, no .tmp leftovers)
 - [x] Two worlds don't cross-contaminate
 
-## Phase 4 — Improvement / leveling ← CURRENT
+## Phase 4 — Improvement / leveling (built 2026-09-11; one design checkbox left for John)
 Feed rule live (head-on = feed / side = merge / tail = cargo; machine back = feed), leveling.py
 formulas, structure info panel (level, invested, hp bar, next threshold), damage bars, repair action.
-- [ ] Feed line visibly speeds a belt; side entry still merges
-- [ ] Fed machine measurably faster
-- [ ] Panel matches formulas; test_leveling green
-- [ ] Side-rule color coding in ghost preview (input green / output red / feed yellow)
-- [ ] Design calls confirmed with John: feed-side rules, void-<=0 results
+- [x] Feed line visibly speeds a belt; side entry still merges (head-on 9s: belt fed 765 -> Lv4, 1.0 -> 2.57 tiles/s; side 2s merge)
+- [x] Fed machine measurably faster (back-fed 400: period 40 -> 23 ticks, 8 -> 17 outputs per 400 ticks)
+- [x] Panel matches formulas; test_leveling green (9 tests)
+- [x] Side-rule color coding in ghost preview (input green / output red / feed yellow) — also on the selected structure
+- [ ] Design calls confirmed with John: feed-side rules, void-<=0 results (implemented per PLAN; John to confirm or change)
 
-## Phase 5 — Combat
+## Phase 5 — Combat ← CURRENT
 5a Walls + towers (belt-fed ammo, number lasers) + debug enemy -> kill it
 5b Waves: timer, budget scaling, spawn ring, greedy+bump pathing, damage, hub death = game over screen
 5c Flow-field pathing (shared BFS from hub); enemies route around walls, chew through when enclosed
