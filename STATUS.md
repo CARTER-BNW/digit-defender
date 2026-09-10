@@ -34,6 +34,13 @@ _Last updated: 2026-09-11 (v3) by Claude_
 - Phase 5 verification (scratch verify_phase5.py): all six checkpoints pass by script (see PHASES.md). 91 tests green.
 - Phase 6 (partial): belt item render interpolation, Space pause + [ ] speed x1/x2/x4, F1 help overlay, minimap; HANDOFF.md rewritten
   for a cold start; README status; memory notes saved (overnight-run preference, Bash heredoc limit, project state).
+- Crash insurance: an unhandled exception in Game.run() saves progress (unless game over), appends the traceback to crash.log, then re-raises.
+  Wave direction arrow now shows 60 s ahead (WAVE_WARNING_S). 92 tests green; run.bat launch verified.
+- Balance probe (scratch bot_player.py, real costs, seed 1337): 3 lines at t=0 give ~2.4/s; 6 lines by 1 min ~5/s; an adder (500) is
+  affordable at ~3.3 min; two hub-adjacent towers fed with 3s (56 + 76 each incl. lines) clear wave 1 untouched, waves 2-4 with minor hub
+  damage (952/980/774 hp) while adding a tower per wave; balance climbs to 7.4K by wave 5. Observation: one 3-miner (0.5 items/s) cannot keep
+  a tower (1 shot/s) stocked through a long fight (one tower hit 0 ammo in wave 4) -> either accept (feed towers from richer lines) or slow
+  TOWER_BASE_PERIOD to 30. Towers placed 8+ tiles from the hub never engage hub attackers (range 6): place them next to the hub.
 - **For John to decide:** feed-side rules (belt head-on = feed, machine back = feed, tower front = ammo) and voiding of <= 0 results — implemented per PLAN,
   the Phase 4 checkbox stays open until you confirm.
 - **For John to eyeball:** zoom feel, checker contrast, deposit colors, belt/item sprites, HUD layout, menu, early-game pacing.

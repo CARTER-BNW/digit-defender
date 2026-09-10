@@ -4,7 +4,7 @@ import math
 
 import pygame
 
-from settings import COLORS, TILE_SIZE
+from settings import COLORS, TILE_SIZE, WAVE_WARNING_S
 from render import numbers
 from sim.combat import ENEMY, PLAYER
 from sim import nests as nestmod
@@ -70,7 +70,7 @@ def draw_combat(screen, camera, combat, selected=None):
             _bar(screen, sx - tp, sy - 6, tp * 3, combat.nests.hp(spec) / nestmod.nest_max_hp(spec), (240, 80, 80))
 
 
-def draw_offscreen_indicators(screen, camera, combat, wave_warning_s=30):
+def draw_offscreen_indicators(screen, camera, combat, wave_warning_s=WAVE_WARNING_S):
     """Red edge arrows toward living enemies off-screen; a pulsing arrow
     toward the coming wave's direction in its last seconds."""
     w, h = screen.get_size()

@@ -112,17 +112,36 @@ class Game:
     # ---- loop ------------------------------------------------------------
 
     def run(self, max_frames=None):
-        while self.running:
-            dt = self.clock.tick(FPS) / 1000.0
-            self.handle_events()
-            self.update(dt)
-            self.draw()
-            self.frame += 1
-            if max_frames is not None and self.frame >= max_frames:
-                self.running = False
+        try:
+            while self.running:
+                dt = self.clock.tick(FPS) / 1000.0
+                self.handle_events()
+                self.update(dt)
+                self.draw()
+                self.frame += 1
+                if max_frames is not None and self.frame >= max_frames:
+                    self.running = False
+        except Exception:
+            # crash insurance: the sim state is consistent between frames, so
+            # keep the progress, log the traceback, then let it propagate
+            self._crash_save()
+            raise
         if self.meta is not None and not self.game_over:
             self.save()                          # never overwrite a save with a dead base
         return self.result
+
+    def _crash_save(self):
+        import traceback
+        try:
+            with open("crash.log", "a", encoding="utf-8") as fh:
+                fh.write(traceback.format_exc() + "\n")
+        except OSError:
+            pass
+        if self.meta is not None and not self.game_over:
+            try:
+                self.save()
+            except Exception:
+                pass
 
     def handle_events(self):
         for event in pygame.event.get():

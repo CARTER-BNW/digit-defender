@@ -89,6 +89,7 @@ WAVE_BUDGET_BASE = 20
 WAVE_BUDGET_GROWTH = 1.25           # budget = BASE * GROWTH**n
 WAVE_SPAWN_MARGIN = 12              # tiles beyond the structure bounding box
 WAVE_MIN_RADIUS = 30                # tiles from origin, minimum
+WAVE_WARNING_S = 60                 # edge arrow shows the coming wave direction this early
 TOWER_RANGE = 6                     # tiles
 TOWER_BASE_PERIOD = 20              # ticks between shots (level shortens it)
 TOWER_DMG_LEVEL_MULT = 0.5          # dmg = ammo value * (1 + mult * (level - 1))

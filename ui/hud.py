@@ -1,7 +1,7 @@
 """HUD: balance, targets, build toolbar with hotkeys, hover info, messages."""
 import pygame
 
-from settings import COLORS, COSTS, REPAIR_COST_PER_HP, TICK_RATE, TILE_SIZE, CHUNK_SIZE
+from settings import COLORS, COSTS, REPAIR_COST_PER_HP, TICK_RATE, TILE_SIZE, CHUNK_SIZE, WAVE_WARNING_S
 from render import numbers
 from sim import leveling
 from sim.structures import KINDS, Belt, Miner, MathMachine, Tower, Spawner, Hub
@@ -256,7 +256,7 @@ class Hud:
         c = game.combat
         w = self.screen.get_width()
         secs = c.seconds_to_wave()
-        urgent = secs <= 30
+        urgent = secs <= WAVE_WARNING_S
         text = f"Wave {c.wave.number + 1} in {int(secs // 60)}:{int(secs % 60):02d}"
         if c.enemies:
             text += f"   enemies {len(c.enemies)}"

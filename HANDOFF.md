@@ -19,7 +19,8 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
 3. In game: 1 = belt, 2 = miner (needs a deposit), 3-6 = machines, 7 = wall, 8 = tower, 9/0/- = spawners; R rotate,
    LMB place (drag paints belts that auto-turn), X demolish (hold to sweep), Q pick, H repair, click = select (panel on the
    right), RMB = cancel / set rally on a selected spawner, wheel zoom, MMB drag pan, WASD pan (Shift fast), F3 debug,
-   F6 spawn an enemy at the cursor, F7 trigger the next wave, F11 fullscreen, Esc = cancel tool / menu.
+   Space pause, [ ] sim speed x1/x2/x4, F1 help overlay, F6 spawn an enemy at the cursor, F7 trigger the next wave,
+   F11 fullscreen, Esc = cancel tool / menu. Minimap bottom-right.
 
 ## Architecture in one screen (details: CLAUDE.md architecture map, docs/PLAN.md)
 - `sim/` is headless (no pygame): `factory.py` (structures dict, fixed tick order, belt chain ordering, economy, damage),
@@ -59,11 +60,13 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
     CHUNK_GEN_BUDGET = 24 chunks/frame (visible first). Everything positions from `Camera.screen_origin()` (no seams).
 
 ## Known rough edges / ideas (not blockers)
-- Balance is untested by a human: income is face value only; adders (500) feel slow early; first targets 4-12.
+- Balance only probed by a scripted player (STATUS v3): survivable and growing through wave 4 with 2-4 belt-fed towers next to the hub;
+  a single 3-miner cannot keep a tower stocked in long fights; towers far from the hub (range 6) never engage.
 - Items on a jammed belt overlap visually (radius 0.32 tile vs 0.25 spacing).
 - Player units are not blocked by structures (by design for now); enemies only ever melee.
 - Combat stats (kills) are transient; the game-over line shows kills since load.
-- Phase 6 candidates: minimap, copy/paste blueprints, sounds, stats graphs, balance pass after a play test.
+- Phase 6 left: copy/paste blueprints, sounds, stats graphs, balance pass after a play test. Flow-field rebuild on very large bases
+  (60k-tile cap) can cost ~200 ms when structures change during a wave (throttled to every 2 s).
 
 ## Next actions
 1. John plays a fresh world for 10 minutes and notes feel/balance issues; confirm the Phase 4 design checkbox.

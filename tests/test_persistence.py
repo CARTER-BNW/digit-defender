@@ -134,6 +134,25 @@ def test_game_save_and_load(saves, screen):
     assert g3.factory.structure_at(9, 4) is not None
 
 
+def test_crash_in_loop_saves_progress_then_raises(saves, screen, monkeypatch, tmp_path):
+    from game import Game
+    monkeypatch.chdir(tmp_path)                    # crash.log lands here
+    g = Game.load(screen, persistence.create_world("crashy", 4))
+    g.factory.place("belt", 3, 3, E, free=True)
+    calls = {"n": 0}
+
+    def boom(*a, **k):
+        calls["n"] += 1
+        if calls["n"] == 3:
+            raise RuntimeError("render exploded")
+    monkeypatch.setattr(g, "draw", boom)
+    with pytest.raises(RuntimeError):
+        g.run(max_frames=10)
+    assert "render exploded" in (tmp_path / "crash.log").read_text()
+    g2 = Game.load(screen, persistence.load_meta("crashy"))
+    assert g2.factory.structure_at(3, 3) is not None
+
+
 def test_two_worlds_do_not_cross_contaminate(saves, screen):
     from game import Game
     a = Game.load(screen, persistence.create_world("A", 1))
