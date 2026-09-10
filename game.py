@@ -70,6 +70,9 @@ class Game:
         self.last_paint = None
         self.hover_tile = (0, 0)
         self.game_over = False
+        self.paused = False
+        self.speed = 1                       # sim speed multiplier: 1, 2, 4
+        self.show_help = False
 
     def _new_factory(self):
         f = Factory(self.seed, self.terrain)
@@ -202,6 +205,14 @@ class Game:
             self.pick()
         elif key == pygame.K_h:
             self.repair()
+        elif key == pygame.K_SPACE:
+            self.paused = not self.paused
+        elif key == pygame.K_RIGHTBRACKET:
+            self.speed = min(4, self.speed * 2)
+        elif key == pygame.K_LEFTBRACKET:
+            self.speed = max(1, self.speed // 2)
+        elif key == pygame.K_F1:
+            self.show_help = not self.show_help
         elif key == pygame.K_F6:                 # debug: spawn an enemy at the cursor
             tx, ty = self.hover_tile
             self.combat.spawn_enemy("grunt", tx + 0.5, ty + 0.5)
@@ -301,8 +312,8 @@ class Game:
             self.demolish(self.hover_tile)
         # fixed-timestep sim: whole ticks only, capped so a slow frame never
         # snowballs into a frozen game (docs/PLAN.md section 2.4)
-        if not self.game_over:
-            self.acc += dt
+        if not self.game_over and not self.paused:
+            self.acc += dt * self.speed
             n = 0
             while self.acc >= TICK_DT and n < MAX_TICKS_PER_FRAME:
                 self.tick()
@@ -358,6 +369,13 @@ class Game:
             self.camera.move(dx * speed * dt, dy * speed * dt)
 
     # ---- draw ------------------------------------------------------------
+
+    @property
+    def render_frac(self):
+        """Fraction of the next tick already elapsed (belt item interpolation)."""
+        if self.paused or self.game_over:
+            return 0.0
+        return min(1.0, self.acc / TICK_DT)
 
     def draw(self):
         self.renderer.draw(self)

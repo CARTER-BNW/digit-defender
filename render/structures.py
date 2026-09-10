@@ -114,7 +114,10 @@ def item_radius(tp):
     return max(2, int(tp * 0.32))
 
 
-def draw_structures(screen, camera, factory, chunk_rect):
+def draw_structures(screen, camera, factory, chunk_rect, frac=0.0):
+    """frac = fraction of the next sim tick already elapsed (accumulator /
+    TICK_DT): items are drawn advanced by speed * frac so 20 Hz sim motion
+    looks smooth at 60 fps. Render-only; the sim never sees it."""
     tp = camera.tile_px
     ox, oy = camera.screen_origin()
     with_text = camera.zoom >= TEXT_MIN_ZOOM
@@ -146,7 +149,11 @@ def draw_structures(screen, camera, factory, chunk_rect):
                     dx, dy = DIR_VEC[s.direction]
                     cxp = sx + half - hw
                     cyp = sy + half - hw
+                    lead = s.speed * frac
                     for value, p in s.items:
+                        p += lead
+                        if p > 0.999:
+                            p = 0.999
                         off = (p - 0.5) * tp
                         item_blits.append((item_sprite(value, tp, with_text),
                                            (int(cxp + dx * off), int(cyp + dy * off))))

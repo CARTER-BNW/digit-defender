@@ -1,7 +1,7 @@
 """HUD: balance, targets, build toolbar with hotkeys, hover info, messages."""
 import pygame
 
-from settings import COLORS, COSTS, REPAIR_COST_PER_HP, TICK_RATE
+from settings import COLORS, COSTS, REPAIR_COST_PER_HP, TICK_RATE, TILE_SIZE, CHUNK_SIZE
 from render import numbers
 from sim import leveling
 from sim.structures import KINDS, Belt, Miner, MathMachine, Tower, Spawner, Hub
@@ -26,6 +26,8 @@ class Hud:
         self.screen = screen
         self.messages = []          # [text, ttl]
         self.toolbar_rect = pygame.Rect(0, 0, 0, 0)
+        self._minimap = None        # cached surface, rebuilt every few frames
+        self._minimap_frame = -100
 
     def message(self, text, ttl=2.5):
         self.messages = [m for m in self.messages if m[0] != text]
@@ -78,11 +80,14 @@ class Hud:
             screen.blit(numbers.text(numbers.fmt(t.value), 18, (255, 230, 120)), (w - 220, y))
             screen.blit(numbers.text(f"+{numbers.fmt(t.reward)}", 16, (140, 255, 140)), (w - 120, y + 1))
         self._draw_wave(game)
+        self._draw_minimap(game)
         self._draw_toolbar(game)
         self._draw_hover(game)
         if game.selected is not None:
             self._draw_panel(game, game.selected)
         self._draw_messages()
+        if game.show_help:
+            self._draw_help()
         if game.game_over:
             self._draw_game_over(game)
 
@@ -120,7 +125,7 @@ class Hud:
             d = "NESW"[game.build_dir]
             lines.append(f"Build {TOOL_NAMES[game.tool]} facing {d}   [R] rotate  [LMB] place  [X] demolish  [Esc] cancel")
         else:
-            lines.append("[1-9] build tools  [R] rotate  [X] demolish  [Q] pick  [wheel] zoom  [MMB] pan  [F3] debug")
+            lines.append("[F1] help   [1-9] build tools  [R] rotate  [X] demolish  [Q] pick  [Space] pause  [ ] speed  [F3] debug")
         tx, ty = game.hover_tile
         s = game.factory.structure_at(tx, ty)
         info = f"tile ({tx}, {ty})"
@@ -197,6 +202,56 @@ class Hud:
         blit(numbers.text(roles, 12, (170, 190, 170)), (x0 + 10, y0 + 146))
         blit(numbers.text("in = cargo or operand, out = output, feed = levels it up", 12, (170, 190, 170)), (x0 + 10, y0 + 164))
 
+    MINI_W, MINI_H, MINI_TILES = 220, 150, 140      # panel px and tiles shown across
+
+    def _draw_minimap(self, game):
+        w, h = self.screen.get_size()
+        x0, y0 = w - self.MINI_W - 8, h - self.MINI_H - 8
+        if game.frame - self._minimap_frame >= 6 or self._minimap is None:
+            self._minimap_frame = game.frame
+            self._minimap = self._build_minimap(game)
+        self.screen.blit(self._minimap, (x0, y0))
+        pygame.draw.rect(self.screen, COLORS["panel_border"], (x0, y0, self.MINI_W, self.MINI_H), 1)
+
+    def _build_minimap(self, game):
+        surf = pygame.Surface((self.MINI_W, self.MINI_H))
+        surf.fill((14, 26, 16))
+        cam = game.camera
+        scale = self.MINI_W / self.MINI_TILES              # px per tile
+        ccx, ccy = cam.x / TILE_SIZE, cam.y / TILE_SIZE     # camera centre in tiles
+        tx0 = ccx - self.MINI_TILES / 2
+        ty0 = ccy - (self.MINI_H / scale) / 2
+        tiles_h = self.MINI_H / scale
+
+        def to_px(tx, ty):
+            return int((tx - tx0) * scale), int((ty - ty0) * scale)
+
+        fill = surf.fill
+        f = game.factory
+        cx0, cx1 = int(tx0 // CHUNK_SIZE), int((tx0 + self.MINI_TILES) // CHUNK_SIZE) + 1
+        cy0, cy1 = int(ty0 // CHUNK_SIZE), int((ty0 + tiles_h) // CHUNK_SIZE) + 1
+        d = max(1, int(scale))
+        for cy in range(cy0, cy1 + 1):
+            for cx in range(cx0, cx1 + 1):
+                for s in f.by_chunk.get((cx, cy), ()):
+                    px, py = to_px(s.x - s.SIZE // 2, s.y - s.SIZE // 2)
+                    size = max(d, int(scale * s.SIZE))
+                    fill(COLORS.get(s.KIND, (200, 200, 200)), (px, py, size, size))
+        for spec in game.combat.known_nests.values():
+            px, py = to_px(spec.tx - 2, spec.ty - 2)
+            fill((120, 40, 40), (px, py, max(2, int(scale * 5)), max(2, int(scale * 5))))
+        for u in game.combat.units:
+            px, py = to_px(u.x, u.y)
+            fill((80, 220, 240), (px - 1, py - 1, 2, 2))
+        for e in game.combat.enemies:
+            px, py = to_px(e.x, e.y)
+            fill((255, 60, 60), (px - 1, py - 1, 3, 3))
+        # camera view rectangle
+        vw, vh = cam.w / cam.zoom / TILE_SIZE, cam.h / cam.zoom / TILE_SIZE
+        vx, vy = to_px(ccx - vw / 2, ccy - vh / 2)
+        pygame.draw.rect(surf, (200, 210, 200), (vx, vy, max(2, int(vw * scale)), max(2, int(vh * scale))), 1)
+        return surf
+
     def _draw_wave(self, game):
         c = game.combat
         w = self.screen.get_width()
@@ -205,9 +260,35 @@ class Hud:
         text = f"Wave {c.wave.number + 1} in {int(secs // 60)}:{int(secs % 60):02d}"
         if c.enemies:
             text += f"   enemies {len(c.enemies)}"
+        if game.paused:
+            text += "   PAUSED"
+        elif game.speed > 1:
+            text += f"   x{game.speed}"
         surf = numbers.text(text, 20, (255, 90, 90) if urgent else (220, 230, 220))
         self._panel((w // 2 - surf.get_width() // 2 - 10, 8, surf.get_width() + 20, 32))
         self.screen.blit(surf, (w // 2 - surf.get_width() // 2, 14))
+
+    HELP = [
+        "1-6 belt / miner / adder / subtract / multiply / divide     7 wall   8 tower   9 0 - spawners",
+        "LMB place (drag paints belts, they turn with the drag)   R rotate   X demolish (hold to sweep)   Q pick tool",
+        "click = select (panel on the right)   H repair   RMB = cancel, or set the rally point of a selected spawner",
+        "wheel zoom   MMB drag / WASD pan (Shift fast)   Space pause   [ ] sim speed x1 x2 x4   F3 debug   F11 fullscreen",
+        "Belts: items enter from behind or the sides; a belt pointing INTO another belt's front FEEDS it (levels it up).",
+        "Machines: left side = A, right side = B, output in front, feed from behind.  Hub: deliver from any side = income.",
+        "Towers: run a belt into the arrow side; the tower fires those numbers.  Ranged units spend balance per shot.",
+        "Targets pay a bonus for delivering the exact number. Waves come from the red edge arrow. Hub dead = game over.",
+        "F1 closes this help.",
+    ]
+
+    def _draw_help(self):
+        w, h = self.screen.get_size()
+        lines = [numbers.text(t, 15) for t in self.HELP]
+        pw = max(s.get_width() for s in lines) + 40
+        ph = len(lines) * 22 + 40
+        x0, y0 = (w - pw) // 2, (h - ph) // 2
+        self._panel((x0, y0, pw, ph))
+        for i, s in enumerate(lines):
+            self.screen.blit(s, (x0 + 20, y0 + 20 + i * 22))
 
     def _draw_game_over(self, game):
         w, h = self.screen.get_size()

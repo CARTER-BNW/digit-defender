@@ -2,7 +2,9 @@
 
 Digit Defender - a Python game
 
-> **Status:** Phase 0 — scaffold only, nothing runnable yet. See `docs/PHASES.md`.
+> **Status:** Phases 0-5 built (terrain, factory, save/load, leveling, combat); Phase 6 polish in progress. See `docs/PHASES.md`.
+
+Run `python main.py` (or `run.bat`). Tests: `python -m pytest -q`.
 
 ## Project docs
 | File | What it is |

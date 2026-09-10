@@ -50,7 +50,7 @@ class Renderer:
         factory = getattr(game, "factory", None)
         if factory is not None:
             rect = (cx0, cy0, cx1, cy1)
-            rstruct.draw_structures(screen, camera, factory, rect)
+            rstruct.draw_structures(screen, camera, factory, rect, getattr(game, "render_frac", 0.0))
             rstruct.draw_health_bars(screen, camera, factory)
             if getattr(game, "selected", None) is not None:
                 rstruct.draw_selection(screen, camera, game.selected)
