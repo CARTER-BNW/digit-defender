@@ -202,7 +202,7 @@ class Hud:
         blit(numbers.text(roles, 12, (170, 190, 170)), (x0 + 10, y0 + 146))
         blit(numbers.text("in = cargo or operand, out = output, feed = levels it up", 12, (170, 190, 170)), (x0 + 10, y0 + 164))
 
-    MINI_W, MINI_H, MINI_TILES = 220, 150, 140      # panel px and tiles shown across
+    MINI_W, MINI_H, MINI_TILES = 220, 150, 96       # panel px and tiles shown across
 
     def _draw_minimap(self, game):
         w, h = self.screen.get_size()

@@ -32,6 +32,8 @@ _Last updated: 2026-09-11 (v3) by Claude_
   (RMB on a selected spawner), ranged/heavy shots debit balance, nests aggro within 48 tiles -> raids every 45 s, core kill pays 500*tier
   and renders rubble), render/combat.py, HUD wave countdown + game-over overlay ([L] reload / [Esc] menu), F6 spawn enemy / F7 wave now (debug).
 - Phase 5 verification (scratch verify_phase5.py): all six checkpoints pass by script (see PHASES.md). 91 tests green.
+- Phase 6 (partial): belt item render interpolation, Space pause + [ ] speed x1/x2/x4, F1 help overlay, minimap; HANDOFF.md rewritten
+  for a cold start; README status; memory notes saved (overnight-run preference, Bash heredoc limit, project state).
 - **For John to decide:** feed-side rules (belt head-on = feed, machine back = feed, tower front = ammo) and voiding of <= 0 results — implemented per PLAN,
   the Phase 4 checkbox stays open until you confirm.
 - **For John to eyeball:** zoom feel, checker contrast, deposit colors, belt/item sprites, HUD layout, menu, early-game pacing.

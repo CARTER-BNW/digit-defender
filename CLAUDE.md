@@ -18,7 +18,7 @@ Design is finalized and approved — @docs/PLAN.md is the authority.
 
 ## Commands
 - Deps: `pip install -r requirements.txt`
-- Run: `python main.py` (or `run.bat`, once it exists)
+- Run: `python main.py` (menu) / `python main.py --world NAME` (skip menu) / `run.bat`
 - Tests: `python -m pytest`
 
 ## Ground rules (non-negotiable — rationale in @docs/PLAN.md)

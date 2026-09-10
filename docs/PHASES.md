@@ -67,3 +67,12 @@ formulas, structure info panel (level, invested, hp bar, next threshold), damage
 ## Phase 6 — Polish (stretch) ← CURRENT
 Belt-item render interpolation, sounds, minimap, stats graphs, drag-place belts, copy/paste
 blueprints, pause/speed controls, balance pass.
+- [x] Belt-item render interpolation (items advance by speed * accumulator fraction; render-only)
+- [x] Drag-place belts (paint with LMB held; belts auto-turn along the drag)
+- [x] Pause (Space) and sim speed x1/x2/x4 ([ ])
+- [x] Minimap (bottom-right, 96 tiles across, structures/enemies/units/nests/camera rect)
+- [x] F1 help overlay
+- [ ] Sounds
+- [ ] Stats graphs
+- [ ] Copy/paste blueprints
+- [ ] Balance pass (after John's play test)
