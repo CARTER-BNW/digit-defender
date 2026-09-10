@@ -24,13 +24,13 @@ def frames(g, n, dt=1 / 60):
 
 
 def test_chunks_appear_only_when_seen_and_unload_far_away(game):
-    frames(game, 2)
+    frames(game, 5)
     loaded_at_start = set(game.terrain.chunks)
     keep, unload = game.camera.keep_unload_rects()
     assert loaded_at_start == {(x, y) for x in range(keep[0], keep[2] + 1)
                                for y in range(keep[1], keep[3] + 1)}
     game.camera.move(200 * CHUNK_PX, 0)   # far to the east
-    frames(game, 2)
+    frames(game, 5)
     assert not (loaded_at_start & set(game.terrain.chunks))
     ux0, uy0, ux1, uy1 = game.camera.visible_chunk_range(UNLOAD_MARGIN)
     for cx, cy in game.terrain.chunks:
@@ -38,12 +38,12 @@ def test_chunks_appear_only_when_seen_and_unload_far_away(game):
 
 
 def test_return_trip_regenerates_identical_terrain(game):
-    frames(game, 1)
+    frames(game, 5)
     before = {k: list(c.tiles) for k, c in game.terrain.chunks.items()}
     game.camera.move(0, 500 * CHUNK_PX)
-    frames(game, 1)
+    frames(game, 5)
     game.camera.move(0, -500 * CHUNK_PX)
-    frames(game, 1)
+    frames(game, 5)
     for k, tiles in before.items():
         assert game.terrain.chunks[k].tiles == tiles
 
@@ -81,7 +81,7 @@ def test_fixed_timestep_caps_ticks(game):
 
 
 def test_surface_cache_is_evicted_offscreen(game):
-    frames(game, 2)
+    frames(game, 5)
     cached = sum(1 for c in game.terrain.chunks.values() if c.surface is not None)
     x0, y0, x1, y1 = game.camera.visible_chunk_range()
     assert cached <= (x1 - x0 + 3) * (y1 - y0 + 3)

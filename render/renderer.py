@@ -12,6 +12,7 @@ from settings import (CHUNK_SIZE, CHUNK_PX, TILE_SIZE, COLORS, GROUND_SHADES,
                       DEPOSIT_COLORS, TEXT_MIN_ZOOM)
 from world.tiles import GROUND_MAX, deposit_value, NEST_GROUND, NEST_CORE
 from render import numbers
+from render import structures as rstruct
 
 
 class Renderer:
@@ -31,15 +32,28 @@ class Renderer:
         zoom = camera.zoom
         cx0, cy0, cx1, cy1 = camera.visible_chunk_range()
         chunk_px = int(CHUNK_PX * zoom)
+        ox, oy = camera.screen_origin()
         for cy in range(cy0, cy1 + 1):
             for cx in range(cx0, cx1 + 1):
-                chunk = terrain.get_chunk(cx, cy)
-                sx, sy = camera.world_to_screen(cx * CHUNK_PX, cy * CHUNK_PX)
+                chunk = terrain.peek_chunk(cx, cy)    # budgeted generation: may lag a frame
+                if chunk is None:
+                    continue
+                sx, sy = cx * chunk_px + ox, cy * chunk_px + oy
                 screen.blit(self.chunk_surface(chunk, zoom), (sx, sy))
                 if self.debug:
                     pygame.draw.rect(screen, (255, 60, 60),
                                      (sx, sy, chunk_px, chunk_px), 1)
         self.evict_offscreen(terrain, (cx0 - 1, cy0 - 1, cx1 + 1, cy1 + 1))
+        factory = getattr(game, "factory", None)
+        if factory is not None:
+            rect = (cx0, cy0, cx1, cy1)
+            rstruct.draw_structures(screen, camera, factory, rect)
+            rstruct.draw_health_bars(screen, camera, factory)
+            if getattr(game, "selected", None) is not None:
+                rstruct.draw_selection(screen, camera, game.selected)
+            ghost = game.ghost() if hasattr(game, "ghost") else None
+            if ghost is not None:
+                rstruct.draw_ghost(screen, camera, *ghost)
         if self.debug:
             self._overlay(game)
 

@@ -50,9 +50,18 @@ class Camera:
         wx, wy = self.screen_to_world(sx, sy)
         return math.floor(wx / TILE_SIZE), math.floor(wy / TILE_SIZE)
 
+    def screen_origin(self):
+        """Screen position of world (0, 0), rounded once. Tiles and chunks
+        are placed at integer multiples of tile_px from it, so their edges
+        always line up (no seams, no drift between terrain and structures)."""
+        z = self.zoom
+        return (round(-self.x * z + self.w / 2), round(-self.y * z + self.h / 2))
+
     def tile_to_screen(self, tx, ty):
         """Screen position of a tile's top-left corner."""
-        return self.world_to_screen(tx * TILE_SIZE, ty * TILE_SIZE)
+        ox, oy = self.screen_origin()
+        tp = self.tile_px
+        return tx * tp + ox, ty * tp + oy
 
     # ---- zoom ------------------------------------------------------------
 

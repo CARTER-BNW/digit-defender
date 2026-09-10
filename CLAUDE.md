@@ -36,7 +36,7 @@ Add one line per file as files are created, stating what that file owns (layout:
 - `settings.py` — every tunable (grid, timestep, zoom, economy, belts, leveling, gen, combat, colors); pygame-free
 - `conftest.py` — forces SDL dummy drivers so pytest runs headless
 - `world/tiles.py` — tile-id registry (ground shades 0-5, DEPOSIT_1..9 = 11..19, NEST_GROUND/CORE) + predicates
-- `game.py` — Game: event loop, fixed-timestep accumulator (tick cap 4), pan (WASD/arrows/Shift, middle-drag), wheel zoom at cursor, F3/F11, terrain streaming
+- `game.py` — Game: event loop, fixed-timestep accumulator (tick cap 4) driving factory.tick, pan (WASD/arrows/Shift, middle-drag), wheel zoom at cursor, build mode (hotkeys/toolbar, R rotate, LMB place + drag-paint belts with auto-turn, X demolish, Q pick, RMB/Esc cancel, click select), F3/F11, terrain streaming
 - `world/chunk.py` — __slots__ Chunk: flat tile list, dirty/modified flags, opaque render cache (surface, surface_zoom); pygame-free
 - `world/terrain.py` — Terrain: chunk dict owner, lazy generate, get_tile/deposit_at via divmod, update(keep, unload) hysteresis, loader/saver hooks
 - `world/generator.py` — pure generate_chunk(seed,cx,cy): noise-shaded global checker, per-chunk digit blobs (forced 1/2/3 near origin, spawn clearing), nest stamping
@@ -44,7 +44,14 @@ Add one line per file as files are created, stating what that file owns (layout:
 - `render/camera.py` — Camera: world-px centre + discrete zoom index, world<->screen<->tile transforms, cursor-anchored zoom, visible/keep/unload chunk rects
 - `render/renderer.py` — chunk surfaces rendered per (chunk, zoom) and cached on the chunk, off-screen eviction, F3 overlay
 - `render/numbers.py` — abbrev(n) (1.2K), LRU-cached fonts and outlined text surfaces, reset() after pygame re-init
-- `tests/` — test_smoke, test_generator, test_camera, test_terrain, test_game (headless pan/zoom/streaming)
+- `sim/structures.py` — Structure base + Belt/Miner/MathMachine(4 ops)/Hub/Wall/Tower/Spawner: side rules (entry_side, FRONT/RIGHT/BACK/LEFT), feed rule, accept(), tick(), to_dict/from_dict, KINDS registry
+- `sim/factory.py` — Factory: structures dict + by_chunk index, typed lists, can_place/place/remove/rotate, deliver+targets, damage/repair, fixed tick order, rebuild_links (downstream-first belt order, merge priority, loop breaking), to_dict/from_dict
+- `sim/leveling.py` — pure formulas: level/thresholds, belt_speed, period, max_hp
+- `sim/economy.py` — Target + seeded make_target, build_cost/demolish_refund
+- `sim/serialize.py` — structure records <-> objects (stable (y,x) order)
+- `render/structures.py` — cached sprites per (kind,dir,tile px,label), batched blits of structures + belt items, ghost/side-role/selection/health-bar drawing
+- `ui/hud.py` — balance, targets, toolbar (TOOLS/HOTKEYS), hover/selection info line, messages
+- `tests/` — test_smoke, test_generator, test_camera, test_terrain, test_game (headless pan/zoom/streaming), test_belts, test_machines, test_economy, test_leveling
 
 ## Project rules
 - Discover a trap → log it in @docs/GOTCHAS.md immediately (`/gotcha`).

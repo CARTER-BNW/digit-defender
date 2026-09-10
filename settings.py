@@ -25,6 +25,7 @@ CAMERA_SPEED = 600                  # world px/s (at zoom 1) for keyboard pannin
 CAMERA_FAST_MULT = 4                # while holding Shift
 PRELOAD_CHUNKS = 1                  # ring of chunks kept generated beyond the screen
 UNLOAD_MARGIN = 3                   # chunks outside this ring get dropped (hysteresis)
+CHUNK_GEN_BUDGET = 24               # max chunks generated per frame (visible ones first)
 TEXT_MIN_ZOOM = 0.5                 # below this, items/deposits draw as colored squares
 
 # --- economy ------------------------------------------------------------------
@@ -37,15 +38,20 @@ COSTS = {
 DEMOLISH_REFUND = 0.5               # fraction of COST returned on demolish
 REPAIR_COST_PER_HP = 0.2
 TARGET_COUNT = 3                    # active hub target numbers
-TARGET_REWARD_MULT = 3              # reward = value * mult (see sim/economy.py)
+TARGET_BASE = 4                     # first targets roll in [base, 3*base] ...
+TARGET_GROWTH = 1.25                # ... and the base grows by this per completed target
+TARGET_REWARD_MULT = 5              # reward = value * mult + flat (sim/economy.py)
+TARGET_REWARD_FLAT = 20
 
 # --- belts / items ------------------------------------------------------------
 BELT_BASE_SPEED = 0.05              # tiles/tick  (= 1 tile/s at 20 ticks/s)
-BELT_SPEED_PER_FED = 0.0001         # tiles/tick per fed value: +0.01 tiles/s per 100 fed
+BELT_SPEED_PER_FED = 0.0001         # tiles/tick per fed value: +0.01 tiles/tick per 100 fed (PLAN 3.5)
+MAX_BELT_SPEED = 0.5                # tiles/tick cap so items never skip a belt
 ITEM_SPACING = 0.25                 # min gap between items on a belt (4 per tile)
 MINER_BASE_PERIOD = 40              # ticks between emissions (2 s)
 MACHINE_BASE_PERIOD = 40            # ticks per operation
 MACHINE_BUFFER = 3                  # operand buffer depth per side
+TOWER_AMMO_MAX = 10                 # numbers a tower can hold
 
 # --- leveling -----------------------------------------------------------------
 LEVEL_THRESHOLDS = [100 * 2 ** k for k in range(20)]   # invested >= t -> level up

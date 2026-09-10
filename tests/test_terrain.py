@@ -7,6 +7,9 @@ def test_update_generates_keep_and_unloads_outside():
     t.update((0, 0, 2, 2), (-1, -1, 3, 3))
     assert len(t.chunks) == 9
     assert t.generated == 9
+    # generation budget: only `budget` new chunks per call, priority rect first
+    t.update((0, 0, 9, 9), (-1, -1, 10, 10), priority_rect=(5, 5, 6, 6), budget=4)
+    assert len(t.chunks) == 13 and {(5, 5), (6, 5), (5, 6), (6, 6)} <= set(t.chunks)
     # hysteresis: still inside the unload rect -> nothing dropped
     t.update((1, 1, 1, 1), (-1, -1, 3, 3))
     assert len(t.chunks) == 9

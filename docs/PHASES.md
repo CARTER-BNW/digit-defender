@@ -21,19 +21,19 @@ keep/unload hysteresis, F3 debug overlay.
 - [x] 60 fps fullscreen at zoom 0.25 (1920x1080: 5.6 ms/frame fast pan, 2.6 ms static; worst single frame 19 ms)
 - [x] test_generator green (determinism, negative coords, near-spawn deposit guarantee, safe zone)
 
-## Phase 2 — Factory core ← CURRENT
+## Phase 2 — Factory core (done 2026-09-11)
 Fixed-timestep loop; build mode (toolbar, hotkeys, R rotate, ghost w/ validity+cost tint, X demolish
 w/ 50% refund); Belt (chains, merges, turns), Miner, MathMachine (4 ops), 3x3 Hub at origin; balance
 HUD; 3 active target numbers with rewards. Every structure ships with to_dict/from_dict.
-- [ ] 2a Miner on deposit -> digits ride belts, turns work
-- [ ] 2b Two lines into adder -> sums emerge; all 4 ops verified in-game (7//2=3; results<=0 voided)
-- [ ] 2c Hub delivery credits face value; target completion pays bonus and rerolls
-- [ ] 2d Costs enforced; going broke is possible (log balancing note)
-- [ ] 2e Line crossing chunk borders, built 40 chunks away, keeps running off-screen
-- [ ] test_belts / test_machines / test_economy green
-- [ ] 2000-belt synthetic world >= 60 fps
+- [x] 2a Miner on deposit -> digits ride belts, turns work
+- [x] 2b Two lines into adder -> sums emerge; all 4 ops verified in-game (7//2=3; results<=0 voided)
+- [x] 2c Hub delivery credits face value; target completion pays bonus and rerolls
+- [x] 2d Costs enforced; going broke is possible (balancing note in STATUS v3: adders at 500 vs ~1.5/s income per miner line feels slow; targets start 4-12)
+- [x] 2e Line crossing chunk borders, built 40 chunks away, keeps running off-screen (chunk 40 unloaded while its belts carried items)
+- [x] test_belts / test_machines / test_economy green (66 tests total)
+- [x] 2000-belt synthetic world >= 60 fps (1920x1080 fullscreen, all 2000 belts + 4000 items visible: 10.7 ms/frame at 0.25, 11.0 ms at 1.0; sim tick 1.2 ms)
 
-## Phase 3 — Save/load
+## Phase 3 — Save/load ← CURRENT
 persistence + serialize (meta.json, chunks/*.bin, structures.json, enemies.json; atomic tmp+replace),
 world-select menu (create/seed/resume, recent-first), autosave 60s + on quit.
 - [ ] Quit mid-flow, relaunch, resume: item progress, balance, targets, camera intact

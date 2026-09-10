@@ -5,10 +5,10 @@ sim.factory.Factory and simulates whether or not a chunk is loaded.
 Persistence (Phase 3): only modified chunks are ever written, and deposits are
 infinite, so in practice nothing is; the hook stays for the future.
 """
-from settings import CHUNK_SIZE, WORLD_SEED
+from settings import CHUNK_SIZE, WORLD_SEED, CHUNK_GEN_BUDGET
 from world.chunk import Chunk
 from world.generator import generate_chunk
-from world.tiles import deposit_value
+from world.tiles import deposit_value, is_buildable
 
 
 class Terrain:
@@ -50,6 +50,10 @@ class Terrain:
         """Digit 1..9 of the deposit under a tile, else 0."""
         return deposit_value(self.get_tile(tx, ty))
 
+    def buildable(self, tx, ty):
+        """Structures may go on ground and deposits, never on nest tiles."""
+        return is_buildable(self.get_tile(tx, ty))
+
     def set_tile(self, tx, ty, tile_id):
         cx, lx = divmod(tx, CHUNK_SIZE)
         cy, ly = divmod(ty, CHUNK_SIZE)
@@ -57,15 +61,26 @@ class Terrain:
 
     # ---- streaming -----------------------------------------------------------
 
-    def update(self, keep_rect, unload_rect):
-        """keep_rect: inclusive (cx0, cy0, cx1, cy1) that must be loaded.
+    def update(self, keep_rect, unload_rect, priority_rect=None, budget=None):
+        """keep_rect: inclusive (cx0, cy0, cx1, cy1) that should be loaded.
         unload_rect: larger inclusive range; chunks outside it are saved (if
-        modified) and dropped. The gap between the two is the hysteresis."""
-        cx0, cy0, cx1, cy1 = keep_rect
-        for cy in range(cy0, cy1 + 1):
-            for cx in range(cx0, cx1 + 1):
-                if (cx, cy) not in self.chunks:
-                    self.get_chunk(cx, cy)
+        modified) and dropped. The gap between the two is the hysteresis.
+        At most `budget` chunks are generated per call (priority_rect, the
+        visible area, first) so a full zoom-out never freezes a frame; the
+        rest arrive over the next frames."""
+        if budget is None:
+            budget = CHUNK_GEN_BUDGET
+        generated = 0
+        rects = (priority_rect, keep_rect) if priority_rect else (keep_rect,)
+        for rect in rects:
+            cx0, cy0, cx1, cy1 = rect
+            for cy in range(cy0, cy1 + 1):
+                for cx in range(cx0, cx1 + 1):
+                    if (cx, cy) not in self.chunks:
+                        if generated >= budget:
+                            break
+                        self.get_chunk(cx, cy)
+                        generated += 1
         ux0, uy0, ux1, uy1 = unload_rect
         stale = [k for k in self.chunks
                  if not (ux0 <= k[0] <= ux1 and uy0 <= k[1] <= uy1)]

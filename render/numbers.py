@@ -29,6 +29,12 @@ def abbrev(n):
     return f"{sign}{n:.1e}"
 
 
+def fmt(n):
+    """Thousands separators up to a million, abbreviated beyond."""
+    n = int(n)
+    return f"{n:,}" if abs(n) < 1_000_000 else abbrev(n)
+
+
 @lru_cache(maxsize=64)
 def font(px, bold=True):
     """A font whose digits are about px pixels tall. SysFont lookup happens

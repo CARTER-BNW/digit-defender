@@ -9,7 +9,16 @@ _Last updated: 2026-09-11 (v3) by Claude_
   (worst single frame 19 ms when a column of chunks generates), 2.6 ms static; fly 300 chunks away and back -> identical tiles.
 - Gotchas logged: str-seeded RNG (hash salting), font cache after pygame re-init, Bash heredoc length.
 - Tuned: NEST_CHANCE_PER_REGION 0.3 (nests findable at region distance 2-3). Deposit colors per digit; deposits draw as dots below zoom 0.5.
-- **For John to eyeball:** zoom feel (cursor anchoring), checker contrast, deposit colors. Polish idea: per-frame chunk-generation budget to kill the 19 ms hitch.
+- Phase 2: sim/{structures,factory,leveling,economy,serialize}.py, render/structures.py, ui/hud.py, build mode in game.py
+  (hotkeys 1-9/0/-, R rotate, LMB place, drag-paint belts that auto-turn, X demolish (hold to sweep), Q pick, RMB/Esc cancel, click select).
+  Side rules: belt back/side = cargo, head-on = feed; machine left = A, right = B, back = feed, front refuses; hub = income; tower front = ammo.
+- Phase 2 verification (scratch verify_phase2.py, real window): 3-line to hub with real costs, target 3 paid +35 and rerolled, adder/sub/mul/div
+  produce 9/5/12/3 in-game, 3-5 voided, broke -> "need 500" and belt refused at balance 1, paint-place turns [E,E,E,S,S,W,W], far line in chunk 40
+  ran while unloaded. 2000 belts + 4000 items fullscreen: 10.7 ms/frame at 0.25, 11.0 ms at 1.0 (uncapped), sim tick 1.2 ms.
+- Perf work: batched Surface.blits + convert_alpha sprites (16.6 -> 11 ms/frame), CHUNK_GEN_BUDGET=24 chunks/frame (visible first) removes the zoom-out freeze.
+- Balancing note (2d): income is face value only (~1.5/s per miner line of 3s); adders at 500 take minutes. Targets start 4-12 (TARGET_BASE 4, x1.25 per completion,
+  reward value*5+20). Feels slow-but-fair on paper; needs a play test.
+- **For John to eyeball:** zoom feel, checker contrast, deposit colors, belt/item sprites, HUD layout, early-game pacing.
 
 ## v2 (2026-09-11): Design complete — plan approved
 - Scope confirmed with John: Beltmatic-like infinite grid factory (mine digits 1-9, math machines,
