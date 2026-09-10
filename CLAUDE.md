@@ -1,30 +1,50 @@
 # Digit Defender
 
 ## Purpose
-Digit Defender - a Python game
-Scope not yet confirmed — Phase 0 checkpoint in @docs/PHASES.md.
+Infinite borderless grid factory game (Beltmatic-like: mine digits 1-9, math machines, hub
+deliveries + target numbers) crossed with base defense (towers, walls, units, enemy nests +
+escalating waves). Chunks generate only when first seen. Hub destroyed = game over.
+Design is finalized and approved — @docs/PLAN.md is the authority.
+
+## On "start" / "continue" / "go"
+1. Read HANDOFF.md, docs/PLAN.md, docs/PHASES.md — in that order.
+2. Resume at the first unchecked checkpoint in docs/PHASES.md (currently Phase 0).
+3. Tick checkboxes and refresh HANDOFF.md as work completes.
+4. Stop and demo at each phase boundary before starting the next phase (`/phase-gate`).
 
 ## Stack & tooling
-- Python 3.12 (Windows / PowerShell)
-- Deps kept minimal — see `requirements.txt`
+- Python 3.12 (Windows / PowerShell), pygame-ce, numpy, opensimplex, pytest
+- Reference codebase to ADAPT patterns from (not copy): `D:\Claude\projects\games\Pixel_Worlds`
 
 ## Commands
 - Deps: `pip install -r requirements.txt`
-- Run: `python app.py` (once it exists)
+- Run: `python main.py` (or `run.bat`, once it exists)
 - Tests: `python -m pytest`
+
+## Ground rules (non-negotiable — rationale in @docs/PLAN.md)
+- `sim/` NEVER imports pygame. All factory/combat logic must be testable headless with pytest.
+- Structures live in the world-level dict `Factory.structures[(tx,ty)]`, NEVER inside terrain chunks.
+- Always `divmod(t, CHUNK_SIZE)` for tile→chunk coords (negative coords are everywhere).
+- Every Structure gets `to_dict()/from_dict()` the moment it is first written.
+- Belts update in downstream-first chain order — never dict iteration order (sim determinism).
+- Never `font.render` or `transform.scale` chunk surfaces per frame — cache everything.
+- Gameplay never writes terrain; nest destruction goes through the registry.
 
 ## Architecture map
 No code yet. Add one line per file as files are created, stating what that file owns.
-
+Planned layout: main.py / game.py / settings.py + world/ + sim/ + render/ + ui/ + tests/
+(see @docs/PLAN.md §1).
 
 ## Project rules
 - Discover a trap → log it in @docs/GOTCHAS.md immediately (`/gotcha`).
 - Phase gates: don't start the next phase until the current phase's checkpoints are verified (`/phase-gate`).
-- End of session: new vN entry in @STATUS.md, refresh HANDOFF.md, commit & push (`/session-wrap`).
-- Never commit data dumps, logs, or secrets — .gitignore covers these; keep it that way.
+- End of session: new vN entry in @STATUS.md, refresh HANDOFF.md, commit (`/session-wrap`). Local git only — no push.
+- Never commit data dumps, logs, saves/, or secrets — .gitignore covers these; keep it that way.
 
 ## Pointers
-- @HANDOFF.md — read first in a new session: live state + next actions
+- @HANDOFF.md — read first in a new session: live state + load-bearing decisions
+- @docs/PLAN.md — full approved architecture (module layout, tick order, save format, pitfalls)
 - @STATUS.md — reverse-chron session log
-- @docs/PHASES.md — roadmap with phase checkpoints
+- @docs/PHASES.md — roadmap with phase exit gates
 - @docs/GOTCHAS.md — known traps
+- @idea.txt — John's original concept notes
