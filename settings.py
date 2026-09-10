@@ -66,7 +66,7 @@ DEPOSIT_HIGH_PER_CHUNK = 0.02       # ...growing per chunk of Chebyshev distance
 DEPOSIT_HIGH_MAX = 0.6              # ...up to this cap
 NEST_REGION = 12                    # chunks per nest-region side (192 tiles)
 SAFE_REGIONS = 1                    # no nests within this Chebyshev region distance of origin
-NEST_CHANCE_PER_REGION = 0.15       # nest chance grows by this per region beyond SAFE_REGIONS
+NEST_CHANCE_PER_REGION = 0.3        # nest chance grows by this per region beyond SAFE_REGIONS
 NEST_CHANCE_MAX = 0.6
 NEST_AGGRO_TILES = 48
 

@@ -11,17 +11,17 @@ conftest.py (SDL dummy driver), CLAUDE.md commands updated.
 - [x] python main.py opens a window and quits cleanly
 - [x] pytest passes (placeholder test)
 
-## Phase 1 — Walkable skeleton ← CURRENT
+## Phase 1 — Walkable skeleton (done 2026-09-11)
 Terrain/Chunk/Generator (dark-green checker + shade noise, deposits 1-9 as digits, spawn clearing),
 Camera pan (WASD + middle-drag) and cursor-anchored discrete zoom, per-zoom cached chunk blits,
 keep/unload hysteresis, F3 debug overlay.
-- [ ] Pan forever; chunks appear only when first seen
-- [ ] All 6 zoom levels, cursor-anchored, no seams
-- [ ] Fly away and return -> identical terrain
-- [ ] 60 fps fullscreen at zoom 0.25
-- [ ] test_generator green (determinism, negative coords, near-spawn deposit guarantee, safe zone)
+- [x] Pan forever; chunks appear only when first seen (real-window pan: loaded stays ~270 chunks while 1600+ generated)
+- [x] All 6 zoom levels, cursor-anchored, no seams (screenshots at every level; anchor + whole-pixel tests) — John: confirm the feel
+- [x] Fly away and return -> identical terrain
+- [x] 60 fps fullscreen at zoom 0.25 (1920x1080: 5.6 ms/frame fast pan, 2.6 ms static; worst single frame 19 ms)
+- [x] test_generator green (determinism, negative coords, near-spawn deposit guarantee, safe zone)
 
-## Phase 2 — Factory core
+## Phase 2 — Factory core ← CURRENT
 Fixed-timestep loop; build mode (toolbar, hotkeys, R rotate, ghost w/ validity+cost tint, X demolish
 w/ 50% refund); Belt (chains, merges, turns), Miner, MathMachine (4 ops), 3x3 Hub at origin; balance
 HUD; 3 active target numbers with rewards. Every structure ships with to_dict/from_dict.

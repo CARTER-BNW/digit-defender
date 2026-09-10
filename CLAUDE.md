@@ -36,7 +36,15 @@ Add one line per file as files are created, stating what that file owns (layout:
 - `settings.py` — every tunable (grid, timestep, zoom, economy, belts, leveling, gen, combat, colors); pygame-free
 - `conftest.py` — forces SDL dummy drivers so pytest runs headless
 - `world/tiles.py` — tile-id registry (ground shades 0-5, DEPOSIT_1..9 = 11..19, NEST_GROUND/CORE) + predicates
-- `tests/test_smoke.py` — settings sanity, tile ids, headless window open/quit
+- `game.py` — Game: event loop, fixed-timestep accumulator (tick cap 4), pan (WASD/arrows/Shift, middle-drag), wheel zoom at cursor, F3/F11, terrain streaming
+- `world/chunk.py` — __slots__ Chunk: flat tile list, dirty/modified flags, opaque render cache (surface, surface_zoom); pygame-free
+- `world/terrain.py` — Terrain: chunk dict owner, lazy generate, get_tile/deposit_at via divmod, update(keep, unload) hysteresis, loader/saver hooks
+- `world/generator.py` — pure generate_chunk(seed,cx,cy): noise-shaded global checker, per-chunk digit blobs (forced 1/2/3 near origin, spawn clearing), nest stamping
+- `sim/nests.py` — pure nest_at(seed,rx,ry) region grid + NestRegistry (destroyed/damage, to_dict/from_dict)
+- `render/camera.py` — Camera: world-px centre + discrete zoom index, world<->screen<->tile transforms, cursor-anchored zoom, visible/keep/unload chunk rects
+- `render/renderer.py` — chunk surfaces rendered per (chunk, zoom) and cached on the chunk, off-screen eviction, F3 overlay
+- `render/numbers.py` — abbrev(n) (1.2K), LRU-cached fonts and outlined text surfaces, reset() after pygame re-init
+- `tests/` — test_smoke, test_generator, test_camera, test_terrain, test_game (headless pan/zoom/streaming)
 
 ## Project rules
 - Discover a trap → log it in @docs/GOTCHAS.md immediately (`/gotcha`).

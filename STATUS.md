@@ -1,5 +1,15 @@
 # STATUS
-_Last updated: 2026-09-11 (v2) by Claude_
+_Last updated: 2026-09-11 (v3) by Claude_
+
+## v3 (2026-09-11, overnight autonomous run): Phase 0 + Phase 1 done
+- John went to bed with "do all you can"; phases verified by running them (tests + scripted real window + screenshots), not by demo.
+- Phase 0: requirements.txt, run.bat, settings.py (all PLAN section 4 tunables), world/tiles.py, conftest.py, main.py, tests/test_smoke.py.
+- Phase 1: world/{chunk,terrain,generator}.py, sim/nests.py, render/{camera,renderer,numbers}.py, game.py; 29 tests green.
+- Real-window verification (scratch verify_phase1.py): all 6 zooms screenshot; fullscreen 1920x1080 at 0.25 = 5.6 ms/frame fast pan
+  (worst single frame 19 ms when a column of chunks generates), 2.6 ms static; fly 300 chunks away and back -> identical tiles.
+- Gotchas logged: str-seeded RNG (hash salting), font cache after pygame re-init, Bash heredoc length.
+- Tuned: NEST_CHANCE_PER_REGION 0.3 (nests findable at region distance 2-3). Deposit colors per digit; deposits draw as dots below zoom 0.5.
+- **For John to eyeball:** zoom feel (cursor anchoring), checker contrast, deposit colors. Polish idea: per-frame chunk-generation budget to kill the 19 ms hitch.
 
 ## v2 (2026-09-11): Design complete — plan approved
 - Scope confirmed with John: Beltmatic-like infinite grid factory (mine digits 1-9, math machines,
