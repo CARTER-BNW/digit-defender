@@ -55,6 +55,7 @@ class Menu:
             if cont is not None:
                 options.append((f"Continue  {cont['name']}", ("play", cont)))
             options.append(("New World", ("new", None)))
+            options.append(("Test lab  (every part and junction, for bug hunting)", ("lab", None)))
             for m in worlds[:MAX_LISTED]:
                 options.append((f"{m['name']}   seed {m['seed']}   {_ago(m.get('last_played', 0))}",
                                 ("play", m)))
@@ -81,6 +82,10 @@ class Menu:
             action, meta = key
             if action == "play":
                 return {"action": "play", "meta": meta}
+            if action == "lab":
+                from world import testworld
+                return {"action": "play", "meta": persistence.find_or_create(testworld.NAME, testworld.SEED),
+                        "lab": True}
             if action == "fullscreen":
                 self._toggle_fullscreen()
                 continue

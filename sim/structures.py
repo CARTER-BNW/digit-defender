@@ -25,6 +25,8 @@ level, speed/rate and max_hp; hp only moves when a level-up raises max_hp.
   Wall/Spawner: every side = feed
   Tower:    every side = ammo (no facing, no feed sides; level it with the
             balance upgrade) — John, 2026-09-11
+  Bridge:   every side = input; the item leaves through the opposite side
+            (two lines cross without mixing) — John, 2026-09-11
 Every structure has to_dict()/from_dict() from day one (save/load).
 """
 import math
@@ -252,6 +254,84 @@ class Belt(Structure):
                       for it in d.get("items", [])]
         self.rr = int(d.get("rr", 0))
         self.split = bool(d.get("split", False))
+
+
+class Bridge(Structure):
+    """Belt crossing (Beltmatic-style bridge, John): two lines cross without
+    mixing. Every side is an input; an item entering through side d travels
+    across at belt speed and leaves through the opposite side, into whatever
+    stands there (belt, machine, HQ, tower, another bridge). Each entry side
+    has its own lane, so the lanes never mix. No facing: it is never rotated,
+    so a relative side is a world side."""
+    __slots__ = ("lanes", "exits")
+    KIND = "bridge"
+    SIDE_ROLES = (ROLE_IN, ROLE_IN, ROLE_IN, ROLE_IN)
+
+    def __init__(self, x, y, direction=N):
+        super().__init__(x, y, 0)
+        self.lanes = [[], [], [], []]      # per entry side: [[value, progress], ...] ascending
+        self.exits = [None, None, None, None]   # per entry side: (structure, rel) beyond the far side
+
+    @property
+    def speed(self):
+        return leveling.belt_speed(self.invested)
+
+    def count(self):
+        return sum(len(lane) for lane in self.lanes)
+
+    def accept(self, value, rel, overshoot, factory):
+        lane = self.lanes[rel % 4]
+        p = overshoot
+        if lane:
+            room = lane[0][1] - ITEM_SPACING
+            if room < 0.0:
+                return False
+            if p > room:
+                p = room
+        lane.insert(0, [value, p])
+        return True
+
+    def tick(self, factory):
+        speed = self.speed
+        for d in range(4):
+            items = self.lanes[d]
+            if not items:
+                continue
+            i = len(items) - 1
+            head = items[i]
+            p = head[1] + speed
+            if p >= 1.0:
+                out = self.exits[d]
+                if out is not None and out[0].accept(head[0], out[1], p - 1.0, factory):
+                    items.pop()
+                    limit = 1.0 - EPS
+                else:
+                    head[1] = 1.0 - EPS
+                    limit = head[1] - ITEM_SPACING
+            else:
+                head[1] = p
+                limit = p - ITEM_SPACING
+            i -= 1
+            while i >= 0:
+                item = items[i]
+                p = item[1] + speed
+                if p > limit:
+                    p = limit
+                item[1] = p
+                limit = p - ITEM_SPACING
+                i -= 1
+
+    def to_dict(self):
+        d = super().to_dict()
+        d["lanes"] = [[list(it) for it in lane] for lane in self.lanes]
+        return d
+
+    def _load_extra(self, d):
+        lanes = [[[int(v), float(p)] for v, p in lane] for lane in d.get("lanes", [])]
+        while len(lanes) < 4:
+            lanes.append([])
+        self.lanes = lanes[:4]
+        self.direction = 0
 
 
 class Miner(Structure):
@@ -601,6 +681,6 @@ class SpawnerHeavy(Spawner):
 
 
 KINDS = {cls.KIND: cls for cls in
-         (Belt, Miner, Adder, Subtractor, Multiplier, Divider, Hub, Wall, Tower,
+         (Belt, Bridge, Miner, Adder, Subtractor, Multiplier, Divider, Hub, Wall, Tower,
           SpawnerRanged, SpawnerMelee, SpawnerHeavy)}
 MACHINE_KINDS = ("adder", "subtractor", "multiplier", "divider")

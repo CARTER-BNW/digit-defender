@@ -160,6 +160,15 @@ def sprite(kind, direction, tp, label=None, level=1, variant=0):
     above 1 get a small badge in the top-right corner. `variant` is the
     belt's input-side mask (its shape)."""
     surf = _sprite(kind, direction, tp, label, variant)
+    if kind == "belt" and tp >= 12:
+        outs = variant >> 4
+        if outs & (outs - 1):                          # more than one exit: a splitter, mark every exit
+            surf = surf.copy()
+            for d in range(4):
+                if outs & (1 << d):
+                    dx, dy = DIR_VEC[d]
+                    _arrow(surf, tp / 2 + dx * tp * 0.34, tp / 2 + dy * tp * 0.34, d, tp * 0.1, (255, 240, 160))
+            surf = _convert(surf)
     if level > 1 and tp >= 16 and kind != "wall":      # walls show their level as the label
         surf = surf.copy()
         badge = numbers.text(str(level), max(8, tp // 3), (255, 230, 120))
@@ -232,6 +241,29 @@ def _wall_sprite(direction, links, tp, label):
     return _convert(surf)
 
 
+def _bridge_sprite(tp):
+    """A belt crossing: the east-west lane in belt grey underneath, the
+    north-south lane raised in bridge brown with dark rails. bridge.png
+    replaces it when present."""
+    png = load_png("bridge")
+    if png is not None:
+        return _convert(_fit(png, tp).copy())
+    surf = pygame.Surface((tp, tp), pygame.SRCALPHA)
+    belt = COLORS["belt"]
+    base = COLORS["bridge"]
+    wpx = max(2, int(round(tp * BELT_WIDTH)))
+    off = (tp - wpx) // 2
+    pygame.draw.rect(surf, belt, (0, off, tp, wpx))
+    if tp >= 12:
+        pygame.draw.rect(surf, COLORS["belt_edge"], (0, off, tp, 1))
+        pygame.draw.rect(surf, COLORS["belt_edge"], (0, off + wpx - 1, tp, 1))
+    pygame.draw.rect(surf, base, (off, 0, wpx, tp))
+    rail = max(1, tp // 12)
+    pygame.draw.rect(surf, _darker(base, 0.45), (off, 0, rail, tp))
+    pygame.draw.rect(surf, _darker(base, 0.45), (off + wpx - rail, 0, rail, tp))
+    return _convert(surf)
+
+
 @lru_cache(maxsize=2048)
 def _sprite(kind, direction, tp, label=None, variant=0):
     cls = KINDS[kind]
@@ -242,6 +274,8 @@ def _sprite(kind, direction, tp, label=None, variant=0):
         return _convert(img.copy()) if img is not None else _belt_procedural(direction, variant, tp)
     if kind == "wall":
         return _wall_sprite(direction, variant, tp, label)
+    if kind == "bridge":
+        return _bridge_sprite(tp)
     png = load_png(kind)
     if png is not None:
         surf = _png_sprite(png, direction, size).copy()
@@ -348,6 +382,25 @@ def draw_structures(screen, camera, factory, chunk_rect, frac=0.0):
                                 vx, vy = DIR_VEC[side]
                         item_blits.append((spr, (int(cxp + vx * off) - spr.get_width() // 2,
                                                  int(cyp + vy * off) - spr.get_height() // 2)))
+                elif kind == "bridge" and any(s.lanes):
+                    cxp = sx + half
+                    cyp = sy + half
+                    lead = s.speed * frac
+                    for d in range(4):                 # each lane runs straight across from its entry edge
+                        lane = s.lanes[d]
+                        if not lane:
+                            continue
+                        ex, ey = DIR_VEC[d]
+                        limit = 0.999
+                        for value, p in reversed(lane):
+                            q = p + lead
+                            if q > limit:
+                                q = limit
+                            limit = q - ITEM_SPACING
+                            spr = item_sprite(value, tp, with_text)
+                            off = (0.5 - q) * tp
+                            item_blits.append((spr, (int(cxp + ex * off) - spr.get_width() // 2,
+                                                     int(cyp + ey * off) - spr.get_height() // 2)))
     screen.blits(blits, doreturn=False)
     screen.blits(item_blits, doreturn=False)
     if empty_towers and tp >= 8:                      # a tower with nothing to fire

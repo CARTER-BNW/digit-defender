@@ -13,6 +13,7 @@ import pygame
 
 from settings import WINDOW_W, WINDOW_H, WORLD_SEED
 from world import persistence
+from world import testworld
 from render import numbers
 from ui.menu import Menu
 from game import Game
@@ -25,6 +26,8 @@ def parse_args(argv):
     p.add_argument("--frames", type=int, default=None, help="auto-quit after N frames")
     p.add_argument("--fullscreen", action="store_true")
     p.add_argument("--autosave", type=float, default=None, help="autosave interval (s)")
+    p.add_argument("--testworld", action="store_true",
+                   help="open the Test Lab world (every part and junction type laid out around the HQ)")
     return p.parse_args(argv)
 
 
@@ -39,15 +42,21 @@ def main(argv=None):
     pygame.display.set_caption("Digit Defender")
 
     while True:
-        if args.world:
+        lab = args.testworld
+        if args.testworld:
+            meta = persistence.find_or_create(testworld.NAME, testworld.SEED)
+        elif args.world:
             meta = persistence.find_or_create(args.world, args.seed)
         else:
             choice = Menu(config, max_frames=args.frames).run()
             if choice["action"] == "quit":
                 break
             meta = choice["meta"]
+            lab = choice.get("lab", False)
         game = Game.load(pygame.display.get_surface(), meta)
         game.show_hints = config.get("hints", True)
+        if lab and testworld.is_empty(game.factory):
+            testworld.build(game.factory)
         if args.autosave is not None:
             game.autosave_s = args.autosave
         result = game.run(max_frames=args.frames)
@@ -56,7 +65,7 @@ def main(argv=None):
         persistence.save_config(config)
         if result == "reload":
             continue                                  # Game.load re-reads the last save
-        if result == "quit" or args.world:
+        if result == "quit" or args.world or args.testworld:
             break
 
     pygame.quit()

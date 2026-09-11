@@ -42,9 +42,13 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
    Home or the HUB button = camera back to the hub, F6 spawn an enemy at the cursor, F7 trigger the next wave,
    F11 fullscreen, Esc = cancel tool / clear selection / menu (Esc in the menu = back into the game; Del in the menu
    deletes the highlighted world after a confirm screen). Minimap bottom-right.
-4. Belt rules a player sees: drag-paint belts; a belt that starts beside a straight belt and points away becomes a
-   branch (T), items alternate between branches; a corner or a merge never branches; numbers cannot be built on
-   except by miners; a miner pushes into every adjacent belt.
+4. Belt rules a player sees (final, round 14): a belt pointing into another belt's side or back MERGES (T / X shapes
+   with several inputs). A belt SPLITS only when [T] is pressed on it, or when an unfed belt starts beside a straight
+   belt (auto branch); splitting belts show small arrows at every exit and alternate items between them. [B] bridge =
+   two lines cross without mixing (in a side, out the opposite). Numbers cannot be built on except by miners; a miner
+   pushes into every adjacent cargo input.
+5. `python main.py --testworld` (or the menu entry "Test lab") opens the Test Lab world: every part and junction type
+   laid out around the HQ (legend in `world/testworld.py`; tests/test_testworld.py checks it runs as documented).
 
 ## Architecture in one screen (details: CLAUDE.md architecture map, docs/PLAN.md)
 - `sim/` is headless (no pygame): `factory.py` (structures dict, fixed tick order, belt chain ordering, economy, damage,
@@ -91,7 +95,11 @@ tests must keep their tiles clear of the right column (x >= 932 px) and the mini
    a belt already fed by its own line is never stolen as a branch (John, round 3: parallel lines stay separate) — UNLESS
    the junction belt has `split` set ([T] key, saved): then it branches into every side belt pointing away, even a fed
    one (John, round 12: a split feeding a merge = two T-junctions; the auto rule cannot tell that layout from the
-   parallel-lines one, so the player decides per belt). Only miners may be built on number tiles. Belt sprites are shape-aware (in_sides | out_sides -> straight/corner/T/cross).
+   parallel-lines one, so the player decides per belt). Bridge (round 14, `sim/structures.Bridge`, cost 10): four
+   lanes keyed by entry side, an item leaves through the opposite side into whatever stands there; `exits` are cached
+   in rebuild_links for fed lanes only (a belt pointing in, a miner, a machine, another bridge); ticks after belts;
+   never rotated (relative side == world side); a fed exit belt counts as pushed / side-fed for the branch rule and
+   gets its `in_sides` bit. Only miners may be built on number tiles. Belt sprites are shape-aware (in_sides | out_sides -> straight/corner/T/cross).
    Belt items are `[value, progress, entry_rel]`; the third field is render-only (corner animation) and the sim never
    reads it; old two-field saves load as BACK.
 5. Leveling: level n -> n+1 costs 100 * 1.25^(n-1) fed (100, 125, 156, 196, 244...), thresholds are the running sum

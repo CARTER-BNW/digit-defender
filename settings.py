@@ -37,7 +37,7 @@ MINER_PULSE_TICKS = 8               # white border flash after each extraction
 # --- economy ------------------------------------------------------------------
 START_BALANCE = 1000
 COSTS = {
-    "belt": 2, "wall": 5, "miner": 10, "tower": 20,
+    "belt": 2, "bridge": 10, "wall": 5, "miner": 10, "tower": 20,
     "adder": 500, "subtractor": 500, "multiplier": 1000, "divider": 1000,
     "spawner_ranged": 50, "spawner_melee": 50, "spawner_heavy": 150,
 }
@@ -66,7 +66,7 @@ LEVEL_BASE_COST = 100               # fed (or balance) to reach level 2
 LEVEL_COST_GROWTH = 1.25            # every further level costs 25% more than the last (John); no level cap
 RATE_STEP = 0.25                    # period = BASE_PERIOD / (1 + level * RATE_STEP)
 BASE_HP = {
-    "belt": 20, "wall": 200, "miner": 60, "tower": 100, "hub": 1000,
+    "belt": 20, "bridge": 40, "wall": 200, "miner": 60, "tower": 100, "hub": 1000,
     "adder": 150, "subtractor": 150, "multiplier": 200, "divider": 200,
     "spawner_ranged": 120, "spawner_melee": 120, "spawner_heavy": 200,
 }
@@ -150,6 +150,7 @@ COLORS = {
     "nest_core": (160, 40, 40),
     "grid_line": (0, 0, 0),
     "belt": (92, 92, 104),
+    "bridge": (150, 128, 90),
     "belt_arrow": (52, 52, 62),
     "belt_edge": (60, 60, 70),
     "miner": (120, 120, 60),

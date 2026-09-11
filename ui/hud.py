@@ -7,24 +7,24 @@ from settings import COLORS, COSTS, REPAIR_COST_PER_HP, TICK_RATE, TILE_SIZE, CH
 from render import numbers
 from render import combat as rcombat
 from sim import leveling
-from sim.structures import KINDS, Belt, Miner, MathMachine, Tower, Spawner, Hub, ROLE_FEED
+from sim.structures import KINDS, Belt, Bridge, Miner, MathMachine, Tower, Spawner, Hub, ROLE_FEED
 
 # toolbar order and hotkeys (Phase 5 appends spawners)
-TOOLS = [("belt", "1"), ("miner", "2"), ("adder", "3"), ("subtractor", "4"),
+TOOLS = [("belt", "1"), ("bridge", "B"), ("miner", "2"), ("adder", "3"), ("subtractor", "4"),
          ("multiplier", "5"), ("divider", "6"), ("wall", "7"), ("tower", "8"),
          ("spawner_ranged", "9"), ("spawner_melee", "0"), ("spawner_heavy", "-"),
          ("demolish", "X")]                 # demolish is a tool too: click or drag to remove
-TOOL_NAMES = {"belt": "Belt", "miner": "Miner", "adder": "Adder", "subtractor": "Subtract",
+TOOL_NAMES = {"belt": "Belt", "bridge": "Bridge", "miner": "Miner", "adder": "Adder", "subtractor": "Subtract",
               "multiplier": "Multiply", "divider": "Divide", "wall": "Wall", "tower": "Tower",
               "spawner_ranged": "Ranged", "spawner_melee": "Melee", "spawner_heavy": "Heavy",
               "demolish": "Demolish"}
 _KEYCODES = {"1": pygame.K_1, "2": pygame.K_2, "3": pygame.K_3, "4": pygame.K_4, "5": pygame.K_5,
              "6": pygame.K_6, "7": pygame.K_7, "8": pygame.K_8, "9": pygame.K_9, "0": pygame.K_0,
-             "-": pygame.K_MINUS, "X": pygame.K_x}
+             "-": pygame.K_MINUS, "X": pygame.K_x, "B": pygame.K_b}
 HOTKEYS = {_KEYCODES[k]: kind for kind, k in TOOLS}
 DISPLAY_NAMES = dict(TOOL_NAMES, hub="HQ")     # what the player calls each kind
-BTN = 62                                        # 12 buttons fit left of the 440 px minimap at 1280 wide
-GAP = 4
+BTN = 60                                        # 13 buttons fit left of the 440 px minimap at 1280 wide
+GAP = 3
 
 
 class Hud:
@@ -214,9 +214,10 @@ class Hud:
                 lines.append(f"Build Belt facing {'NESW'[game.build_dir]}   [LMB] click, or hold and drag a path (Shift = straight),"
                              " release to build   [R] rotate  [Esc] cancel")
         elif game.tool:
-            if game.tool in ("miner", "wall", "tower"):
+            if game.tool in ("miner", "wall", "tower", "bridge"):
                 extra = {"miner": "   (miners push numbers out of all four sides)",
-                         "tower": "   (ammo goes in through any side; range 10)"}.get(game.tool, "")
+                         "tower": "   (ammo goes in through any side; range 10)",
+                         "bridge": "   (two lines cross without mixing: in a side, out the opposite)"}.get(game.tool, "")
                 lines.append(f"Build {TOOL_NAMES[game.tool]}   [LMB] place  [X] demolish  [Esc] cancel" + extra)
             else:
                 d = "NESW"[game.build_dir]
@@ -242,6 +243,8 @@ class Hud:
             info += f"   {DISPLAY_NAMES.get(s.KIND, s.KIND)}  Lv {s.level}  fed {numbers.fmt(s.invested)}  hp {numbers.fmt(s.hp)}/{numbers.fmt(s.max_hp)}"
             if isinstance(s, Belt):
                 info += f"  speed {s.speed * 20:.2f} t/s  items {len(s.items)}  [T] split {'FORCED' if s.split else 'auto'}"
+            elif isinstance(s, Bridge):
+                info += f"  crossing: in one side, out the opposite  items {s.count()}"
             elif isinstance(s, Miner):
                 info += f"  every {s.period / 20:.2f}s"
             elif isinstance(s, MathMachine):
@@ -266,7 +269,7 @@ class Hud:
         self._panel((x0, y0, pw, ph))
         blit = self.screen.blit
         name = DISPLAY_NAMES.get(s.KIND, s.KIND)
-        facing = "" if s.KIND in ("miner", "wall", "hub", "tower") else f"  facing {'NESW'[s.direction]}"
+        facing = "" if s.KIND in ("miner", "wall", "hub", "tower", "bridge") else f"  facing {'NESW'[s.direction]}"
         blit(numbers.text(f"{name}  ({s.x}, {s.y}){facing}", 15), (x0 + 10, y0 + 8))
         blit(numbers.text(f"Level {s.level}", 22, (255, 230, 120)), (x0 + 10, y0 + 28))
         nxt = leveling.next_threshold(s.invested)
@@ -286,6 +289,9 @@ class Hud:
         if isinstance(s, Belt):
             rate = (f"speed {s.speed * TICK_RATE:.2f} tiles/s   items {len(s.items)}   "
                     f"[T] T-junction {'FORCED' if s.split else 'auto'}")
+        elif isinstance(s, Bridge):
+            rate = (f"two lines cross here: in through a side, out the opposite side, never mixing   "
+                    f"items {s.count()}   {s.speed * TICK_RATE:.2f} tiles/s")
         elif isinstance(s, Miner):
             rate = f"mines a {s.value} every {s.period} ticks ({s.period / TICK_RATE:.2f} s) out of every side"
         elif isinstance(s, MathMachine):
@@ -309,7 +315,7 @@ class Hud:
         up_cost = game.factory.upgrade_cost(s)
         upgrade = f"[U] upgrade to Lv {s.level + 1} for {numbers.fmt(up_cost)}" if up_cost else "[U] max level"
         refund = int(COSTS.get(s.KIND, 0) * 0.5)
-        rot = "" if s.KIND in ("miner", "wall", "tower") else "[R] rotate   "
+        rot = "" if s.KIND in ("miner", "wall", "tower", "bridge") else "[R] rotate   "
         actions = f"{rot}[X] demolish +{refund}   {repair}" if not isinstance(s, Hub) else "the HQ cannot be moved"
         blit(numbers.text(f"{upgrade}   {actions}", 13, (255, 230, 120)), (x0 + 10, y0 + 124))
         if isinstance(s, Spawner):
@@ -436,11 +442,14 @@ class Hud:
         self.screen.blit(surf, (w // 2 - surf.get_width() // 2, 14))
 
     HELP = [
-        "1-6 belt / miner / adder / subtract / multiply / divide     7 wall   8 tower   9 0 - spawners     X demolish tool",
+        "1-6 belt / miner / adder / subtract / multiply / divide   7 wall   8 tower   9 0 - spawners   B bridge   X demolish",
         "LMB place; belts: hold and drag = preview, release to build; Shift = straight run + square corner; R while",
         "dragging turns every belt (twice = the line runs backwards); drag back to undo.   R rotate   Q pick tool",
-        "Drag off the MIDDLE of a line to branch it (T-junction); from its END the last belt turns; backwards reverses.",
-        "T on a belt = forced T-junction: it splits into every side belt pointing away, even one with its own feed.",
+        "JUNCTIONS: a belt pointing into another belt's side or back MERGES into it (T / X shapes with several inputs).",
+        "A belt SPLITS only when you press T on it, or when an unfed belt starts beside a straight line: items alternate",
+        "between its front and each side belt pointing away; splitting belts show small arrows at every exit.",
+        "B = bridge: two lines cross without mixing (whatever enters a side leaves through the opposite side).",
+        "Drag off the MIDDLE of a line to branch it; from its END the last belt turns; dragging backwards reverses it.",
         "X = demolish tool: click or drag over buildings (50% refund), X or Esc to stop.   Del = remove the hovered one",
         "click = select (panel on the right); drag a box = select many (U upgrades / H repairs them all)   RMB = cancel",
         "wheel zoom   MMB drag / WASD pan (Shift fast)   Space pause   [ ] sim speed x1 x2 x4   F3 debug   F11 fullscreen",

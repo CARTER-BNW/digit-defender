@@ -17,7 +17,7 @@ from collections import deque
 
 from settings import (CHUNK_SIZE, START_BALANCE, TARGET_COUNT, COSTS)
 from sim import economy
-from sim.structures import (KINDS, Belt, Miner, MathMachine, Hub, Tower, Spawner,
+from sim.structures import (KINDS, Belt, Bridge, Miner, MathMachine, Hub, Tower, Spawner,
                             Wall, FRONT, BACK, LEFT, RIGHT, entry_side, DIR_VEC, ROLE_IN)
 
 _MERGE_PRIORITY = {BACK: 0, LEFT: 1, RIGHT: 2}
@@ -36,6 +36,7 @@ class Factory:
         self.by_chunk = {}              # (cx, cy) -> [Structure] for rendering
         self.belts = []
         self.belts_ordered = []
+        self.bridges = []
         self.miners = []
         self.machines = []
         self.towers = []
@@ -61,7 +62,7 @@ class Factory:
 
     def all_structures(self):
         """Unique structures (the hub occupies 9 keys)."""
-        out = list(self.belts) + self.miners + self.machines + self.towers \
+        out = list(self.belts) + self.bridges + self.miners + self.machines + self.towers \
             + self.spawners + self.walls
         if self.hub is not None:
             out.append(self.hub)
@@ -127,6 +128,8 @@ class Factory:
             self.by_chunk.setdefault(ck, []).append(s)
         if isinstance(s, Belt):
             self.belts.append(s)
+        elif isinstance(s, Bridge):
+            self.bridges.append(s)
         elif isinstance(s, Miner):
             self.miners.append(s)
         elif isinstance(s, MathMachine):
@@ -161,7 +164,7 @@ class Factory:
                 lst.remove(s)
                 if not lst:
                     del self.by_chunk[ck]
-        for lst in (self.belts, self.miners, self.machines, self.towers,
+        for lst in (self.belts, self.bridges, self.miners, self.machines, self.towers,
                     self.spawners, self.walls):
             if s in lst:
                 lst.remove(s)
@@ -170,7 +173,7 @@ class Factory:
 
     def rotate(self, tx, ty):
         s = self.structures.get((tx, ty))
-        if s is None or s is self.hub:
+        if s is None or s is self.hub or isinstance(s, Bridge):
             return None
         s.direction = (s.direction + 1) % 4
         self.dirty_links = True
@@ -179,7 +182,7 @@ class Factory:
     def clear_structures(self):
         self.structures.clear()
         self.by_chunk.clear()
-        for lst in (self.belts, self.belts_ordered, self.miners, self.machines,
+        for lst in (self.belts, self.belts_ordered, self.bridges, self.miners, self.machines,
                     self.towers, self.spawners, self.walls):
             lst.clear()
         self.hub = None
@@ -276,6 +279,8 @@ class Factory:
             m.tick(self)
         for b in self.belts_ordered:
             b.tick(self)
+        for br in self.bridges:
+            br.tick(self)
         for s in self.spawners:
             s.tick(self)
         for t in self.towers:
@@ -285,10 +290,27 @@ class Factory:
         self.tick_count += 1
 
     def rebuild_links(self):
-        for lst in (self.belts, self.miners, self.machines, self.towers,
+        for lst in (self.belts, self.bridges, self.miners, self.machines, self.towers,
                     self.spawners, self.walls):
             lst.sort(key=_key)
         structures = self.structures
+        # bridges: a lane fed from side d exits through side (d + 2) into whatever stands there
+        for br in self.bridges:
+            exits = []
+            for d in range(4):
+                fx, fy = DIR_VEC[d]
+                feeder = structures.get((br.x + fx, br.y + fy))
+                fed = (isinstance(feeder, Belt) and feeder.direction == (d + 2) % 4) \
+                    or isinstance(feeder, (Miner, Bridge)) \
+                    or (isinstance(feeder, MathMachine) and feeder.front_tile() == (br.x, br.y))
+                out_dir = (d + 2) % 4
+                dx, dy = DIR_VEC[out_dir]
+                nb = structures.get((br.x + dx, br.y + dy))
+                if not fed or nb is None or nb is br:
+                    exits.append(None)
+                else:
+                    exits.append((nb, entry_side(out_dir, nb.direction)))
+            br.exits = exits
         for s in self.belts + self.machines:
             nxt = structures.get(s.front_tile())
             if nxt is s:
@@ -322,6 +344,12 @@ class Factory:
                     pushed.add(id(nb))
                     if rel != BACK:
                         side_fed.add(id(nb))
+        for br in self.bridges:
+            for out in br.exits:
+                if out is not None and isinstance(out[0], Belt) and out[1] != FRONT:
+                    pushed.add(id(out[0]))
+                    if out[1] != BACK:
+                        side_fed.add(id(out[0]))
         # belt outputs: the front target plus, for a straight (back-fed) belt,
         # belts beside it that lead straight away and have no cargo source of
         # their own. A belt that merely starts beside a line is a branch (that
@@ -363,6 +391,11 @@ class Factory:
             nb = mc.next
             if isinstance(nb, Belt) and mc.next_rel != FRONT:
                 nb.in_sides |= 1 << DIR_VEC.index((mc.x - nb.x, mc.y - nb.y))
+        for br in self.bridges:
+            for out in br.exits:
+                if out is not None and isinstance(out[0], Belt) and out[1] != FRONT:
+                    nb = out[0]
+                    nb.in_sides |= 1 << DIR_VEC.index((br.x - nb.x, br.y - nb.y))
         for w in self.walls:                         # walls join their wall neighbours
             links = 0
             for d, (dx, dy) in enumerate(DIR_VEC):

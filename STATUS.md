@@ -66,6 +66,15 @@ _Last updated: 2026-09-11 (v6) by Claude_
   in a boxed group; RMB gather points no longer move units already out. Tests 126 -> 128.
 - Round 13: target bonus = value * amount * k, k rolled 10-20 per target (seeded; midpoint 15 when constructed
   by hand), no flat part - 5 x 7 pays 350-700 (was 72). Economy will inflate; balance pass still pending.
+- Round 14 (John: "sort out T and X junctions, add bridges, generate a test world"): (1) Bridge structure ([B],
+  cost 10, hp 40): four lanes keyed by entry side, in a side -> out the opposite at belt speed, lanes never mix,
+  exits cached per fed lane, saved as `lanes`; procedural crossing sprite (bridge.png override), items drawn straight
+  across. (2) Junction rules written down (help overlay + HANDOFF): merge = any belt pointing into a side/back;
+  split = [T] or an unfed belt starting beside a straight belt; splitting belts show exit arrows. (3) Test Lab:
+  `world/testworld.py` builds every part and junction around the HQ (row with forced T/X splits, merge T, cross
+  merge, bridge crossing, auto branch, four machines with routed outputs, towers stocked/empty, three spawners with
+  queues, levelled walls and belts); `--testworld` / menu "Test lab" opens it (built once into a world named
+  "Test Lab"); tests/test_bridge.py + tests/test_testworld.py. Toolbar 13 buttons (60 px). Tests 128 -> 134.
 
 
 ## v5 (2026-09-11, afternoon): John's third round of play-test feedback, all implemented

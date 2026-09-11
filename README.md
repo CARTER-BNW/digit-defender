@@ -5,9 +5,11 @@ Digit Defender - a Python game
 > **Status:** Phases 0-5 built (terrain, factory, save/load, leveling, combat); Phase 6 polish in progress. See `docs/PHASES.md`.
 
 Run `python main.py` (or `run.bat`). Tests: `python -m pytest -q`.
+`python main.py --testworld` (or the menu entry "Test lab") opens a hand-built world with every part and
+junction type laid out around the HQ (`world/testworld.py` has the legend) for bug hunting.
 
 ## Custom sprites
-Drop PNGs into `assets/sprites/` named after the structure kind: `belt.png`, `miner.png`, `adder.png`,
+Drop PNGs into `assets/sprites/` named after the structure kind: `belt.png`, `bridge.png` (a crossing; never rotated), `miner.png`, `adder.png`,
 `subtractor.png`, `multiplier.png`, `divider.png`, `wall.png`, `tower.png`, `spawner_ranged.png`,
 `spawner_melee.png`, `spawner_heavy.png`, `hub.png`. Size: **32x32 px** per tile (`hub.png` is 192x192: the HQ is 6x6).
 Draw everything facing **left** (a belt flows to the left, a machine outputs to the left; miners, walls

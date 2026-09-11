@@ -44,7 +44,7 @@ Add one line per file as files are created, stating what that file owns (layout:
 - `render/camera.py` — Camera: world-px centre + discrete zoom index, world<->screen<->tile transforms, cursor-anchored zoom, visible/keep/unload chunk rects
 - `render/renderer.py` — chunk surfaces rendered per (chunk, zoom) and cached on the chunk, off-screen eviction, F3 overlay
 - `render/numbers.py` — abbrev(n) (1.2K), LRU-cached fonts and outlined text surfaces, reset() after pygame re-init
-- `sim/structures.py` — Structure base + Belt/Miner/MathMachine(4 ops)/Hub/Wall/Tower/Spawner: side rules (entry_side, FRONT/RIGHT/BACK/LEFT), feed rule, accept(), tick(), to_dict/from_dict, KINDS registry; belt items [value, progress, entry_rel]; Wall.links; Spawner queue/enqueue (paid units)/rally_point(factory)
+- `sim/structures.py` — Structure base + Belt/Bridge (two-lane crossing)/Miner/MathMachine(4 ops)/Hub/Wall/Tower/Spawner: side rules (entry_side, FRONT/RIGHT/BACK/LEFT), feed rule, accept(), tick(), to_dict/from_dict, KINDS registry; belt items [value, progress, entry_rel]; Wall.links; Spawner queue/enqueue (paid units)/rally_point(factory)
 - `sim/factory.py` — Factory: structures dict + by_chunk index, typed lists, can_place/place/remove/rotate, deliver+targets, damage/repair/upgrade (balance -> fed), fixed tick order, rebuild_links (downstream-first belt order, merge priority, loop breaking, splitter rule, wall links), to_dict/from_dict
 - `sim/leveling.py` — pure formulas: geometric uncapped level costs (threshold/level_cost/level), belt_speed, period, max_hp
 - `sim/economy.py` — Target + seeded make_target, build_cost/demolish_refund
@@ -56,7 +56,8 @@ Add one line per file as files are created, stating what that file owns (layout:
 - `ui/hud.py` — balance, targets, toolbar (TOOLS/HOTKEYS), hover/selection info line, messages
 - `ui/menu.py` — world-select menu (Continue / New World name+seed / recent worlds / Fullscreen / Quit; Esc resumes the last world), blocking loop, max_frames for smoke runs
 - `world/persistence.py` — saves/<slug>/{meta,structures,enemies}.json + chunks/*.bin, atomic write_json (.tmp -> .bak rotation), read_json .bak fallback, world registry (slugify/create/list/find_or_create), config.json, save_world/load_world
-- `tests/` — test_smoke, test_generator, test_camera, test_terrain, test_game (headless pan/zoom/streaming), test_belts, test_machines, test_economy, test_leveling
+- `world/testworld.py` — the "Test Lab" layout (every part and junction type around the HQ; `build(factory)`, `is_empty`), opened by `--testworld` or the menu entry
+- `tests/` — test_smoke, test_generator, test_camera, test_terrain, test_game (headless pan/zoom/streaming/UI), test_belts, test_bridge, test_machines, test_economy, test_leveling, test_combat, test_persistence, test_testworld
 
 ## Project rules
 - Discover a trap → log it in @docs/GOTCHAS.md immediately (`/gotcha`).
