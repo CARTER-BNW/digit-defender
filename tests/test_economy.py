@@ -1,7 +1,7 @@
 """Costs, refusals, hub income, targets, refunds, round-trip."""
 from settings import COSTS, TARGET_COUNT, START_BALANCE
 from sim.factory import Factory
-from sim.economy import Target, make_target, target_range, target_reward
+from sim.economy import Target, initial_targets, next_level, target_reward, top_up
 from sim.structures import N, E, S, W
 
 
@@ -59,31 +59,52 @@ def test_hub_delivery_credits_face_value_via_any_hub_tile():
     assert f.balance == 16
 
 
-def test_target_payout_and_reroll():
+def test_target_amount_progress_payout_and_level_up():
     f = Factory(seed=1, balance=0)
-    old = f.targets[0]
-    f.targets[0] = Target(7, 55)
+    f.targets[0] = Target(0, 1, 7, 3)                  # slot 0: deliver three 7s
+    reward = f.targets[0].reward
+    assert reward == target_reward(7, 3) == int(7 * 3 * 1.5) + 20
     f.deliver(7)
-    assert f.balance == 7 + 55
-    assert f.targets_completed == 1 and f.stats["bonus"] == 55
-    assert f.targets[0].value != 7 or f.targets[0].reward != 55
+    f.deliver(7)
+    assert f.targets[0].delivered == 2 and f.balance == 14 and f.targets_completed == 0
+    f.deliver(7)                                        # the third one completes it
+    assert f.balance == 21 + reward and f.stats["bonus"] == reward and f.targets_completed == 1
+    nxt = f.targets[0]
+    assert nxt.slot == 0 and nxt.level == 2 and nxt.delivered == 0
+    assert 7 < nxt.value <= 14 and 3 < nxt.amount <= 6          # each grew 25-75% (+dupe bump)
+    assert nxt.value not in {t.value for t in f.targets if t is not nxt}
     assert len(f.targets) == TARGET_COUNT
-    assert f.events and f.events[-1] == ("target", 7, 55)
-    f.deliver(7)                     # no longer a target: plain income
-    assert f.balance == 7 + 55 + 7 and f.targets_completed == 1
+    assert f.events[-1] == ("target", 7, reward, 3, 2, nxt.value, nxt.amount)
+    f.deliver(7)                                        # 7 is no longer a target: plain income
+    assert f.balance == 21 + reward + 7 and f.targets_completed == 1
 
 
-def test_target_generation_is_seeded_and_scales():
-    assert make_target(5, 0, 0).value == make_target(5, 0, 0).value
-    lo, hi = target_range(0)
-    assert lo <= make_target(5, 0, 0).value <= hi
-    assert target_range(10)[0] > target_range(0)[0]
-    assert target_reward(10) > 10
+def test_targets_start_distinct_5_to_9_and_climb_a_seeded_ladder():
     f1, f2 = Factory(seed=77), Factory(seed=77)
     assert [t.value for t in f1.targets] == [t.value for t in f2.targets]
-    for seed in range(40):                       # no duplicate values on the board
-        vals = [t.value for t in Factory(seed=seed).targets]
-        assert len(set(vals)) == len(vals), (seed, vals)
+    for seed in range(40):
+        ts = Factory(seed=seed).targets
+        vals = [t.value for t in ts]
+        assert len(ts) == TARGET_COUNT and len(set(vals)) == len(vals), (seed, vals)
+        assert all(5 <= v <= 9 for v in vals)
+        assert all(t.level == 1 and t.amount == 5 and t.delivered == 0 for t in ts)
+        assert [t.slot for t in ts] == list(range(TARGET_COUNT))
+    # the ladder is seeded per (world, slot, level) and always climbs 25-75% (at least +1)
+    t = Target(2, 1, 9, 5)
+    a, b = next_level(5, t), next_level(5, t)
+    assert (a.value, a.amount, a.level) == (b.value, b.amount, 2)
+    assert 11 <= a.value <= 16 and 6 <= a.amount <= 9
+    cur = Target(0, 1, 5, 5)
+    for lvl in range(2, 12):
+        nxt = next_level(11, cur)
+        assert nxt.level == lvl and nxt.value > cur.value and nxt.amount > cur.amount
+        assert nxt.value <= cur.value * 1.75 + 1 and nxt.amount <= cur.amount * 1.75 + 1
+        cur = nxt
+    assert cur.value >= 39 and cur.amount >= 39                # ten levels of at least x1.25
+    # a number another slot already uses is bumped past it
+    assert next_level(5, t, taken={a.value, a.value + 1}).value == a.value + 2
+    assert target_reward(10, 4) == int(10 * 4 * 1.5) + 20
+    assert [t.value for t in initial_targets(5, 7)] and len({t.value for t in initial_targets(5, 7)}) == 7
 
 
 def test_hub_is_permanent():
@@ -99,12 +120,25 @@ def test_factory_roundtrip_preserves_economy_state():
     f = Factory(seed=3, balance=START_BALANCE)
     f.create_hub(0, 0)
     f.place("belt", 5, 5, N, free=True)
-    f.targets[1] = Target(42, 999)
-    f.deliver(42)
+    f.targets[1] = Target(1, 3, 42, 4, reward=999)
+    f.deliver(42)                                       # progress 1/4, not done yet
     d = f.to_dict()
     g = Factory.from_dict(d, seed=3)
     assert g.balance == f.balance
     assert [t.to_dict() for t in g.targets] == [t.to_dict() for t in f.targets]
-    assert g.targets_generated == f.targets_generated
+    assert g.targets[1].delivered == 1 and g.targets[1].level == 3 and g.targets[1].reward == 999
     assert g.hub is not None and g.structure_at(5, 5).KIND == "belt"
     assert g.to_dict() == d
+
+
+def test_old_saves_with_three_value_reward_targets_still_load():
+    d = Factory(seed=3).to_dict()
+    d["targets"] = [{"value": 4, "reward": 40}, {"value": 6, "reward": 50}, {"value": 9, "reward": 65}]
+    g = Factory.from_dict(d, seed=3)
+    assert len(g.targets) == TARGET_COUNT
+    assert [t.value for t in g.targets[:3]] == [4, 6, 9]
+    assert all(t.level == 1 and t.amount == 5 and t.delivered == 0 for t in g.targets[:3])
+    assert g.targets[0].reward == 40                    # kept as saved
+    vals = [t.value for t in g.targets]
+    assert len(set(vals)) == TARGET_COUNT and g.targets[3].slot == 3
+    assert top_up(3, [Target(0, 1, 5, 5)], 2)[1].value != 5

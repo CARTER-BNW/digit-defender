@@ -655,7 +655,8 @@ class Game:
     def _on_event(self, ev):
         kind = ev[0]
         if kind == "target":
-            self.hud.message(f"Target {ev[1]} delivered: +{ev[2]} bonus!")
+            self.hud.message(f"Target done: {ev[3]} x {ev[1]} delivered, +{ev[2]} bonus!   "
+                             f"Next: Lv{ev[4]} wants {ev[6]} x {ev[5]}", 4)
         elif kind == "wave":
             self.hud.message(f"Wave {ev[1]}: {ev[2]} enemies incoming!", 4)
         elif kind == "raid":

@@ -294,8 +294,8 @@ HUD countdown + red edge arrows in the last 30 s.
 ### 3.9 Save format (`persistence.py` + `sim/serialize.py`)
 ```
 meta.json        {version, name, seed, created, last_played, camera:[x,y,zoom],
-                  balance, tick_count, wave:{number,next_at_tick},
-                  targets:[{value,reward}, ...]}
+                  balance, tick_count, wave:{number,next_at_tick,raids,units,next_uid},
+                  targets:[{slot,level,value,amount,delivered,reward}, ...]}
 chunks/*.bin     version byte + tiles  (rare — deposits infinite; kept for future)
 structures.json  {version, structures:[{kind,x,y,dir,invested,hp, ...kind-specific:
                   op, buffers, out, value, timer, items:[[v,p],...]}]}

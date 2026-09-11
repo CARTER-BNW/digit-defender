@@ -38,6 +38,11 @@ _Last updated: 2026-09-11 (v6) by Claude_
   middle of a line keeps flowing, so dragging off it leaves a branch beside the line = T. (4) Machines take operands
   from all three non-output sides: back tops up the emptier buffer (A on a tie), so a single line from behind pairs its
   own numbers; machines have no feed side and level via [U]. Tests 117 -> 122.
+- Round 8 (same evening): targets redesigned - 4 slots with levels. Level 1: distinct numbers 5..9, amount 5; a
+  delivery of the number counts toward the amount; done -> bonus value*amount*1.5+20 and the slot's next level grows
+  number and amount each by a seeded random 25-75% (`sim/economy.py`: initial_targets / next_level / top_up; Target has
+  slot/level/value/amount/delivered/reward). Panel shows "amount x number  delivered/amount  Lv  +bonus". Old saves
+  ({value,reward}, 3 slots) still load. Tests 122 -> N (see git log).
 
 
 ## v5 (2026-09-11, afternoon): John's third round of play-test feedback, all implemented

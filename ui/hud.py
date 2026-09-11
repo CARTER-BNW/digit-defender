@@ -87,13 +87,18 @@ class Hud:
         pygame.draw.rect(screen, COLORS["panel_border"], hb, 1, border_radius=4)
         label = numbers.text("HUB  [Home]", 14)
         screen.blit(label, (hb.centerx - label.get_width() // 2, hb.centery - label.get_height() // 2))
-        # targets
-        self._panel((w - 228, 8, 220, 24 + 22 * len(f.targets)))
-        screen.blit(numbers.text("Targets  (deliver exactly)", 14, (170, 190, 170)), (w - 220, 12))
+        # targets: one slot per row, "amount x number", progress, level, bonus
+        pw = 300
+        x = w - pw
+        self._panel((x - 8, 8, pw, 24 + 22 * len(f.targets)))
+        screen.blit(numbers.text("Targets   amount x number   done   level   bonus", 14, (170, 190, 170)), (x, 12))
         for i, t in enumerate(f.targets):
             y = 32 + i * 22
-            screen.blit(numbers.text(numbers.fmt(t.value), 18, (255, 230, 120)), (w - 220, y))
-            screen.blit(numbers.text(f"+{numbers.fmt(t.reward)}", 16, (140, 255, 140)), (w - 120, y + 1))
+            screen.blit(numbers.text(f"{t.amount} x", 15, (200, 220, 200)), (x, y + 2))
+            screen.blit(numbers.text(numbers.fmt(t.value), 18, (255, 230, 120)), (x + 48, y))
+            screen.blit(numbers.text(f"{t.delivered}/{t.amount}", 14, (200, 220, 200)), (x + 128, y + 3))
+            screen.blit(numbers.text(f"Lv{t.level}", 13, (170, 190, 170)), (x + 190, y + 3))
+            screen.blit(numbers.text(f"+{numbers.fmt(t.reward)}", 16, (140, 255, 140)), (x + 232, y + 1))
         self._draw_wave(game)
         self._draw_minimap(game)
         self._draw_toolbar(game)
@@ -387,7 +392,8 @@ class Hud:
         "Towers (range 10): run a belt or put a miner beside one, any side; it fires those numbers. Red frame = no ammo.",
         "Spawners: click one to train a unit (costs balance); units walk to its gather point beside the hub.",
         "Units: click or drag a box to select (Shift adds), RMB moves them in a grid; RMB on a selected spawner = gather point.",
-        "Targets pay a bonus for delivering the exact number. Waves come from the red edge arrow. Hub dead = game over.",
+        "Targets: deliver the shown amount of that number for the bonus; the slot then levels up (bigger number and amount).",
+        "Waves come from the red edge arrow. Hub dead = game over.",
         "Enemies shoot from 3-5 tiles and melee up close; each level costs 25% more than the last, no cap.",
         "F1 closes this help.",
     ]

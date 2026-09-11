@@ -43,10 +43,11 @@ COSTS = {
 }
 DEMOLISH_REFUND = 0.5               # fraction of COST returned on demolish
 REPAIR_COST_PER_HP = 0.2
-TARGET_COUNT = 3                    # active hub target numbers
-TARGET_BASE = 4                     # first targets roll in [base, 3*base] ...
-TARGET_GROWTH = 1.25                # ... and the base grows by this per completed target
-TARGET_REWARD_MULT = 5              # reward = value * mult + flat (sim/economy.py)
+TARGET_COUNT = 4                    # hub target slots, each with its own level (John: 4 types)
+TARGET_LEVEL1_RANGE = (5, 9)        # level-1 target numbers: distinct picks from this range
+TARGET_BASE_AMOUNT = 5              # deliveries of its number a level-1 target wants
+TARGET_GROWTH = (0.25, 0.75)        # per level, the number and the amount each grow by a random share in this range
+TARGET_REWARD_MULT = 1.5            # bonus = number * amount * mult + flat (sim/economy.py)
 TARGET_REWARD_FLAT = 20
 
 # --- belts / items ------------------------------------------------------------

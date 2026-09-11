@@ -162,8 +162,7 @@ def delete_world(slug):
 
 # ---- world state -----------------------------------------------------------------
 
-FACTORY_META_KEYS = ("balance", "tick_count", "targets", "targets_generated",
-                     "targets_completed", "stats")
+FACTORY_META_KEYS = ("balance", "tick_count", "targets", "targets_completed", "stats")
 
 
 def save_world(meta, factory, camera=None, nests=None, wave=None):

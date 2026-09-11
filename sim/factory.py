@@ -42,8 +42,7 @@ class Factory:
         self.spawners = []
         self.walls = []
         self.hub = None
-        self.targets = []
-        self.targets_generated = 0
+        self.targets = economy.initial_targets(seed, TARGET_COUNT)   # one per slot, level 1
         self.targets_completed = 0
         self.tick_count = 0
         self.dirty_links = True
@@ -54,8 +53,6 @@ class Factory:
         self.hub_hit_tick = -10 ** 9    # last tick the hub took damage (alert border)
         self.hub_destroyed = False
         self.combat = None              # sim.combat.Combat when attached (Phase 5)
-        while len(self.targets) < TARGET_COUNT:
-            self.targets.append(self._new_target())
 
     # ---- queries -----------------------------------------------------------
 
@@ -195,27 +192,24 @@ class Factory:
     # ---- economy -----------------------------------------------------------
 
     def deliver(self, value):
-        """Hub income; exact target matches pay their bonus and reroll."""
+        """Hub income. A delivery of a target's number counts toward its
+        amount; a finished target pays its bonus and its slot levels up
+        (event: ("target", value, reward, amount, next level, next value,
+        next amount))."""
         self.balance += value
         self.stats["delivered"] += value
         for i, t in enumerate(self.targets):
-            if t.value == value:
+            if t.value != value:
+                continue
+            t.delivered += 1
+            if t.done:
                 self.balance += t.reward
                 self.stats["bonus"] += t.reward
                 self.targets_completed += 1
-                self.events.append(("target", t.value, t.reward))
-                self.targets[i] = self._new_target()
-                break
-
-    def _new_target(self):
-        """Next seeded target, skipping values already on the board."""
-        active = {t.value for t in self.targets}
-        for _ in range(16):
-            t = economy.make_target(self.seed, self.targets_generated, self.targets_completed)
-            self.targets_generated += 1
-            if t.value not in active:
-                return t
-        return t
+                nxt = economy.next_level(self.seed, t, (o.value for o in self.targets if o is not t))
+                self.targets[i] = nxt
+                self.events.append(("target", t.value, t.reward, t.amount, nxt.level, nxt.value, nxt.amount))
+            break
 
     def hub_under_attack(self):
         """True for HUB_ALERT_S after the hub last took damage."""
@@ -416,7 +410,6 @@ class Factory:
             "balance": self.balance,
             "tick_count": self.tick_count,
             "targets": [t.to_dict() for t in self.targets],
-            "targets_generated": self.targets_generated,
             "targets_completed": self.targets_completed,
             "stats": dict(self.stats),
             "structures": structure_records(self),
@@ -427,10 +420,10 @@ class Factory:
         from sim.serialize import load_structure_records
         f = cls(seed, terrain, balance=int(d.get("balance", START_BALANCE)))
         f.tick_count = int(d.get("tick_count", 0))
-        f.targets_generated = int(d.get("targets_generated", f.targets_generated))
         f.targets_completed = int(d.get("targets_completed", 0))
         if d.get("targets"):
-            f.targets = [economy.Target.from_dict(t) for t in d["targets"]]
+            f.targets = [economy.Target.from_dict(t, i) for i, t in enumerate(d["targets"])]
+            economy.top_up(seed, f.targets, TARGET_COUNT)      # older saves carried fewer slots
         f.stats.update(d.get("stats", {}))
         load_structure_records(f, d.get("structures", {}))
         return f

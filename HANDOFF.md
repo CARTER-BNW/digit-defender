@@ -106,6 +106,11 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
    NestRegistry (enemies.json), never in terrain; renderer draws rubble from the registry.
 9. Saves: meta.json (identity + balance/tick/targets/camera/wave incl. player units), structures.json, enemies.json; write
    .tmp -> rotate .bak -> replace; readers fall back to .bak. Autosave 60 s + on exit; a game-over state is never saved.
+11. Targets (John, round 8): TARGET_COUNT = 4 slots, each with its own level. A target wants `amount` deliveries of
+    its `value` (progress `delivered`); done -> bonus `value*amount*1.5 + 20`, `targets_completed += 1`, the slot moves to
+    its next level via `economy.next_level` (number and amount each grow by a seeded random 25-75%, number bumped past
+    any value another slot uses). Level 1 = distinct numbers from 5..9 with amount 5 (`economy.initial_targets`, seeded
+    by `seed:targets:init`). Saved per slot; older 3-slot / {value,reward} saves load and get topped up (`top_up`).
 10. Rendering: chunk surfaces rendered per (chunk, zoom) at the target tile size and cached on the chunk, evicted off-screen;
     CHUNK_GEN_BUDGET = 24 chunks/frame (visible first). Everything positions from `Camera.screen_origin()` (no seams).
     Walls carry `links` (bitmask of wall neighbours, rebuilt with the links) and draw connector bars + their level;
