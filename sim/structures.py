@@ -11,7 +11,9 @@ structure facing nd enters through side entry_side(d, nd).
 THE FEED RULE (docs/PLAN.md section 3.5): an item entering through a side that
 is not a cargo input is consumed as feed: invested += value, hp += value
 (capped). invested drives level, speed/rate and max_hp.
-  Belt:     BACK/LEFT/RIGHT = cargo (tail / side merge), FRONT (head-on) = feed
+  Belt:     BACK/LEFT/RIGHT = cargo (tail / side merge), FRONT (head-on) = feed.
+            Outputs: the structure in front plus any belt beside it that points
+            straight away; items alternate evenly between outputs (splitter).
   Machine:  LEFT = operand A, RIGHT = operand B, BACK = feed, FRONT refuses
   Hub:      every side = income
   Miner:    pushes its digit into EVERY adjacent cargo input (belt back/side,
@@ -136,7 +138,7 @@ class Belt(Structure):
     """items: [[value, progress], ...] sorted by progress ascending; the head
     (about to leave) is items[-1]. Spacing >= ITEM_SPACING is enforced from
     the head backwards, which is what makes backpressure propagate."""
-    __slots__ = ("items", "feeders", "in_sides")
+    __slots__ = ("items", "feeders", "in_sides", "outputs", "out_sides", "rr")
     KIND = "belt"
     HAS_OUTPUT = True
     SIDE_ROLES = (ROLE_OUT, ROLE_IN, ROLE_IN, ROLE_IN)
@@ -146,6 +148,9 @@ class Belt(Structure):
         self.items = []
         self.feeders = []      # upstream belts (rebuilt with links)
         self.in_sides = 0      # bitmask of WORLD sides (1 << dir) that push cargo in (render shapes)
+        self.outputs = []      # [(structure, rel, world_dir), ...] rebuilt with links
+        self.out_sides = 0     # bitmask of WORLD sides items leave through (render shapes)
+        self.rr = 0            # round-robin cursor over outputs (saved: keeps splits deterministic)
 
     @property
     def speed(self):
@@ -175,8 +180,20 @@ class Belt(Structure):
         head = items[i]
         p = head[1] + speed
         if p >= 1.0:
-            nxt = self.next
-            if nxt is not None and nxt.accept(head[0], self.next_rel, p - 1.0, factory):
+            outs = self.outputs
+            n = len(outs)
+            moved = False
+            if n:
+                over = p - 1.0
+                value = head[0]
+                for k in range(n):                     # even split: try outputs in turn
+                    j = (self.rr + k) % n
+                    nb, rel, _ = outs[j]
+                    if nb.accept(value, rel, over, factory):
+                        self.rr = (j + 1) % n
+                        moved = True
+                        break
+            if moved:
                 items.pop()
                 limit = 1.0 - EPS
             else:
@@ -198,10 +215,13 @@ class Belt(Structure):
     def to_dict(self):
         d = super().to_dict()
         d["items"] = [[v, p] for v, p in self.items]
+        if self.rr:
+            d["rr"] = self.rr
         return d
 
     def _load_extra(self, d):
         self.items = [[int(v), float(p)] for v, p in d.get("items", [])]
+        self.rr = int(d.get("rr", 0))
 
 
 class Miner(Structure):

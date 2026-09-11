@@ -182,8 +182,10 @@ class Factory:
 7. **Waves/nests**: timers, raid triggers (Phase 5)
 8. **Economy**: refresh targets if completed (income is delivery-only)
 
-**Belt chain ordering** (`rebuild`): follow `next` links; order each chain tail-first (the
-belt whose `next` is not a belt goes first). Merges make a forest, ordered by DFS from each
+**Belt chain ordering** (`rebuild`): Kahn's algorithm over cargo links (a belt is ordered after
+every belt it outputs into; belts with no belt outputs go first). Belt outputs are the front target
+plus belts beside it that point straight away (implicit splitter, even round-robin). Original plan:
+follow `next` links; order each chain tail-first (the belt whose `next` is not a belt goes first). Merges make a forest, ordered by DFS from each
 sink; merge priority fixed left-first (deterministic). Belt loops are legal: detect, break
 ordering at the smallest (y,x) belt, accept one-tick lag inside loops. Rebuild only on
 placement/removal/rotation (`dirty_links`), never per tick.

@@ -90,6 +90,8 @@ class Factory:
                 return False, "occupied"
             if self.terrain is not None and not self.terrain.buildable(*t):
                 return False, "cannot build here"
+            if kind != "miner" and self.terrain is not None and self.terrain.deposit_at(*t):
+                return False, "only miners go on numbers"
         if kind == "miner":
             if self.terrain is None or self.terrain.deposit_at(x, y) == 0:
                 return False, "miner needs a deposit"
@@ -283,21 +285,32 @@ class Factory:
                 if nb.SIDE_ROLES[rel] == ROLE_IN:
                     outs.append((nb, rel))
             m.outputs = outs
+        # belt outputs: the front target plus belts beside it that lead straight away
         for b in self.belts:
+            outs = []
+            if b.next is not None:
+                outs.append((b.next, b.next_rel, b.direction))
+            for rel in (LEFT, RIGHT):
+                d = (b.direction + rel) % 4
+                dx, dy = DIR_VEC[d]
+                nb = structures.get((b.x + dx, b.y + dy))
+                if isinstance(nb, Belt) and nb.direction == d:
+                    outs.append((nb, BACK, d))
+            b.outputs = outs
             b.feeders = []
+            b.in_sides = 0
+            b.out_sides = 0
         for b in self.belts:
-            nxt = b.next
-            if isinstance(nxt, Belt) and b.next_rel != FRONT:
-                nxt.feeders.append(b)
-        for b in self.belts:
-            if len(b.feeders) > 1:
-                b.feeders.sort(key=lambda f: (_MERGE_PRIORITY[f.next_rel], f.y, f.x))
-        # connection sides for belt sprites: which world sides deliver cargo
-        for b in self.belts:
-            mask = 0
-            for fdr in b.feeders:
-                mask |= 1 << ((fdr.direction + 2) % 4)
-            b.in_sides = mask
+            side_outs = False
+            for nb, rel, d in b.outputs:
+                if d != b.direction:
+                    side_outs = True
+                b.out_sides |= 1 << d
+                if isinstance(nb, Belt) and rel != FRONT:
+                    nb.feeders.append(b)
+                    nb.in_sides |= 1 << DIR_VEC.index((b.x - nb.x, b.y - nb.y))
+            if not side_outs:
+                b.out_sides |= 1 << b.direction      # a plain belt always continues forward
         for m in self.miners:
             for nb, rel in m.outputs:
                 if isinstance(nb, Belt):
@@ -305,26 +318,38 @@ class Factory:
         for mc in self.machines:
             nb = mc.next
             if isinstance(nb, Belt) and mc.next_rel != FRONT:
-                nb.in_sides |= 1 << ((mc.direction + 2) % 4)
+                nb.in_sides |= 1 << DIR_VEC.index((mc.x - nb.x, mc.y - nb.y))
+        for b in self.belts:
+            if len(b.feeders) > 1:
+                b.feeders.sort(key=lambda f: (
+                    _MERGE_PRIORITY[entry_side(DIR_VEC.index((b.x - f.x, b.y - f.y)), b.direction)],
+                    f.y, f.x))
+        # downstream-first order (Kahn over cargo links); loops broken at the smallest (y, x)
+        remaining = {id(b): sum(1 for nb, rel, _ in b.outputs
+                                if isinstance(nb, Belt) and rel != FRONT)
+                     for b in self.belts}
         ordered = []
         visited = set()
+        ready = deque(b for b in self.belts if remaining[id(b)] == 0)
 
-        def walk(start):
-            queue = deque((start,))
-            while queue:
-                b = queue.popleft()
+        def drain():
+            while ready:
+                b = ready.popleft()
                 if id(b) in visited:
                     continue
                 visited.add(id(b))
                 ordered.append(b)
-                queue.extend(b.feeders)
+                for f in b.feeders:
+                    remaining[id(f)] -= 1
+                    if remaining[id(f)] <= 0:
+                        ready.append(f)
 
-        for b in self.belts:                         # sinks first, in (y, x) order
-            if not (isinstance(b.next, Belt) and b.next_rel != FRONT):
-                walk(b)
-        for b in self.belts:                         # loops: smallest (y, x) breaks
+        drain()
+        for b in self.belts:
             if id(b) not in visited:
-                walk(b)
+                remaining[id(b)] = 0
+                ready.append(b)
+                drain()
         self.belts_ordered = ordered
         self.dirty_links = False
         self.dirty_flowfield = True

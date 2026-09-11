@@ -43,7 +43,11 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
    tests/test_persistence.py: save@100 + load + 100 == twin@200.
 4. Side rules (`sim/structures.py` docstring): item entering through a non-cargo side is FEED (invested += value, hp += value
    capped). Belt: back/sides cargo, head-on feed. Machine: left = A, right = B, back = feed, front refuses. Hub: all income.
-   Tower: front = ammo (arrow points at its supply belt), others feed. Miner/Wall/Spawner: all feed. sub/div <= 0 voided.
+   Tower: front = ammo (arrow points at its supply belt), others feed. Wall/Spawner: all feed. sub/div <= 0 voided.
+   Miners (John, 2026-09-11) push into every adjacent cargo input, never into feed sides, no facing. Belt outputs = the front
+   target plus any belt beside it that points straight away; items alternate evenly over outputs (implicit splitter; `rr`
+   cursor saved). Only miners may be built on number tiles (belts go on the exposed sides of a deposit group).
+   Belt sprites are shape-aware (in_sides | out_sides -> straight/corner/T/cross, John's PNGs face left).
 5. Leveling: thresholds 100*2^k; belt speed = 0.05 + invested*0.0001 tiles/tick (cap 0.5); periods /(1 + 0.25*levels);
    max_hp = BASE_HP + invested. Repair costs 0.2/hp.
 6. Ranged/heavy unit shots debit balance by the fired value; hold fire when broke; melee free; towers eat belt ammo

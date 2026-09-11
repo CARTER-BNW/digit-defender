@@ -265,3 +265,50 @@ def test_belt_connection_sides_for_sprites():
     f.place("belt", 1, 1, E, free=True)            # feeds c from the west too
     f.rebuild_links()
     assert c.in_sides == N_ | E_ | W_               # a cross
+
+
+def test_splitter_alternates_evenly_and_shapes_as_t():
+    f = factory()
+    m = f.place("miner", 5, 8, N, free=True, value=1)
+    m.invested = 10 ** 6                              # fast source
+    for y in range(7, 4, -1):
+        f.place("belt", 5, y, N, free=True)          # up into the junction
+    j = f.place("belt", 5, 4, N, free=True)          # junction: nothing in front
+    left = [f.place("belt", x, 4, W, free=True) for x in range(4, 0, -1)]
+    right = [f.place("belt", x, 4, E, free=True) for x in range(6, 10)]
+    run(f, 400)
+    nl = sum(len(b.items) for b in left)
+    nr = sum(len(b.items) for b in right)
+    assert nl > 0 and nr > 0 and abs(nl - nr) <= 1, (nl, nr)
+    assert [o[2] for o in j.outputs] == [W, E]
+    assert j.out_sides == (1 << W) | (1 << E) and j.in_sides == 1 << S
+    from render.structures import belt_openings
+    assert belt_openings(N, j.in_sides | (j.out_sides << 4)) == {S, W, E}
+    # a straight continuation plus one side branch splits three ways
+    f2 = factory()
+    src = f2.place("miner", 0, 0, E, free=True, value=2)
+    src.invested = 10 ** 6
+    a = f2.place("belt", 1, 0, E, free=True)
+    ahead = [f2.place("belt", x, 0, E, free=True) for x in range(2, 8)]
+    branch = [f2.place("belt", 1, y, N, free=True) for y in range(-1, -7, -1)]
+    run(f2, 400)
+    assert sum(len(b.items) for b in branch) > 0 and sum(len(b.items) for b in ahead) > 0
+    assert a.out_sides == (1 << E) | (1 << N)
+    assert [o[2] for o in a.outputs] == [E, N]
+    # ordering: both branches are downstream of the junction
+    assert f2.belts_ordered.index(a) > f2.belts_ordered.index(ahead[0])
+    assert f2.belts_ordered.index(a) > f2.belts_ordered.index(branch[0])
+
+
+def test_only_miners_on_deposits():
+    class T:
+        def deposit_at(self, tx, ty):
+            return 3 if (tx, ty) in ((2, 2), (3, 2)) else 0
+
+        def buildable(self, tx, ty):
+            return True
+    f = Factory(seed=1, terrain=T(), balance=10 ** 6)
+    assert f.can_place("belt", 2, 2, E) == (False, "only miners go on numbers")
+    assert f.can_place("wall", 3, 2, E) == (False, "only miners go on numbers")
+    assert f.can_place("miner", 2, 2, E)[0]
+    assert f.can_place("belt", 4, 2, E)[0]

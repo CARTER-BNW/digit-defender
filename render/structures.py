@@ -111,20 +111,21 @@ BELT_SHAPES = {
 }
 
 
-def belt_openings(direction, in_sides):
-    """World sides a belt connects: its front plus every cargo input side."""
-    opens = {direction}
-    for d in range(4):
-        if in_sides & (1 << d) and d != direction:
-            opens.add(d)
-    if len(opens) == 1:                              # nothing feeding it: show a straight belt
-        opens.add((direction + 2) % 4)
+def belt_openings(direction, variant):
+    """World sides a belt connects: every cargo input side and every output
+    side (variant packs in_sides | out_sides << 4). A lone belt shows straight."""
+    mask = (variant & 15) | (variant >> 4)
+    opens = {d for d in range(4) if mask & (1 << d)}
+    if not opens:
+        return {direction, (direction + 2) % 4}
+    if len(opens) == 1:
+        opens.add((next(iter(opens)) + 2) % 4)
     return opens
 
 
-def _belt_png(direction, in_sides, size):
+def _belt_png(direction, variant, size):
     """Pick the shape file whose rotated openings match, or None."""
-    opens = belt_openings(direction, in_sides)
+    opens = belt_openings(direction, variant)
     n = len(opens)
     if n == 2:
         a, b = sorted(opens)
@@ -167,14 +168,14 @@ def sprite(kind, direction, tp, label=None, level=1, variant=0):
     return surf
 
 
-def _belt_procedural(direction, in_sides, tp):
+def _belt_procedural(direction, variant, tp):
     """Strip from every open side to the centre plus a small dark arrow."""
     surf = pygame.Surface((tp, tp), pygame.SRCALPHA)
     base = COLORS["belt"]
     wpx = max(2, int(round(tp * BELT_WIDTH)))
     off = (tp - wpx) // 2
     half = tp // 2
-    for d in belt_openings(direction, in_sides):
+    for d in belt_openings(direction, variant):
         if d == 0:
             rect = (off, 0, wpx, half + wpx // 2)
         elif d == 2:
@@ -268,7 +269,8 @@ def draw_structures(screen, camera, factory, chunk_rect, frac=0.0):
                 sx = s.x * tp + ox
                 sy = s.y * tp + oy
                 if s.KIND == "belt":
-                    blits.append((sprite("belt", s.direction, tp, None, s.level, s.in_sides), (sx, sy)))
+                    blits.append((sprite("belt", s.direction, tp, None, s.level,
+                                         s.in_sides | (s.out_sides << 4)), (sx, sy)))
                 else:
                     blits.append((sprite(s.KIND, s.direction, tp, s.label(), s.level), (sx, sy)))
                 if s.KIND == "belt" and s.items:
@@ -277,15 +279,23 @@ def draw_structures(screen, camera, factory, chunk_rect, frac=0.0):
                     cyp = sy + half
                     lead = s.speed * frac
                     limit = 0.999
-                    for value, p in reversed(s.items):          # head first
+                    outs = s.outputs
+                    n_out = len(outs)
+                    branching = any(o[2] != s.direction for o in outs)
+                    for i, (value, p) in enumerate(reversed(s.items)):    # head first
                         q = p + lead
                         if q > limit:
                             q = limit
                         limit = q - ITEM_SPACING
                         spr = item_sprite(value, tp, with_text)
                         off = (q - 0.5) * tp
-                        item_blits.append((spr, (int(cxp + dx * off) - spr.get_width() // 2,
-                                                 int(cyp + dy * off) - spr.get_height() // 2)))
+                        vx, vy = dx, dy
+                        if branching and q > 0.5:
+                            # past the centre, head for the branch this item will take
+                            side = outs[(s.rr + i) % n_out][2]
+                            vx, vy = DIR_VEC[side]
+                        item_blits.append((spr, (int(cxp + vx * off) - spr.get_width() // 2,
+                                                 int(cyp + vy * off) - spr.get_height() // 2)))
     screen.blits(blits, doreturn=False)
     screen.blits(item_blits, doreturn=False)
 
