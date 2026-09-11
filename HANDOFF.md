@@ -6,7 +6,7 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
 ## Live state
 - **Phases 0-5 are built and verified** (tests + real-window runs + screenshots). Phase 6 (polish) is in progress.
   156 pytest tests green (`python -m pytest -q`, ~10 s). Last commits: cbf056b (round 16), 6d00eaf (wrap v8),
-  then the Android commit of 2026-09-12 (STATUS v9).
+  70a3393 (Android copy, STATUS v9) and this handoff refresh, all 2026-09-12. Working tree clean.
 - **Android copy (2026-09-12, STATUS v9):** `android/` = the untouched desktop game + `android/mobile/` (touch
   layer: tap / long press / drags / pinch / two-finger tap + on-screen hotkey buttons; `entry.py` is the APK's
   main), packaged by python-for-android inside the WSL distro `dd-android` (Ubuntu on `D:\WSL`, everything on
@@ -46,6 +46,7 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
 - **Code changes need a game restart** (a running `python main.py` keeps the code it started with).
 - Directory: D:\Claude\projects\games\Digit Defender (local git on `main`, no remote). Saves in `saves/` (gitignored;
   "Test Lab" lives there too), machine prefs in `config.json` (gitignored; holds fullscreen, hints, last world).
+  The phone keeps its own saves and config on the device (`files/digit_defender/`), separate from the PC's.
 - Run: `python main.py` (menu) or `python main.py --world NAME [--seed N]` (skip menu), `--testworld`, `--frames N`
   auto-quit, `--autosave S`, `--fullscreen`. `run.bat` passes args through.
 - Open design checkbox in Phase 4: John to confirm feed-side rules and voiding of <= 0 results (implemented per PLAN;
@@ -97,6 +98,35 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
 - `ui/`: `hud.py` (balance, targets, wave timer, toolbar, hover line, structure panel, messages, game over), `menu.py`.
 - `game.py`: Game.load/save, event loop, fixed timestep (20 Hz, cap 4 ticks/frame), build mode (belt preview path,
   demolish tool, drag-box selection of structures and units), unit commands, autosave, game over -> [L] reload.
+
+Android in one screen (`android/`, STATUS v9, `android/README.md` for the player-facing controls):
+- `mobile/entry.py` = the APK's main (sync writes a two-line `app/main.py` stub calling it). `MobileGame(Game)`
+  overrides only `handle_event` (finger events -> `TouchLayer`; SDL's mirrored mouse events dropped on the phone;
+  K_AC_BACK -> Escape; APP_WILLENTERBACKGROUND -> save), `update` (long-press timer first), `draw` (overlay after
+  the HUD, flip guarded) and `toggle_fullscreen` (no-op); `dispatch()` is the untouched desktop handler the touch
+  layer feeds. `MobileMenu` turns the soft keyboard on for New World. `install_patches()` wraps `pygame.event.get`
+  (Back -> Escape in the menu loop too), `pygame.key.get_mods` (sticky Shift from `touch.STATE["mods"]`) and, on
+  the phone, `pygame.mouse.get_pos` (= last finger, `STATE["last_pos"]`, so hover/ghost follow the finger).
+  Display: `set_mode((round(w/scale), 720), SCALED | FULLSCREEN)` with scale = native height / 720 (Pixel 9a
+  2424x1080 -> 1616x720 at 1.5x); saves + config redirected to `$ANDROID_PRIVATE/digit_defender/` (the unpacked
+  app dir is wiped on every update); `DEFAULT_CONFIG["hints"] = False` (the right-hand buttons sit where the hints
+  panel would be). `--desktop` runs the same code in a window on the PC with the left mouse button as a finger.
+- `mobile/touch.py` = `TouchLayer`: modes None / pending / held / lmb / pan / two; TAP_MAX_PX 14, LONG_PRESS_S
+  0.45, TWO_TAP_S 0.35, PINCH_STEP 1.22; `layout()` recomputes the button rects every frame by mirroring
+  `ui/hud.py` (left block under the 190-px info panel and above the toolbar, right block under the HQ button and
+  above the minimap), so HUD layout changes move the buttons automatically; `hud.over_ui` is wrapped per instance
+  to include them. Synthesized events carry `touch=False` and go through `game.dispatch`.
+- Pipeline: `sync.py` (Windows, stdlib) -> `wsl/build.sh` inside `dd-android` (mirrors `android/` to
+  `~/dd-android`, re-creates the p4a dist when `android.api` changed, runs buildozer, copies the APK back) ->
+  adb (`D:\Android\sdk\platform-tools\adb.exe`, env `ADB` overrides). `p4a-recipes/pygame` builds pygame-ce
+  2.5.8 (p4a's own pygame 2.1.0 cannot build on its Python 3.14); `manifest_application_args.xml` disables
+  predictive back; `buildozer.spec` targets API 36 (Play Protect refuses 33). `VERSION` bumps on every sync.
+- Testing on the phone without touching it: `adb shell input tap X Y` / `input swipe x1 y1 x2 y2 ms` /
+  `input keyevent KEYCODE_BACK` (device px: menu entries sit at x 1212, y 344 + 66 per row), `adb shell screencap
+  -p /sdcard/s.png` + `adb pull` then Read the PNG, `python android\sync.py logs` (python + SDL tags;
+  `--follow 30` streams), `adb shell pidof org.johncarter.digitdefender`, `adb shell run-as
+  org.johncarter.digitdefender ls files/digit_defender/saves`. Use PowerShell for adb paths: Git Bash rewrites
+  `/sdcard/...` into a Windows path. A stuck install = a dialog on the phone (`uiautomator dump`, docs/GOTCHAS.md).
 
 Naming: the player sees "HQ" everywhere (sprite label, HQ button, alerts, help, panel via `hud.DISPLAY_NAMES`); the
 code, saves and docs keep the kind name `hub` (John, round 10).
@@ -232,6 +262,15 @@ tests must keep their tiles clear of the right column (x >= 932 px) and the mini
 - Combat stats (kills) are transient; the game-over line shows kills since load.
 - Phase 6 left: copy/paste blueprints, sounds, stats graphs, balance pass after a play test. Flow-field rebuild on very large bases
   (60k-tile cap) can cost ~200 ms when structures change during a wave (throttled to every 2 s).
+- Android (untested by John as of this handoff): text is pygame's default font at 1.5x (no `consolas` on the
+  phone; bundle a TTF in assets and point `render/numbers.font` at it if he finds it hard to read); buttons are
+  64 logical px (96 device px, about 6 mm) and may need to grow; the long press is 0.45 s; a second finger cancels
+  a belt drag in progress (by design, so two-finger pan never commits half a line); the "Info hints" panel, if
+  turned back on in the menu, draws under the right-hand buttons; naming a new world depends on the soft keyboard
+  committing text (space / enter), otherwise Create gives "World N"; F3/F6/F7 debug keys have no button; the menu's
+  "Fullscreen" entry does nothing on the phone; deleting a world needs the Del key (desktop only); the first
+  install of a new package name raises a Play Protect prompt (not repeated for updates); a Bluetooth mouse or
+  keyboard would be ignored on the phone (mouse events are dropped in touch-only mode).
 
 ## Next actions
 0. John's first phone session: expect feedback on the touch layer (`android/mobile/touch.py`: gestures,
