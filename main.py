@@ -15,6 +15,7 @@ from settings import WINDOW_W, WINDOW_H, WORLD_SEED
 from world import persistence
 from world import testworld
 from render import numbers
+from ui import prefs
 from ui.menu import Menu
 from game import Game
 
@@ -36,6 +37,7 @@ def main(argv=None):
     pygame.init()
     numbers.reset()          # fonts cached before a previous pygame.quit() are dead
     config = persistence.load_config()
+    prefs.apply(config)                              # text / button scale (menu Settings)
     fullscreen = args.fullscreen or config.get("fullscreen", False)
     screen = pygame.display.set_mode((0, 0) if fullscreen else (WINDOW_W, WINDOW_H),
                                      pygame.FULLSCREEN if fullscreen else 0)
@@ -54,7 +56,7 @@ def main(argv=None):
             meta = choice["meta"]
             lab = choice.get("lab", False)
         game = Game.load(pygame.display.get_surface(), meta)
-        game.show_hints = config.get("hints", True)
+        game.apply_config(config)                 # hints panel, wave pause
         if lab:
             if testworld.is_empty(game.factory):
                 testworld.build(game.factory)

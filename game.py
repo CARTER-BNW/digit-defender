@@ -95,6 +95,12 @@ class Game:
         f.create_hub(0, 0)
         return f
 
+    def apply_config(self, config):
+        """Menu Settings the game reads: the info hints panel and the wave
+        pause (the text / button scales live in ui.prefs)."""
+        self.show_hints = bool(config.get("hints", True))
+        self.combat.waves_paused = bool(config.get("waves_paused", False))
+
     # ---- persistence -----------------------------------------------------
 
     @classmethod

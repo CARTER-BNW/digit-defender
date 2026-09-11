@@ -1,22 +1,32 @@
 # HANDOFF — Digit Defender
-_Last updated: 2026-09-12 (v9: the Android copy runs on John's Pixel 9a; `/android_update_copy` refreshes it) by Claude_
+_Last updated: 2026-09-12 (v10: John's phone round 1 - Settings screen, contextual buttons above the toolbar) by Claude_
 
 New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHASES.md (checkpoints), docs/GOTCHAS.md.
 
 ## Live state
 - **Phases 0-5 are built and verified** (tests + real-window runs + screenshots). Phase 6 (polish) is in progress.
-  156 pytest tests green (`python -m pytest -q`, ~10 s). Last commits: cbf056b (round 16), 6d00eaf (wrap v8),
-  70a3393 (Android copy, STATUS v9) and this handoff refresh, all 2026-09-12. Working tree clean.
+  167 pytest tests green (`python -m pytest -q`, ~12 s). Last commits: cbf056b (round 16), 6d00eaf (wrap v8),
+  70a3393 (Android copy, STATUS v9), bb3870b (handoff v9) and the phone round 1 commit (STATUS v10), all
+  2026-09-12.
+- **Phone round 1 (2026-09-12, STATUS v10):** menu "Settings" screen (`ui/menu.py`: text size 80-180%, button size
+  80-200%, fullscreen (desktop only), info hints, enemy waves on / paused; values in config.json, scales through
+  `ui/prefs.py`) replaces the old Fullscreen / Info hints rows; the HUD scales its panels, hints, messages, wave
+  timer, help and game-over text with the text size (`Hud.px` / `Hud.text`; the toolbar and the Android buttons
+  follow the button size); `Combat.waves_paused` freezes the wave countdown ([F7] still fires, camp raids go on;
+  `Game.apply_config` reads it with the hints flag). Android buttons now sit in ONE row above the toolbar and
+  appear only when they can act (Rot / Shift / Box / Upg / Fix / Split / Train / Form at the left, Pause / Speed /
+  Help / Save / Menu / Load at the right); Esc, Del, Pick, HQ and the zoom buttons are gone (Back key, X tool,
+  the HQ button, pinch).
 - **Android copy (2026-09-12, STATUS v9):** `android/` = the untouched desktop game + `android/mobile/` (touch
   layer: tap / long press / drags / pinch / two-finger tap + on-screen hotkey buttons; `entry.py` is the APK's
   main), packaged by python-for-android inside the WSL distro `dd-android` (Ubuntu on `D:\WSL`, everything on
   D:, no Docker - John's call). `python android\sync.py all` = sync copy -> build -> adb install -> run -> log
   dump; `/android_update_copy` is the checked walkthrough; `android/README.md` has the pipeline table and the
-  phone controls. APK 0.1.0 (pygame-ce 2.5.8, CPython 3.14, targetSdk 36, arm64) is installed on his Pixel 9a
-  and was driven by adb: menu, Test Lab running, Pause by touch, swipe pan, Back -> menu, saves in the app's
-  private dir. **John has not played it yet**; expect touch-feel feedback (button sizes, 1.5x text, soft
-  keyboard on New World). Every build trap hit is in docs/GOTCHAS.md (five Android entries); keep the game on
-  APIs pygame-ce offers on Android (no SysFont: `consolas` falls back to the default font there).
+  phone controls. APK 0.1.x (pygame-ce 2.5.8, CPython 3.14, targetSdk 36, arm64) runs on his Pixel 9a (adb-driven
+  checks: menu, Test Lab running, Pause by touch, swipe pan, Back -> menu, saves in the app's private dir).
+  John played it once and sent phone round 1 (STATUS v10, implemented; see the bullet above). Every build trap
+  hit is in docs/GOTCHAS.md (five Android entries); keep the game on APIs pygame-ce offers on Android (no
+  SysFont: `consolas` falls back to the default font there).
 - **John play-tested sixteen rounds on 2026-09-11/12; every item is implemented** (STATUS v4-v8 list them round by
   round, HANDOFF decisions 1-11 below hold the resulting rules). The game he now has, in one breath: a 6x6 HQ; belts
   drawn by drag with a transparent preview (Shift = straight L, R turns the drag), items that curve through corners;
@@ -112,10 +122,14 @@ Android in one screen (`android/`, STATUS v9, `android/README.md` for the player
   app dir is wiped on every update); `DEFAULT_CONFIG["hints"] = False` (the right-hand buttons sit where the hints
   panel would be). `--desktop` runs the same code in a window on the PC with the left mouse button as a finger.
 - `mobile/touch.py` = `TouchLayer`: modes None / pending / held / lmb / pan / two; TAP_MAX_PX 14, LONG_PRESS_S
-  0.45, TWO_TAP_S 0.35, PINCH_STEP 1.22; `layout()` recomputes the button rects every frame by mirroring
-  `ui/hud.py` (left block under the 190-px info panel and above the toolbar, right block under the HQ button and
-  above the minimap), so HUD layout changes move the buttons automatically; `hud.over_ui` is wrapped per instance
-  to include them. Synthesized events carry `touch=False` and go through `game.dispatch`.
+  0.45, TWO_TAP_S 0.35, PINCH_STEP 1.22; `layout()` recomputes the button rects every frame: one row just above
+  `hud.toolbar_rect` (it calls `hud.buttons()` first), ACTION_BUTTONS from the left edge, each with a `when(game,
+  layer)` predicate (Rot: a tool or selected building with a facing; Shift: belt tool, a selection, Box armed or
+  Shift on; Box: no tool; Upg: a selection; Fix: a damaged selection; Split: a belt selected; Train: a spawner
+  selected; Form: live units selected; none after a game over), SYSTEM_BUTTONS (Pause, Speed, Help, Save, Menu,
+  Load on game over) from the right edge, one row up when both groups would not fit side by side; size 64 px x
+  `prefs.button_scale` (labels scale too); `hud.over_ui` is wrapped per instance to include them. Synthesized
+  events carry `touch=False` and go through `game.dispatch`.
 - Pipeline: `sync.py` (Windows, stdlib) -> `wsl/build.sh` inside `dd-android` (mirrors `android/` to
   `~/dd-android`, re-creates the p4a dist when `android.api` changed, runs buildozer, copies the APK back) ->
   adb (`D:\Android\sdk\platform-tools\adb.exe`, env `ADB` overrides). `p4a-recipes/pygame` builds pygame-ce
@@ -228,6 +242,14 @@ tests must keep their tiles clear of the right column (x >= 932 px) and the mini
     CHUNK_GEN_BUDGET = 24 chunks/frame (visible first). Everything positions from `Camera.screen_origin()` (no seams).
     Walls carry `links` (bitmask of wall neighbours, rebuilt with the links) and draw connector bars + their level;
     a tower with empty ammo gets a red frame; the hub's damage bar sits under its label, one tile wide.
+12. Settings (John, phone round 1, 2026-09-12): config.json keys `text_scale` / `button_scale` (`ui/prefs.py`, steps
+    0.8-1.8 / 0.8-2.0), `hints`, `fullscreen`, `waves_paused`; the menu's "Settings" screen replaces the Fullscreen /
+    Info hints rows (Enter / tap / Right steps a value, Left steps back). Text size scales every HUD panel, the
+    hints, messages, wave timer, help, game over and the menu rows (world numbers never; the hints panel stops
+    short of the minimap, the wave timer steps aside from a wide structure panel); button size scales the toolbar
+    (still shrunk to fit left of the minimap) and the Android buttons with their labels. Waves paused =
+    `Combat.waves_paused`: `next_at_tick` advances with the tick so the countdown stands still, [F7] still fires,
+    camp raids are unaffected; it is a machine setting (config), not saved per world.
 
 ## Known rough edges / ideas (not blockers)
 - Towers take ammo from every side now, so a tower cannot be belt-levelled; `[U]` is the only way to level one.
@@ -262,21 +284,25 @@ tests must keep their tiles clear of the right column (x >= 932 px) and the mini
 - Combat stats (kills) are transient; the game-over line shows kills since load.
 - Phase 6 left: copy/paste blueprints, sounds, stats graphs, balance pass after a play test. Flow-field rebuild on very large bases
   (60k-tile cap) can cost ~200 ms when structures change during a wave (throttled to every 2 s).
-- Android (untested by John as of this handoff): text is pygame's default font at 1.5x (no `consolas` on the
-  phone; bundle a TTF in assets and point `render/numbers.font` at it if he finds it hard to read); buttons are
-  64 logical px (96 device px, about 6 mm) and may need to grow; the long press is 0.45 s; a second finger cancels
-  a belt drag in progress (by design, so two-finger pan never commits half a line); the "Info hints" panel, if
-  turned back on in the menu, draws under the right-hand buttons; naming a new world depends on the soft keyboard
-  committing text (space / enter), otherwise Create gives "World N"; F3/F6/F7 debug keys have no button; the menu's
-  "Fullscreen" entry does nothing on the phone; deleting a world needs the Del key (desktop only); the first
-  install of a new package name raises a Play Protect prompt (not repeated for updates); a Bluetooth mouse or
-  keyboard would be ignored on the phone (mouse events are dropped in touch-only mode).
+- Android (phone round 1 done 2026-09-12, John to re-test): text is pygame's default font at 1.5x (no `consolas`
+  on the phone; bundle a TTF in assets and point `render/numbers.font` at it if it still reads badly at a bigger
+  "Text size"); buttons are 64 logical px x the "Button size" setting (100% = 96 device px, about 6 mm); the long
+  press is 0.45 s; a second finger cancels a belt drag in progress (by design, so two-finger pan never commits
+  half a line); at the extreme Settings (text 180% + buttons 200%) the wave timer and messages end up under the
+  two button rows on the 720-px canvas; naming a new world depends on the soft keyboard committing text (space /
+  enter), otherwise Create gives "World N"; F3/F6/F7 debug keys have no button; the Settings screen hides the
+  Fullscreen row on the phone; deleting a world needs the Del key (desktop only); the first install of a new
+  package name raises a Play Protect prompt (not repeated for updates); a Bluetooth mouse or keyboard would be
+  ignored on the phone (mouse events are dropped in touch-only mode). No Esc / Del / Pick / HQ buttons any more:
+  Back = Escape, the X tool demolishes, a long press = right click, the HQ button recentres.
 
 ## Next actions
-0. John's first phone session: expect feedback on the touch layer (`android/mobile/touch.py`: gestures,
-   button sizes, long-press delay, text at 1.5x, world naming via the soft keyboard). Change the touch layer
-   or the desktop code, then `/android_update_copy` (sync -> build -> install -> run -> logs); the desktop code
-   stays the master and `android/app/` is never edited by hand.
+0. John's phone round 2: round 1 (STATUS v10) gave him the Settings screen (text size, button size, hints, waves
+   paused; fullscreen desktop-only), one row of buttons above the toolbar that appear only when useful, and no
+   Esc / Del / Pick / HQ / zoom buttons. Expect follow-ups on the same lines (which button shows when, the sizes,
+   whether "waves paused" should also stop camp raids). Change the touch layer or the desktop code, then
+   `/android_update_copy` (sync -> build -> install -> run -> logs); the desktop code stays the master and
+   `android/app/` is never edited by hand.
 1. Expect the next round of play-test feedback (John gives tile coordinates / screenshots, usually from the Test Lab):
    rebuild the scene from the legend in `world/testworld.py`, reproduce headlessly, fix, screenshot-verify (dummy
    driver + Read the PNG is fine; keep scene tiles clear of the HUD rects), commit (local only). His existing Test Lab

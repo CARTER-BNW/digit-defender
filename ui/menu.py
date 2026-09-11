@@ -1,4 +1,6 @@
-"""World-select menu: Continue / New World / recent worlds / Fullscreen / Quit.
+"""World-select menu: Continue / New World / Test lab / recent worlds /
+Settings / Quit. Settings (text size, button size, fullscreen, info hints,
+enemy waves on/paused) live in config.json; the scales go through ui.prefs.
 
 Blocking loop on the existing display. run() returns
 {"action": "play", "meta": <world meta>} or {"action": "quit"}.
@@ -11,6 +13,7 @@ import pygame
 from settings import WINDOW_W, WINDOW_H, COLORS
 from world import persistence
 from render import numbers
+from ui import prefs
 
 QUIT = "__quit__"
 BACK = "__back__"
@@ -59,10 +62,7 @@ class Menu:
             for m in worlds[:MAX_LISTED]:
                 options.append((f"{m['name']}   seed {m['seed']}   {_ago(m.get('last_played', 0))}",
                                 ("play", m)))
-            fs = self.config.get("fullscreen", False)
-            options.append((f"Fullscreen: {'On' if fs else 'Off'}", ("fullscreen", None)))
-            hints = self.config.get("hints", True)
-            options.append((f"Info hints: {'On' if hints else 'Off'}", ("hints", None)))
+            options.append(("Settings  (text and button size, fullscreen, hints, waves)", ("settings", None)))
             options.append(("Quit", ("quit", None)))
             footer = "Up/Down or mouse, Enter to select, Del deletes the highlighted world"
             footer += ", Esc back to the game" if cont is not None else ""
@@ -86,12 +86,9 @@ class Menu:
                 from world import testworld
                 return {"action": "play", "meta": persistence.find_or_create(testworld.NAME, testworld.SEED),
                         "lab": True}
-            if action == "fullscreen":
-                self._toggle_fullscreen()
-                continue
-            if action == "hints":
-                self.config["hints"] = not self.config.get("hints", True)
-                persistence.save_config(self.config)
+            if action == "settings":
+                if self._settings() == QUIT:
+                    return {"action": "quit"}
                 continue
             r = self._new_world()
             if r == QUIT:
@@ -121,6 +118,79 @@ class Menu:
         else:
             pygame.display.set_mode((WINDOW_W, WINDOW_H))
         persistence.save_config(self.config)
+
+    # ---- settings --------------------------------------------------------------
+
+    fullscreen_toggle = True                    # the phone build hides the row
+
+    def settings_rows(self):
+        """[(label, key)] for the Settings screen, from the current config."""
+        c = self.config
+        rows = [(f"Text size: {prefs.percent(prefs.text_scale)}", "text"),
+                (f"Button size: {prefs.percent(prefs.button_scale)}", "button")]
+        if self.fullscreen_toggle:
+            rows.append((f"Fullscreen: {'On' if c.get('fullscreen', False) else 'Off'}", "fullscreen"))
+        rows.append((f"Info hints: {'On' if c.get('hints', True) else 'Off'}", "hints"))
+        rows.append((f"Enemy waves: {'Paused' if c.get('waves_paused', False) else 'On'}", "waves"))
+        rows.append(("Back", "back"))
+        return rows
+
+    def adjust(self, key, direction=1):
+        """Step one setting (direction +1 / -1), save the config and apply it.
+        Returns True when the screen should close (Back)."""
+        c = self.config
+        if key == "back":
+            return True
+        if key == "text":
+            c["text_scale"] = prefs.step(prefs.text_scale, prefs.TEXT_SCALES, direction)
+        elif key == "button":
+            c["button_scale"] = prefs.step(prefs.button_scale, prefs.BUTTON_SCALES, direction)
+        elif key == "fullscreen":
+            self._toggle_fullscreen()               # saves the config itself
+            return False
+        elif key == "hints":
+            c["hints"] = not c.get("hints", True)
+        elif key == "waves":
+            c["waves_paused"] = not c.get("waves_paused", False)
+        prefs.apply(c)
+        persistence.save_config(c)
+        return False
+
+    def _settings(self):
+        """Settings screen: Enter / tap / Right steps a value forward, Left
+        back; Esc or Back returns to the menu. BACK or QUIT."""
+        sel = 0
+        footer = "Enter, tap or Right = next value, Left = previous, Esc back"
+        while True:
+            rows = self.settings_rows()
+            rects = self._draw("Settings", [label for label, _ in rows], sel, footer)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return QUIT
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        return BACK
+                    if event.key in (pygame.K_UP, pygame.K_w):
+                        sel = (sel - 1) % len(rows)
+                    elif event.key in (pygame.K_DOWN, pygame.K_s):
+                        sel = (sel + 1) % len(rows)
+                    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_RIGHT, pygame.K_d):
+                        if self.adjust(rows[sel][1], 1):
+                            return BACK
+                    elif event.key in (pygame.K_LEFT, pygame.K_a):
+                        self.adjust(rows[sel][1], -1)
+                elif event.type == pygame.MOUSEMOTION:
+                    for i, r in enumerate(rects):
+                        if r.collidepoint(event.pos):
+                            sel = i
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    for i, r in enumerate(rects):
+                        if r.collidepoint(event.pos):
+                            sel = i
+                            if self.adjust(rows[i][1], 1):
+                                return BACK
+            if self._tick():
+                return QUIT
 
     # ---- screens ---------------------------------------------------------------
 
@@ -207,18 +277,25 @@ class Menu:
         tag = numbers.text("mine digits, build math, defend the HQ", 18, DIM)
         screen.blit(tag, ((w - tag.get_width()) // 2, h // 8 + 74))
         y = h // 8 + 130
+        # rows at the text size (Settings), shrunk when they would not fit above the footer
+        scale = prefs.text_scale
+        need = (len(lines) + (1.3 if subtitle else 0)) * 44
+        room = h - 52 - y
+        if need * scale > room:
+            scale = max(0.6, room / need)
+        f = lambda v: int(round(v * scale))
         if subtitle:
-            s = numbers.text(subtitle, 28, DIM)
+            s = numbers.text(subtitle, f(28), DIM)
             screen.blit(s, ((w - s.get_width()) // 2, y))
-            y += 56
+            y += f(56)
         rects = []
         for i, line in enumerate(lines):
-            s = numbers.text(line, 26, HI if i == sel else FG)
+            s = numbers.text(line, f(26), HI if i == sel else FG)
             rects.append(screen.blit(s, ((w - s.get_width()) // 2, y)))
-            y += 44
+            y += f(44)
         if footer:
-            s = numbers.text(footer, 16, DIM)
-            screen.blit(s, ((w - s.get_width()) // 2, h - 44))
+            s = numbers.text(footer, f(16), DIM)
+            screen.blit(s, ((w - s.get_width()) // 2, h - f(44)))
         for note in persistence.warnings[-2:]:
             s = numbers.text(note, 14, (255, 150, 120))
             screen.blit(s, (12, h - 20 - 16 * (2 - persistence.warnings[-2:].index(note))))

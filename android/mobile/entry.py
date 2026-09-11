@@ -19,6 +19,7 @@ import pygame
 
 from world import persistence, testworld
 from render import numbers
+from ui import prefs
 from ui.menu import Menu
 from game import Game
 from .touch import TouchLayer, STATE, FINGER_EVENTS
@@ -51,7 +52,7 @@ class MobileGame(Game):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.show_hints = False                 # the right-hand buttons take that space
+        self.show_hints = False                 # apply_config() re-reads the phone config (hints off by default)
         self.touch = TouchLayer(self)
         orig = self.hud.over_ui
         self.hud.over_ui = lambda pos, _o=orig: _o(pos) or self.touch.hit(pos)
@@ -123,6 +124,8 @@ class MobileGame(Game):
 
 
 class MobileMenu(Menu):
+    fullscreen_toggle = False               # the phone is always fullscreen: no Settings row for it
+
     def _toggle_fullscreen(self):
         self.config["fullscreen"] = True
         persistence.save_config(self.config)
@@ -227,6 +230,7 @@ def main(argv=None):
         os.chdir(data)                          # crash.log lands here too
     persistence.DEFAULT_CONFIG["hints"] = False
     config = persistence.load_config()
+    prefs.apply(config)                         # text / button scale (menu Settings)
     screen = open_display(args, android)
     pygame.display.set_caption("Digit Defender")
     if touch_only:
@@ -246,7 +250,7 @@ def main(argv=None):
             meta = choice["meta"]
             lab = choice.get("lab", False)
         game = MobileGame.load(pygame.display.get_surface(), meta)
-        game.show_hints = config.get("hints", False)
+        game.apply_config(config)               # hints panel (off by default here), wave pause
         if lab:
             if testworld.is_empty(game.factory):
                 testworld.build(game.factory)

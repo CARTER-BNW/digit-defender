@@ -1,5 +1,49 @@
 # STATUS
-_Last updated: 2026-09-12 (v9) by Claude_
+_Last updated: 2026-09-12 (v10) by Claude_
+
+## v10 (2026-09-12): John's phone round 1 - Settings screen, contextual buttons above the toolbar (tests 156 -> 167)
+John: "few things on the phone. add setting options in menu that has ui text size, and move the full screen and
+info text there too. instead of being on the left, can the buttons be above the hot bar. I don't need HQ (already
+got home), esc, pick, del. buttons only show when needed (spawner selected -> train, units selected -> form).
+make the button and text adjustable in menu. no zoom buttons, I can pinch. in menu option to pause waves."
+- `ui/prefs.py` (new, pygame-free): `text_scale` / `button_scale` read from config.json (`apply`), step tables
+  TEXT_SCALES 0.8-1.8 and BUTTON_SCALES 0.8-2.0, `tsize` / `tpx` helpers. `persistence.DEFAULT_CONFIG` gained
+  hints / text_scale / button_scale / waves_paused. main.py and the Android entry call `prefs.apply(config)` at
+  startup and `Game.apply_config(config)` (hints panel + wave pause) after every load.
+- `ui/menu.py`: main list is Continue / New World / Test lab / worlds / **Settings** / Quit; the Settings screen
+  (`settings_rows` / `adjust` / `_settings`) cycles Text size, Button size, Fullscreen (desktop only:
+  `fullscreen_toggle`, MobileMenu sets False), Info hints, Enemy waves On / Paused, Back; Enter / tap / Right = next
+  value, Left = previous, Esc back; every change saves config.json and applies at once. Menu rows draw at the text
+  size and shrink to fit above the footer (a 6-world list at 150% still fits 720 px).
+- `ui/hud.py`: `Hud.px` / `Hud.text` scale the right column (width 340 x scale), targets rows, HQ button, hints
+  (clamped to the room above the minimap; no room = no panel), structure / group panels, wave timer, messages,
+  hub alert, help (steps down until it fits) and the game-over screen with the text size; the toolbar buttons
+  follow the button size (BTN 60 x scale, still shrunk to fit 14 left of the minimap: 78 px at 1616 wide, 54 at
+  1280) and their key / name / cost text scales with the button. The wave timer is drawn after the structure
+  panel and steps right of it, or under it, when big text makes the panel reach the screen centre; messages start
+  under the timer.
+- `sim/combat.py`: `Combat.waves_paused` - while set and the wave is not due, `next_at_tick` advances one per
+  tick (countdown frozen); `[F7]` (next_at_tick <= now) still spawns; camp raids unaffected. HUD line says
+  "(waves paused)"; the urgent red never shows while paused.
+- `android/mobile/touch.py`: ACTION_BUTTONS (Rot, Shift, Box, Upg, Fix, Split, Train, Form) each with a `when`
+  predicate, SYSTEM_BUTTONS (Pause, Speed, Help, Save, Menu, Load on game over); `layout()` puts them in one row
+  just above `hud.toolbar_rect` (actions from the left, system from the right, system one row up when both do
+  not fit), sized 64 x `prefs.button_scale`, labels scaled; Esc / Del / Pick / HQ / Zoom -/+ removed; no buttons
+  but the system ones after a game over; the build tag sits over the row's right end. README controls updated.
+- Tests: `tests/test_settings.py` (8: prefs apply / step / clamp, settings rows adjust + save, settings screen keys,
+  main menu lists Settings not the toggles, phone menu has no fullscreen row, HUD sizes at 150% + a full draw at
+  180% with every panel on, apply_config, waves paused freeze + F7); `tests/test_android_touch.py` rewritten for
+  the row (which buttons show when, above the toolbar / no overlaps, 150% = 96 px buttons + toolbar 78, 200% =
+  two rows). 167 green.
+- Verification: scratch verify_phone_ui.py (dummy driver, 1616x720, Test Lab): idle = Box + system; belt tool =
+  Rot Shift; spawner selected = Rot Shift Box Upg Fix Train; belt = ... Split; units = Shift Box Form; 150% text +
+  150% buttons with hints on (wave timer moved under the wide panel, hints clipped to 2 lines above the minimap);
+  180% / 200% (two button rows); game over (system + Load only); Settings screen at 100% / 150%; main menu at 150%
+  with 6 worlds. APK 0.1.1 built in 1.3 min (`python android\sync.py sync build`, 25.0 MB) and installed on the
+  Pixel 9a with `install run logs` (see the commit message for the log result).
+- **Open:** John to re-test on the phone; at the extreme Settings (180% + 200%) the timer / messages sit under
+  the button rows; "waves paused" leaves camp raids alone (ask if he wants both); economy / Phase 4 checkbox /
+  Phase 6 leftovers as before.
 
 ## v9 (2026-09-12): Android copy - the game runs on John's Pixel 9a (tests 144 -> 156)
 John: "i want a copy of this game so i can play on android ... make a new command /android_update_copy".

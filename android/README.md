@@ -48,12 +48,17 @@ later builds take a few minutes.
 | two-finger tap | middle click: patrol between the rally point and the tap (units selected) |
 | Back button | Escape |
 
-On-screen buttons (left column, under the info panel): **Rot** R, **Esc**, **Del**, **Pick** Q,
-**Upg** U, **Fix** H, **Split** T, **Train** C, **Shift** (sticky: add to selection / straight belt
-drag), **Box** (next drag selects), **HQ** Home, **Form** (next formation). Right block (under the
-HQ button): **Zoom -/+**, **Pause**, **Speed** x1/x2/x4, **Help** F1, **Save**, **Menu**, and **Load**
-on the game-over screen. The info hints panel is off by default (its space holds the buttons; the
-menu can turn it back on).
+On-screen buttons sit in one row just above the toolbar and appear only while they can do
+something (John, phone round 1). Left end, the actions: **Rot** R (a tool with a facing, or a
+rotatable building selected), **Shift** (sticky: straight belt drag / add to a selection; shown
+with the belt tool, with a selection, or while on), **Box** (next drag selects; no tool active),
+**Upg** U (something selected), **Fix** H (a selected building is damaged), **Split** T (a belt
+selected), **Train** C (a spawner selected), **Form** (units selected: next formation). Right end:
+**Pause**, **Speed** x1/x2/x4, **Help** F1, **Save**, **Menu**, and **Load** on the game-over screen
+(when both ends would overlap, the right group moves one row up). Gone on purpose: Esc (the Back
+key), Del (the X tool), Pick, HQ (the HQ button in the right column) and the zoom buttons (pinch).
+Menu > Settings: text size, button size (toolbar + these buttons), info hints (off by default on the
+phone), enemy waves on / paused; the fullscreen row is desktop-only.
 
 Naming a new world: the New World screen opens the soft keyboard; letters arrive when the keyboard
 commits a word (space / enter), or just tap Create for an automatic name.

@@ -8,6 +8,7 @@ from settings import (COLORS, COSTS, REPAIR_COST_PER_HP, TICK_RATE, TILE_SIZE, C
 from render import numbers
 from render import combat as rcombat
 from sim import leveling
+from ui import prefs
 from sim.structures import KINDS, Belt, Bridge, Miner, MathMachine, Tower, Spawner, Hub, ROLE_FEED
 
 # toolbar order and hotkeys (Phase 5 appends spawners)
@@ -62,6 +63,8 @@ class Hud:
         self._alert_surf = None     # red screen frame (hub under attack), cached per size
         self.hub_button = pygame.Rect(8, 72, 120, 26)
         self.btn = BTN              # toolbar button size in use (buttons())
+        self.panel_rect = None      # the top-left structure / group panel this frame (None = none shown)
+        self.wave_rect = pygame.Rect(0, 0, 0, 0)
 
     def message(self, text, ttl=2.5):
         self.messages = [m for m in self.messages if m[0] != text]
@@ -72,13 +75,27 @@ class Hud:
             m[1] -= dt
         self.messages = [m for m in self.messages if m[1] > 0][-4:]
 
+    # ---- scale (menu Settings, ui/prefs.py) ----------------------------------
+
+    @staticmethod
+    def px(v):
+        """Layout pixels scaled by the text size."""
+        return prefs.tpx(v)
+
+    @staticmethod
+    def text(s, size, color=COLORS["text"]):
+        """Text at `size` px times the text size (panels, hints, messages;
+        the toolbar scales with the button size instead)."""
+        return numbers.text(s, prefs.tsize(size), color)
+
     # ---- layout --------------------------------------------------------------
 
     def buttons(self):
         w, h = self.screen.get_size()
         n = len(TOOLS)
         avail = w - self.MINI_W - 16                  # centred in the space left of the minimap
-        btn = max(40, min(BTN, (avail - 16 - (n - 1) * GAP) // n))
+        want = int(round(BTN * prefs.button_scale))   # menu Settings "Button size"
+        btn = max(40, min(want, (avail - 16 - (n - 1) * GAP) // n))
         self.btn = btn
         total = n * btn + (n - 1) * GAP
         x0 = max(8, (avail - total) // 2)
@@ -117,44 +134,47 @@ class Hud:
         screen = self.screen
         f = game.factory
         w, h = screen.get_size()
-        col = self.COL_W
+        p, T = self.px, self.text                     # layout px / text scaled by the text size
+        col = p(self.COL_W)
         x = w - col - 8
         # right column, top to bottom: balance (centred), targets, HQ button, hints
-        bal = pygame.Rect(x, 8, col, 58)
+        bal = pygame.Rect(x, 8, col, p(58))
         self._panel(bal)
-        t = numbers.text("Balance", 14, (170, 190, 170))
-        screen.blit(t, (bal.centerx - t.get_width() // 2, bal.y + 4))
-        t = numbers.text(numbers.fmt(f.balance), 28)
-        screen.blit(t, (bal.centerx - t.get_width() // 2, bal.y + 22))
-        tg = pygame.Rect(x, bal.bottom + 6, col, 24 + 22 * len(f.targets))
+        t = T("Balance", 14, (170, 190, 170))
+        screen.blit(t, (bal.centerx - t.get_width() // 2, bal.y + p(4)))
+        t = T(numbers.fmt(f.balance), 28)
+        screen.blit(t, (bal.centerx - t.get_width() // 2, bal.y + p(22)))
+        row = p(22)
+        tg = pygame.Rect(x, bal.bottom + 6, col, p(24) + row * len(f.targets))
         self._panel(tg)
-        screen.blit(numbers.text("Targets   (deliver amount x number)", 14, (170, 190, 170)), (tg.x + 8, tg.y + 4))
+        screen.blit(T("Targets   (deliver amount x number)", 14, (170, 190, 170)), (tg.x + 8, tg.y + p(4)))
         for i, tgt in enumerate(f.targets):
-            y = tg.y + 24 + i * 22
+            y = tg.y + p(24) + i * row
             xx = tg.x + 8
-            screen.blit(numbers.text(f"{tgt.amount} x", 15, (200, 220, 200)), (xx, y + 2))
-            screen.blit(numbers.text(numbers.fmt(tgt.value), 18, (255, 230, 120)), (xx + 52, y))
-            screen.blit(numbers.text(f"{tgt.delivered}/{tgt.amount}", 14, (200, 220, 200)), (xx + 140, y + 3))
-            screen.blit(numbers.text(f"Lv{tgt.level}", 13, (170, 190, 170)), (xx + 208, y + 3))
-            screen.blit(numbers.text(f"+{numbers.fmt(tgt.reward)}", 16, (140, 255, 140)), (xx + 258, y + 1))
+            screen.blit(T(f"{tgt.amount} x", 15, (200, 220, 200)), (xx, y + p(2)))
+            screen.blit(T(numbers.fmt(tgt.value), 18, (255, 230, 120)), (xx + p(52), y))
+            screen.blit(T(f"{tgt.delivered}/{tgt.amount}", 14, (200, 220, 200)), (xx + p(140), y + p(3)))
+            screen.blit(T(f"Lv{tgt.level}", 13, (170, 190, 170)), (xx + p(208), y + p(3)))
+            screen.blit(T(f"+{numbers.fmt(tgt.reward)}", 16, (140, 255, 140)), (xx + p(258), y + p(1)))
         self.rects = {"balance": bal, "targets": tg}
         hb = self.hub_button
-        hb.update(x + col // 2 - 60, tg.bottom + 6, 120, 26)
+        hb.update(x + col // 2 - p(60), tg.bottom + 6, p(120), p(26))
         pygame.draw.rect(screen, COLORS["hub"], hb, border_radius=4)
         pygame.draw.rect(screen, COLORS["panel_border"], hb, 1, border_radius=4)
-        label = numbers.text("HQ  [Home]", 14)
+        label = T("HQ  [Home]", 14)
         screen.blit(label, (hb.centerx - label.get_width() // 2, hb.centery - label.get_height() // 2))
         if getattr(game, "show_hints", True):
             self._draw_hints(game, x, hb.bottom + 6, col)
         else:
             self.hints_rect = pygame.Rect(0, 0, 0, 0)
-        self._draw_wave(game)
         self._draw_minimap(game)
         self._draw_toolbar(game)
+        self.panel_rect = None
         if game.selected is not None:
             self._draw_panel(game, game.selected)
         elif game.selected_structures:
             self._draw_group_panel(game)
+        self._draw_wave(game)       # after the panel: big text makes the panel wide, the timer moves aside
         rcombat.draw_offscreen_indicators(screen, game.camera, game.combat)   # on top of the panels
         self._draw_hub_alert(game)
         self._draw_messages()
@@ -175,13 +195,15 @@ class Hud:
         buttons = self.buttons()
         self._panel(self.toolbar_rect)
         balance = game.factory.balance
-        name_px = 12 if self.btn >= 58 else 11        # 14 buttons at 1280 wide: a touch smaller
+        bs = self.btn / BTN                           # the text inside scales with the button
+        q = lambda v: int(round(v * bs))              # (14 buttons at 1280 wide: a touch smaller)
+        name_px = max(9, q(12))
         for rect, kind, key in buttons:
             cost = COSTS.get(kind, 0)
             color = COLORS.get(kind, (120, 120, 120))
             if balance < cost:
                 color = tuple(int(c * 0.45) for c in color)
-            icon = rect.inflate(-8, -22).move(0, -6)
+            icon = rect.inflate(-q(8), -q(22)).move(0, -q(6))
             pygame.draw.rect(screen, color, icon, border_radius=4)
             if kind == "spawner_repair":                # the repair cross, like its units
                 cx, cy = icon.center
@@ -192,14 +214,14 @@ class Hud:
                 pygame.draw.rect(screen, (255, 255, 120), rect, 2, border_radius=4)
             else:
                 pygame.draw.rect(screen, COLORS["panel_border"], rect, 1, border_radius=4)
-            screen.blit(numbers.text(key, 13), (rect.x + 4, rect.y + 2))
+            screen.blit(numbers.text(key, max(9, q(13))), (rect.x + q(4), rect.y + q(2)))
             name = numbers.text(TOOL_NAMES[kind], name_px)
-            screen.blit(name, (rect.centerx - name.get_width() // 2, rect.bottom - 26))
+            screen.blit(name, (rect.centerx - name.get_width() // 2, rect.bottom - q(26)))
             if kind == "demolish":
-                c = numbers.text("50% back", 11, (255, 230, 120))
+                c = numbers.text("50% back", max(8, q(11)), (255, 230, 120))
             else:
-                c = numbers.text(str(cost), 12, (255, 230, 120) if balance >= cost else (255, 110, 110))
-            screen.blit(c, (rect.centerx - c.get_width() // 2, rect.bottom - 13))
+                c = numbers.text(str(cost), max(9, q(12)), (255, 230, 120) if balance >= cost else (255, 110, 110))
+            screen.blit(c, (rect.centerx - c.get_width() // 2, rect.bottom - q(13)))
 
     @staticmethod
     def _wrap(text, px, max_w):
@@ -217,14 +239,22 @@ class Hud:
         return lines
 
     def _draw_hints(self, game, x, y, col):
-        """The info hints (controls, hovered tile, selection) in a panel."""
+        """The info hints (controls, hovered tile, selection) in a panel that
+        stops short of the minimap."""
+        p = self.px
+        size, lh = prefs.tsize(12), p(16)
         lines = []
         for text in self._hint_lines(game):
-            lines.extend(self._wrap(text, 12, col - 16))
-        self.hints_rect = pygame.Rect(x, y, col, 12 + 16 * len(lines))
+            lines.extend(self._wrap(text, size, col - 16))
+        room = self.screen.get_height() - self.MINI_H - 16 - y - p(12)
+        lines = lines[:room // lh] if room >= lh else []
+        if not lines:                                   # big text on a small window: no room, no panel
+            self.hints_rect = pygame.Rect(0, 0, 0, 0)
+            return
+        self.hints_rect = pygame.Rect(x, y, col, p(12) + lh * len(lines))
         self._panel(self.hints_rect)
         for i, line in enumerate(lines):
-            self.screen.blit(numbers.text(line, 12), (x + 8, y + 6 + i * 16))
+            self.screen.blit(numbers.text(line, size), (x + 8, y + p(6) + i * lh))
 
     def _hint_lines(self, game):
         lines = []
@@ -312,19 +342,20 @@ class Hud:
     def _draw_panel(self, game, s):
         """Selected-structure panel: level, invested, next threshold, hp,
         rate, buffers, actions. Every number comes from sim.leveling."""
-        ph = 190
+        p, T = self.px, self.text
+        ph = p(190)
         x0, y0 = 8, 8                                   # top left (John)
         rows = []                                       # (dy, surface); the panel grows to the widest line
         name = DISPLAY_NAMES.get(s.KIND, s.KIND)
         facing = "" if s.KIND in ("miner", "wall", "hub", "tower", "bridge") else f"  facing {'NESW'[s.direction]}"
-        rows.append((8, numbers.text(f"{name}  ({s.x}, {s.y}){facing}", 15)))
-        rows.append((28, numbers.text(f"Level {s.level}", 22, (255, 230, 120))))
+        rows.append((p(8), T(f"{name}  ({s.x}, {s.y}){facing}", 15)))
+        rows.append((p(28), T(f"Level {s.level}", 22, (255, 230, 120))))
         nxt = leveling.next_threshold(s.invested)
         if nxt is None:
             nxt_txt = "max level"
         else:
             nxt_txt = f"next at {numbers.fmt(nxt)}  ({numbers.fmt(nxt - s.invested)} to go)"
-        rows.append((56, numbers.text(f"fed {numbers.fmt(s.invested)}   {nxt_txt}", 14, (200, 220, 200))))
+        rows.append((p(56), T(f"fed {numbers.fmt(s.invested)}   {nxt_txt}", 14, (200, 220, 200))))
         # rate line
         if isinstance(s, Belt):
             rate = (f"speed {s.speed * TICK_RATE:.2f} tiles/s   items {len(s.items)}   "
@@ -351,7 +382,7 @@ class Hud:
             rate = "everything delivered here is income"
         else:
             rate = "blocks enemies; joins neighbouring walls; the number is its level"
-        rows.append((100, numbers.text(rate, 13, (200, 220, 200))))
+        rows.append((p(100), T(rate, 13, (200, 220, 200))))
         # actions
         missing = s.max_hp - s.hp
         repair = f"[H] repair {int(missing * REPAIR_COST_PER_HP + 0.999)}" if missing > 0 else "[H] repair (full)"
@@ -360,29 +391,30 @@ class Hud:
         refund = int(COSTS.get(s.KIND, 0) * 0.5)
         rot = "" if s.KIND in ("miner", "wall", "tower", "bridge") else "[R] rotate   "
         actions = f"{rot}[Del] demolish +{refund}   {repair}" if not isinstance(s, Hub) else "the HQ cannot be moved"
-        rows.append((124, numbers.text(f"{upgrade}   {actions}", 13, (255, 230, 120))))
+        rows.append((p(124), T(f"{upgrade}   {actions}", 13, (255, 230, 120))))
         if isinstance(s, Spawner):
             roles = f"alive {game.combat.count_units_of(s)}   [RMB] on the map = gather point (new and idle units)"
         else:
             roles = "sides F/R/B/L: " + " / ".join(str(r) for r in type(s).SIDE_ROLES)
-        rows.append((146, numbers.text(roles, 12, (170, 190, 170))))
+        rows.append((p(146), T(roles, 12, (170, 190, 170))))
         if ROLE_FEED in type(s).SIDE_ROLES:
             hint = "feed sides level it up too: belt numbers into a yellow side"
         else:
             hint = "no feed sides here: level it up with [U]"
-        rows.append((164, numbers.text(hint, 12, (170, 190, 170))))
-        pw = max(372, max(r.get_width() for _, r in rows) + 20)
-        self._panel((x0, y0, pw, ph))
+        rows.append((p(164), T(hint, 12, (170, 190, 170))))
+        pw = max(p(372), max(r.get_width() for _, r in rows) + 20)
+        self.panel_rect = pygame.Rect(x0, y0, pw, ph)
+        self._panel(self.panel_rect)
         blit = self.screen.blit
         for dy, surf in rows:
             blit(surf, (x0 + 10, y0 + dy))
         # hp bar (drawn over the panel, under the rate line)
-        bx, by, bw, bh = x0 + 10, y0 + 80, pw - 20, 12
+        bx, by, bw, bh = x0 + 10, y0 + p(80), pw - 20, p(12)
         pygame.draw.rect(self.screen, COLORS["hp_bar_bg"], (bx, by, bw, bh))
         frac = max(0.0, min(1.0, s.hp / s.max_hp)) if s.max_hp else 0
         pygame.draw.rect(self.screen, COLORS["hp_bar"] if frac > 0.5 else (230, 160, 60) if frac > 0.25 else (230, 70, 60),
                          (bx, by, int(bw * frac), bh))
-        blit(numbers.text(f"hp {numbers.fmt(s.hp)} / {numbers.fmt(s.max_hp)}", 13), (bx + 4, by - 1))
+        blit(T(f"hp {numbers.fmt(s.hp)} / {numbers.fmt(s.max_hp)}", 13), (bx + 4, by - 1))
 
     def _draw_hub_alert(self, game):
         """Pulsing red frame along the screen edges while the hub takes damage."""
@@ -400,13 +432,14 @@ class Hud:
             self._alert_surf = surf
         self._alert_surf.set_alpha(int(60 + 170 * pulse))
         self.screen.blit(self._alert_surf, (0, 0))
-        txt = numbers.text("HQ UNDER ATTACK", 22, (255, 90, 90))
-        self.screen.blit(txt, (w // 2 - txt.get_width() // 2, 46))
+        txt = self.text("HQ UNDER ATTACK", 22, (255, 90, 90))
+        self.screen.blit(txt, (w // 2 - txt.get_width() // 2, self.px(46)))
 
     def _draw_group_panel(self, game):
         """Drag-box selection: counts per kind, total upgrade / repair /
         demolish figures, and what [C] would cost at the spawners inside."""
         group = game.selected_structures
+        p, T = self.px, self.text
         x0, y0 = 8, 8                                   # top left, like the single panel
         rows = []                                       # (dy, surface); the panel grows to the widest line
         counts = {}
@@ -414,26 +447,27 @@ class Hud:
             counts[s.KIND] = counts.get(s.KIND, 0) + 1
         kinds = ", ".join(f"{DISPLAY_NAMES.get(k, k.capitalize())} x{n}"
                           for k, n in sorted(counts.items(), key=lambda kv: -kv[1]))
-        rows.append((8, numbers.text(f"{len(group)} structures selected", 15)))
-        rows.append((30, numbers.text(kinds, 13, (200, 220, 200))))
+        rows.append((p(8), T(f"{len(group)} structures selected", 15)))
+        rows.append((p(30), T(kinds, 13, (200, 220, 200))))
         levels = [s.level for s in group]
-        rows.append((50, numbers.text(f"levels {min(levels)} - {max(levels)}", 13, (200, 220, 200))))
+        rows.append((p(50), T(f"levels {min(levels)} - {max(levels)}", 13, (200, 220, 200))))
         up = sum(c for c in (game.factory.upgrade_cost(s) for s in group) if c)
         missing = sum(max(0, s.max_hp - s.hp) for s in group)
         rep = int(missing * REPAIR_COST_PER_HP + 0.999) if missing else 0
         refund = sum(int(COSTS.get(s.KIND, 0) * 0.5) for s in group)
-        rows.append((74, numbers.text(f"[U] upgrade all for {numbers.fmt(up)}   [H] repair all for {numbers.fmt(rep)}   "
-                                      f"[Del] demolish all +{numbers.fmt(refund)}", 13, (255, 230, 120))))
+        rows.append((p(74), T(f"[U] upgrade all for {numbers.fmt(up)}   [H] repair all for {numbers.fmt(rep)}   "
+                              f"[Del] demolish all +{numbers.fmt(refund)}", 13, (255, 230, 120))))
         spawners = [s for s in group if isinstance(s, Spawner)]
-        dy = 96
+        dy = p(96)
         if spawners:
             n_sp = len(spawners)
-            rows.append((dy, numbers.text(f"[C] train a unit at each of {n_sp} spawner{'s' if n_sp > 1 else ''} for "
-                                          f"{unit_cost_summary(spawners)}   [RMB] gather point", 12, (255, 230, 120))))
-            dy += 18
-        rows.append((dy, numbers.text("[Shift+drag] add more   [Esc] deselect", 12, (170, 190, 170))))
-        pw = max(372, max(r.get_width() for _, r in rows) + 20)
-        self._panel((x0, y0, pw, dy + 22))
+            rows.append((dy, T(f"[C] train a unit at each of {n_sp} spawner{'s' if n_sp > 1 else ''} for "
+                               f"{unit_cost_summary(spawners)}   [RMB] gather point", 12, (255, 230, 120))))
+            dy += p(18)
+        rows.append((dy, T("[Shift+drag] add more   [Esc] deselect", 12, (170, 190, 170))))
+        pw = max(p(372), max(r.get_width() for _, r in rows) + 20)
+        self.panel_rect = pygame.Rect(x0, y0, pw, dy + p(22))
+        self._panel(self.panel_rect)
         for off, surf in rows:
             self.screen.blit(surf, (x0 + 10, y0 + off))
 
@@ -493,17 +527,27 @@ class Hud:
         c = game.combat
         w = self.screen.get_width()
         secs = c.seconds_to_wave()
-        urgent = secs <= WAVE_WARNING_S
+        urgent = secs <= WAVE_WARNING_S and not c.waves_paused
         text = f"Wave {c.wave.number + 1} in {int(secs // 60)}:{int(secs % 60):02d}"
+        if c.waves_paused:
+            text += "   (waves paused)"
         if c.enemies:
             text += f"   enemies {len(c.enemies)}"
         if game.paused:
             text += "   PAUSED"
         elif game.speed > 1:
             text += f"   x{game.speed}"
-        surf = numbers.text(text, 20, (255, 90, 90) if urgent else (220, 230, 220))
-        self._panel((w // 2 - surf.get_width() // 2 - 10, 8, surf.get_width() + 20, 32))
-        self.screen.blit(surf, (w // 2 - surf.get_width() // 2, 14))
+        surf = self.text(text, 20, (255, 90, 90) if urgent else (220, 230, 220))
+        sw, ph = surf.get_width(), self.px(32)
+        x, y = w // 2 - sw // 2, 8
+        pr = self.panel_rect
+        if pr is not None and x - 10 < pr.right + 6:      # a wide structure panel (big text): step aside
+            x = pr.right + 16
+            if x + sw + 16 > self.rects["balance"].left:  # no room beside it: under it
+                x, y = w // 2 - sw // 2, pr.bottom + 6
+        self.wave_rect = pygame.Rect(x - 10, y, sw + 20, ph)
+        self._panel(self.wave_rect)
+        self.screen.blit(surf, (x, y + (ph - surf.get_height()) // 2))
 
     HELP = [
         "1-6 belt / miner / adder / subtract / multiply / divide   7 wall   8 tower   9 0 - = spawners   B bridge   X demolish",
@@ -541,44 +585,43 @@ class Hud:
     ]
 
     def _draw_help(self):
+        """The help panel at the text size, stepping down (13 px lines at 1x,
+        then smaller) until its 30-odd lines fit the window."""
         w, h = self.screen.get_size()
-        lines = [numbers.text(t, 15) for t in self.HELP]
-        pw = max(s.get_width() for s in lines) + 40
-        ph = len(lines) * 22 + 40
-        if ph > h - 16:                                   # 30 lines: tighten the spacing on small windows
-            lines = [numbers.text(t, 13) for t in self.HELP]
-            pw = max(s.get_width() for s in lines) + 40
-            ph = len(lines) * 19 + 30
-            x0, y0 = (w - pw) // 2, (h - ph) // 2
-            self._panel((x0, y0, pw, ph))
-            for i, s in enumerate(lines):
-                self.screen.blit(s, (x0 + 20, y0 + 15 + i * 19))
-            return
+        ts = prefs.text_scale
+        for scale in (ts, ts * 0.87, 1.0, 0.87, 0.75, 0.65):
+            size, lh, pad = max(6, int(round(15 * scale))), int(round(22 * scale)), int(round(20 * scale))
+            lines = [numbers.text(t, size) for t in self.HELP]
+            pw = max(s.get_width() for s in lines) + 2 * pad
+            ph = len(lines) * lh + 2 * pad
+            if ph <= h - 16 and pw <= w - 16:
+                break
         x0, y0 = (w - pw) // 2, (h - ph) // 2
         self._panel((x0, y0, pw, ph))
         for i, s in enumerate(lines):
-            self.screen.blit(s, (x0 + 20, y0 + 20 + i * 22))
+            self.screen.blit(s, (x0 + pad, y0 + pad + i * lh))
 
     def _draw_game_over(self, game):
         w, h = self.screen.get_size()
         dim = pygame.Surface((w, h), pygame.SRCALPHA)
         dim.fill((40, 0, 0, 170))
         self.screen.blit(dim, (0, 0))
-        title = numbers.text("HQ DESTROYED", 56, (255, 80, 80))
-        self.screen.blit(title, (w // 2 - title.get_width() // 2, h // 2 - 80))
+        p, T = self.px, self.text
+        title = T("HQ DESTROYED", 56, (255, 80, 80))
+        self.screen.blit(title, (w // 2 - title.get_width() // 2, h // 2 - p(80)))
         c = game.combat
-        line = numbers.text(f"survived {c.wave.number} waves, {c.stats['kills']} kills, tick {game.factory.tick_count}", 20)
-        self.screen.blit(line, (w // 2 - line.get_width() // 2, h // 2 - 10))
-        keys = numbers.text("[L] load last save      [Esc] back to menu", 24, (255, 230, 120))
-        self.screen.blit(keys, (w // 2 - keys.get_width() // 2, h // 2 + 40))
+        line = T(f"survived {c.wave.number} waves, {c.stats['kills']} kills, tick {game.factory.tick_count}", 20)
+        self.screen.blit(line, (w // 2 - line.get_width() // 2, h // 2 - p(10)))
+        keys = T("[L] load last save      [Esc] back to menu", 24, (255, 230, 120))
+        self.screen.blit(keys, (w // 2 - keys.get_width() // 2, h // 2 + p(40)))
 
     def _draw_messages(self):
         w = self.screen.get_width()
-        y = 80
+        y = max(self.px(80), self.wave_rect.bottom + self.px(40))   # under the wave timer, wherever it went
         for text, ttl in self.messages:
-            surf = numbers.text(text, 18, (255, 220, 120))
+            surf = self.text(text, 18, (255, 220, 120))
             if ttl < 0.6:
                 surf = surf.copy()
                 surf.set_alpha(int(255 * ttl / 0.6))
             self.screen.blit(surf, (w // 2 - surf.get_width() // 2, y))
-            y += 24
+            y += self.px(24)

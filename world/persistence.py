@@ -24,7 +24,9 @@ from settings import CHUNK_SIZE, SAVE_VERSION
 ROOT = Path(__file__).resolve().parent.parent
 _saves_dir = ROOT / "saves"
 CONFIG_PATH = ROOT / "config.json"
-DEFAULT_CONFIG = {"fullscreen": False, "last_world": None}
+DEFAULT_CONFIG = {"fullscreen": False, "last_world": None, "hints": True,
+                  "text_scale": 1.0, "button_scale": 1.0,    # menu Settings (ui/prefs.py)
+                  "waves_paused": False}                     # menu Settings: the wave countdown stands still
 CHUNK_VERSION = 1
 
 warnings = []          # human-readable notes about fallbacks (UI may show them)

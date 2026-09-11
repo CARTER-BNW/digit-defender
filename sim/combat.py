@@ -216,6 +216,7 @@ class Combat:
         self.next_uid = 1
         self.flow = FlowField()
         self.use_flow = True                   # False -> v1 greedy only (tests)
+        self.waves_paused = False              # menu Settings: the wave countdown stands still (raids go on)
         self.wave = (WaveState.from_dict(wave) if wave
                      else WaveState(0, WAVE_FIRST_S * TICK_RATE, wave_angle(seed, 0)))
         self.raid_counts = {tuple(int(v) for v in k.split(",")): int(n)
@@ -647,7 +648,9 @@ class Combat:
     def tick(self):
         f = self.factory
         t = f.tick_count
-        if t >= self.wave.next_at_tick:
+        if self.waves_paused and t < self.wave.next_at_tick:
+            self.wave.next_at_tick += 1        # frozen countdown; [F7] (next_at_tick <= t) still fires
+        elif t >= self.wave.next_at_tick:
             self.spawn_wave()
         if t - self._last_scan >= NEST_SCAN_TICKS:
             self._scan_nests(t)

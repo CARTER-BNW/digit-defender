@@ -9,9 +9,12 @@ untouched:
                          demolish box, selection box
     two-finger drag    = pan;  pinch = zoom in discrete steps at the pinch
     two-finger tap     = middle click (patrol with units selected)
-    on-screen buttons  = the hotkeys (R, Esc, Del, Q, U, H, T, C, Home, Space,
-                         speed, F1, zoom, formation) plus sticky Shift / Box,
-                         Save, Menu and Load (game over)
+    on-screen buttons  = one row just above the toolbar. Left: the actions
+                         that apply right now (Rot, Shift, Box, Upg, Fix,
+                         Split, Train, Form), each shown only while it can
+                         do something. Right: Pause, Speed, Help, Save, Menu
+                         and Load (game over). Sizes follow the menu's
+                         Settings "Button size" (ui/prefs.py).
 
 STATE is read by the pygame patches installed in entry.py: `mods` are the
 sticky modifier bits ORed into pygame.key.get_mods(), `last_pos` is what
@@ -24,7 +27,8 @@ import pygame
 
 from render import numbers
 from settings import COLORS
-from ui.hud import TOOLS, BTN as HUD_BTN, GAP as HUD_GAP
+from sim.structures import Belt, Spawner
+from ui import prefs
 
 try:                                        # written by android/sync.py
     from . import build_info as _bi
@@ -38,21 +42,36 @@ TAP_MAX_PX = 14          # a finger may wander this far (logical px) and still t
 LONG_PRESS_S = 0.45      # hold this long without moving = right click
 TWO_TAP_S = 0.35         # two fingers down and up within this, without moving = middle click
 PINCH_STEP = 1.22        # finger-distance ratio per discrete zoom step
-BTN_W, BTN_H, GAP = 64, 64, 6
+BTN_W, BTN_H, GAP = 64, 64, 6   # at button scale 1.0 (menu Settings "Button size")
 FINGER_EVENTS = (pygame.FINGERDOWN, pygame.FINGERMOTION, pygame.FINGERUP)
-PANEL_H = 190            # ui.hud single-structure panel height (the left block sits under it)
+NO_FACING = ("miner", "wall", "hub", "tower", "bridge", "demolish")   # kinds [R] does nothing to
 
-LEFT_BUTTONS = [         # (label, action): a key code, or a named action below; two columns
-    ("Rot", pygame.K_r), ("Esc", pygame.K_ESCAPE),
-    ("Del", pygame.K_DELETE), ("Pick", pygame.K_q),
-    ("Upg", pygame.K_u), ("Fix", pygame.K_h),
-    ("Split", pygame.K_t), ("Train", pygame.K_c),
-    ("Shift", "shift"), ("Box", "box"),
-    ("HQ", pygame.K_HOME), ("Form", "formation"),
+
+def _selected(g):
+    """The selected structures: the clicked one, or the boxed group."""
+    if g.selected is not None:
+        return [g.selected]
+    return list(g.selected_structures)
+
+
+# (label, action, when): the action is a key code or a name handled by
+# activate(); when(game, layer) says whether the button is shown this frame.
+ACTION_BUTTONS = [
+    ("Rot", pygame.K_r, lambda g, t: (g.tool not in NO_FACING) if g.tool is not None
+     else (g.selected is not None and g.selected.KIND not in NO_FACING)),
+    ("Shift", "shift", lambda g, t: bool(STATE["mods"] & pygame.KMOD_SHIFT) or g.tool == "belt"
+     or t.box_armed or bool(_selected(g)) or bool(g.selected_units)),
+    ("Box", "box", lambda g, t: g.tool is None),
+    ("Upg", pygame.K_u, lambda g, t: bool(_selected(g))),
+    ("Fix", pygame.K_h, lambda g, t: any(s.hp < s.max_hp for s in _selected(g))),
+    ("Split", pygame.K_t, lambda g, t: any(isinstance(s, Belt) for s in _selected(g))),
+    ("Train", pygame.K_c, lambda g, t: any(isinstance(s, Spawner) for s in _selected(g))),
+    ("Form", "formation", lambda g, t: any(not u.dead for u in g.selected_units)),
 ]
-RIGHT_BUTTONS = [        # four columns under the HQ button, above the minimap
-    ("Zoom -", "zoom_out"), ("Zoom +", "zoom_in"), ("Pause", pygame.K_SPACE), ("Speed", "speed"),
-    ("Help", pygame.K_F1), ("Save", "save"), ("Menu", "menu"), ("Load", "load"),
+SYSTEM_BUTTONS = [       # right end of the row (a row higher when the actions need the width)
+    ("Pause", pygame.K_SPACE, lambda g, t: True), ("Speed", "speed", lambda g, t: True),
+    ("Help", pygame.K_F1, lambda g, t: True), ("Save", "save", lambda g, t: True),
+    ("Menu", "menu", lambda g, t: True), ("Load", "load", lambda g, t: g.game_over),
 ]
 
 
@@ -264,34 +283,34 @@ class TouchLayer:
     # ---- overlay buttons --------------------------------------------------
 
     def layout(self):
-        """Button rects for the current screen and HUD state (mirrors the
-        ui.hud layout: under the info panel / HQ button, clear of the toolbar
-        and the minimap)."""
+        """Button rects for the current game state: one row just above the
+        toolbar, the actions that apply now from its left edge, the system
+        buttons from its right edge (one row higher when both would not fit
+        side by side)."""
         g = self.game
         hud = g.hud
-        w, h = self.size()
+        hud.buttons()                             # toolbar_rect for this frame (also before the first draw)
+        tb = hud.toolbar_rect
+        bs = prefs.button_scale
+        bw, bh, gap = int(round(BTN_W * bs)), int(round(BTN_H * bs)), max(3, int(round(GAP * bs)))
+        actions = [] if g.game_over else [(l, a) for l, a, when in ACTION_BUTTONS if when(g, self)]
+        system = [(l, a) for l, a, when in SYSTEM_BUTTONS if when(g, self)]
+
+        def span(items):
+            return len(items) * bw + max(0, len(items) - 1) * gap
+
+        y = tb.top - gap - bh
         out = []
-        n = len(TOOLS)
-        avail = w - hud.MINI_W - 16
-        tb = max(40, min(HUD_BTN, (avail - 16 - (n - 1) * HUD_GAP) // n))
-        toolbar_top = h - tb - 10 - 8
-        top = 8 + PANEL_H + 8
-        rows = (len(LEFT_BUTTONS) + 1) // 2
-        bh = min(BTN_H, max(36, (toolbar_top - 8 - top - (rows - 1) * GAP) // rows))
-        for i, (label, action) in enumerate(LEFT_BUTTONS):
-            col, row = i % 2, i // 2
-            out.append((pygame.Rect(8 + col * (BTN_W + GAP), top + row * (bh + GAP), BTN_W, bh), label, action))
-        targets = len(getattr(g.factory, "targets", ()) or ())
-        rtop = 8 + 58 + 6 + (24 + 22 * targets) + 6 + 26 + 8      # balance, targets, HQ button
-        mini_top = h - hud.MINI_H - 8
-        col_x = w - hud.COL_W - 8
-        bw = (hud.COL_W - 3 * GAP) // 4
-        bh2 = min(BTN_H, max(36, (mini_top - 8 - rtop - GAP) // 2))
-        for i, (label, action) in enumerate(RIGHT_BUTTONS):
-            if action == "load" and not g.game_over:
-                continue
-            col, row = i % 4, i // 4
-            out.append((pygame.Rect(col_x + col * (bw + GAP), rtop + row * (bh2 + GAP), bw, bh2), label, action))
+        x = tb.left
+        for label, action in actions:
+            out.append((pygame.Rect(x, y, bw, bh), label, action))
+            x += bw + gap
+        if actions and span(actions) + gap + span(system) > tb.width:
+            y -= bh + gap                         # the row is full: system buttons one row up
+        x = max(8, tb.right - span(system))
+        for label, action in system:
+            out.append((pygame.Rect(x, y, bw, bh), label, action))
+            x += bw + gap
         self.buttons = out
         return out
 
@@ -318,10 +337,6 @@ class TouchLayer:
         elif action == "formation":
             if g.cycle_formation(1) is None:
                 g.hud.message("Select units first (tap one, or Box + drag)", 1.5)
-        elif action == "zoom_in":
-            g.camera.zoom_by(1)
-        elif action == "zoom_out":
-            g.camera.zoom_by(-1)
         elif action == "speed":
             g.speed = {1: 2, 2: 4}.get(g.speed, 1)
             g.hud.message(f"Speed x{g.speed}", 1.0)
@@ -337,8 +352,9 @@ class TouchLayer:
     def draw(self, screen):
         g = self.game
         shift = bool(STATE["mods"] & pygame.KMOD_SHIFT)
-        last = None
-        for rect, label, action in self.layout():
+        bs = prefs.button_scale
+        buttons = self.layout()
+        for rect, label, action in buttons:
             active = ((action == "shift" and shift) or (action == "box" and self.box_armed)
                       or (action == pygame.K_SPACE and g.paused) or (action == pygame.K_F1 and g.show_help))
             text = label
@@ -351,14 +367,14 @@ class TouchLayer:
             screen.blit(surf, rect.topleft)
             pygame.draw.rect(screen, (255, 230, 120) if active else COLORS["panel_border"], rect,
                              2 if active else 1, border_radius=6)
-            t = numbers.text(text, 15 if len(text) <= 5 else 13)
+            t = numbers.text(text, max(8, int(round((15 if len(text) <= 5 else 13) * bs))))
             screen.blit(t, (rect.centerx - t.get_width() // 2, rect.centery - t.get_height() // 2))
-            last = rect
         if self.mode == "pending" and self.press is not None:       # long-press progress ring
             frac = (self.clock() - self.press.t0) / LONG_PRESS_S
             if frac > 0.25:
                 r = int(30 - 22 * min(1.0, frac))
                 pygame.draw.circle(screen, (255, 230, 120), (int(self.press.x), int(self.press.y)), max(5, r), 2)
-        if last is not None:
+        if buttons:                                                  # build tag over the row's right end
             t = numbers.text(BUILD_LABEL, 11, (150, 170, 150))
-            screen.blit(t, (last.right - t.get_width(), last.bottom + 2))
+            top = min(r.top for r, _, _ in buttons)
+            screen.blit(t, (buttons[-1][0].right - t.get_width(), top - t.get_height()))

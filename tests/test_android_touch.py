@@ -144,26 +144,101 @@ def test_two_finger_tap_is_a_middle_click(game):
     assert game.touch.mode is None and not game.dragging   # no units: nothing to patrol, no crash
 
 
+def labels(g):
+    return [l for _, l, _ in g.touch.layout()]
+
+
 def test_overlay_buttons(game):
     game.set_tool("adder")
     d = game.build_dir
     tap(game, button(game, "Rot"))
     assert game.build_dir == (d + 1) % 4
-    tap(game, button(game, "Esc"))
-    assert game.tool is None
+    # John (phone round 1): no Esc (Back key), Del / Pick / HQ (Home button), no zoom buttons (pinch)
+    assert not set(labels(game)) & {"Esc", "Del", "Pick", "HQ", "Zoom -", "Zoom +"}
+    game.set_tool("belt")                        # Shift = straight belt drag: shown with the belt tool
     tap(game, button(game, "Shift"))
     assert pygame.key.get_mods() & pygame.KMOD_SHIFT
+    assert "Shift" in labels(game)               # stays while it is on, whatever the state
     tap(game, button(game, "Shift"))
     assert not (pygame.key.get_mods() & pygame.KMOD_SHIFT)
-    tap(game, button(game, "Zoom +"))
-    assert game.camera.zoom > 1.0
     tap(game, button(game, "Pause"))
     assert game.paused
     tap(game, button(game, "Speed"))
     assert game.speed == 2
-    assert not any(l == "Load" for _, l, _ in game.touch.layout())
+    assert "Load" not in labels(game)
     game.game_over = True
-    assert any(l == "Load" for _, l, _ in game.touch.layout())
+    shown = labels(game)
+    assert "Load" in shown and "Menu" in shown
+    assert not set(shown) & {"Rot", "Shift", "Box", "Upg"}     # nothing to act on after the game over
+
+
+def test_buttons_show_only_when_useful(game):
+    assert labels(game) == ["Box", "Pause", "Speed", "Help", "Save", "Menu"]   # no tool, nothing selected
+    game.set_tool("wall")
+    assert "Rot" not in labels(game) and "Box" not in labels(game)    # no facing; a drag places anyway
+    game.set_tool("spawner_melee")
+    assert "Rot" in labels(game)
+    game.set_tool(None)
+    sp = game.factory.place("spawner_ranged", 6, 4, 1)
+    belt = game.factory.place("belt", 6, 7, 1)
+    game.selected = sp
+    shown = labels(game)
+    assert {"Rot", "Shift", "Upg", "Train"} <= set(shown)
+    assert "Fix" not in shown and "Split" not in shown and "Form" not in shown
+    game.factory.damage(sp, 10)
+    assert "Fix" in labels(game)
+    game.selected = belt
+    shown = labels(game)
+    assert "Split" in shown and "Train" not in shown and "Fix" not in shown
+    game.selected = None
+    game.selected_structures = [sp, belt]
+    assert {"Upg", "Fix", "Split", "Train", "Shift"} <= set(labels(game))
+    game.selected_structures = []
+    u = game.combat.spawn_unit("melee", 8.5, 8.5)
+    game.selected_units = [u]
+    shown = labels(game)
+    assert "Form" in shown and "Shift" in shown and "Upg" not in shown
+    tap(game, button(game, "Form"))
+    assert u.formation != "box"
+    u.dead = True
+    assert "Form" not in labels(game)
+
+
+def test_buttons_sit_above_the_toolbar(game):
+    game.set_tool("belt")
+    game.selected_units = []
+    tb = game.hud.toolbar_rect
+    rows = game.touch.layout()
+    assert rows and rows[0][1] == "Rot" and rows[-1][1] == "Menu"
+    for r, _, _ in rows:
+        assert r.bottom <= tb.top and r.left >= tb.left and r.right <= tb.right
+        assert not r.colliderect(game.hud.minimap_rect)
+    rects = [r for r, _, _ in rows]
+    assert not any(a.colliderect(b) for i, a in enumerate(rects) for b in rects[i + 1:])
+    assert len({r.top for r in rects}) == 1                        # one row: it all fits at 1616 wide
+
+
+def test_button_size_setting(game):
+    from ui import prefs
+    try:
+        prefs.button_scale = 1.5
+        r = next(r for r, l, _ in game.touch.layout() if l == "Pause")
+        assert r.size == (96, 96)
+        assert game.hud.btn == 78            # 14 toolbar buttons of 90 would not fit left of the minimap: shrunk
+        tap(game, button(game, "Pause"))
+        assert game.paused
+        prefs.button_scale = 2.0             # five actions + five system buttons of 128 px: two rows
+        game.set_tool("belt")
+        belt = game.factory.place("belt", 6, 7, 1)
+        game.factory.damage(belt, 5)
+        game.selected = belt                 # Rot Shift Upg Fix Split
+        rows = game.touch.layout()
+        assert [l for _, l, _ in rows] == ["Rot", "Shift", "Upg", "Fix", "Split", "Pause", "Speed", "Help", "Save", "Menu"]
+        tops = {r.top for r, _, _ in rows}
+        assert len(tops) == 2 and all(r.bottom <= game.hud.toolbar_rect.top for r, _, _ in rows)
+        assert rows[0][0].top > rows[-1][0].top     # the system buttons took the row above
+    finally:
+        prefs.button_scale = 1.0
 
 
 def test_box_button_arms_a_selection_drag(game):
