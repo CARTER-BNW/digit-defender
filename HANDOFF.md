@@ -62,6 +62,12 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
 
 Naming: the player sees "HQ" everywhere (sprite label, HQ button, alerts, help, panel via `hud.DISPLAY_NAMES`); the
 code, saves and docs keep the kind name `hub` (John, round 10).
+HUD layout (John, round 11; `ui/hud.py` docstring): right column 340 px = balance (centred) / targets / HQ button /
+hints panel (word-wrapped controls + hovered-tile + selection lines; menu toggle "Info hints", config["hints"],
+`Game.show_hints`); wave timer top centre; the clicked structure's info panel and the group panel top LEFT; minimap
+440x300 (128 tiles across, click = recentre) bottom right; toolbar centred in the space left of the minimap;
+off-screen edge arrows are drawn by the HUD on top of the panels. `Hud.over_ui` covers all of these, so scripted
+tests must keep their tiles clear of the right column (x >= 932 px) and the minimap corner (x >= 832, y >= 412).
 
 ## Load-bearing decisions (do not re-litigate casually; rationale in PLAN.md)
 1. Structures live in `Factory.structures[(tx,ty)]` (+ `by_chunk` index for rendering), never in terrain chunks. Terrain
@@ -90,7 +96,8 @@ code, saves and docs keep the kind name `hub` (John, round 10).
    (100, 125, 156...) and feed it in full (excess carries over; fed progress is not discounted — the price never drifts
    while numbers trickle in) — idea.txt: balance is spent to create / improve / repair.
 6. Ranged/heavy unit shots debit balance by the fired value; hold fire when broke; melee free; towers eat belt ammo
-   (dmg = value * (1 + 0.5*(level-1)), range TOWER_RANGE = 10). Spawners never spawn on their own: a click queues one unit
+   (dmg = value * (1 + 0.5*(level-1)), range TOWER_RANGE = 10, buffer TOWER_AMMO_BASE 20 + TOWER_AMMO_PER_LEVEL 10 per
+   level above 1 — John, round 11). Spawners never spawn on their own: a click queues one unit
    (UNIT_COSTS 50/50/150, SPAWNER_QUEUE_MAX 9), one unit walks out per period (timer keeps counting while idle, so the
    first click after a pause trains at once). Units take grid slots: `Combat.slot_near` / `gather` spiral tile centres out
    from the gather point, skipping structure tiles and other units' slots (one unit per tile, compact grid); default gather

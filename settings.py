@@ -58,7 +58,8 @@ ITEM_SPACING = 0.5                  # min gap between items on a belt (2 per til
 MINER_BASE_PERIOD = 40              # ticks between emissions (2 s)
 MACHINE_BASE_PERIOD = 40            # ticks per operation
 MACHINE_BUFFER = 3                  # operand buffer depth per side
-TOWER_AMMO_MAX = 10                 # numbers a tower can hold
+TOWER_AMMO_BASE = 20                # numbers a level-1 tower can hold (John)...
+TOWER_AMMO_PER_LEVEL = 10           # ...plus this many per level above 1
 
 # --- leveling -----------------------------------------------------------------
 LEVEL_BASE_COST = 100               # fed (or balance) to reach level 2

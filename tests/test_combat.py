@@ -361,8 +361,11 @@ def test_tower_takes_ammo_from_every_side():
     run(f, 41)
     assert sorted(tower.ammo) == [5, 6] and tower.invested == 0 and tower.level == 1
     tower.ammo.clear()
-    tower.ammo.extend([1] * 10)
+    assert tower.ammo_max == 20                             # 20 at level 1 (John)...
+    tower.ammo.extend([1] * 20)
     assert not tower.accept(9, LEFT, 0.0, f)               # full: the belt stalls instead
+    tower.invested = 225                                    # level 3: ...+10 per level
+    assert tower.level == 3 and tower.ammo_max == 40 and tower.accept(9, LEFT, 0.0, f)
 
 
 def test_enemies_shoot_while_advancing_and_melee_in_contact():

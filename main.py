@@ -47,6 +47,7 @@ def main(argv=None):
                 break
             meta = choice["meta"]
         game = Game.load(pygame.display.get_surface(), meta)
+        game.show_hints = config.get("hints", True)
         if args.autosave is not None:
             game.autosave_s = args.autosave
         result = game.run(max_frames=args.frames)

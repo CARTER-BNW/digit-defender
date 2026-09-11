@@ -51,6 +51,11 @@ _Last updated: 2026-09-11 (v6) by Claude_
   arrows toward known camps), aggro/raids unchanged (needs a structure within 48 tiles). (2) "hub" -> "HQ" in every
   player-facing string (sprite label, button, alerts, game over, help, menu tagline, panel names via DISPLAY_NAMES);
   code/saves keep `hub`. Tests 124 -> 126.
+- Round 11 (same evening): HUD layout per John - right column (balance centred, targets, HQ button, hints panel with
+  word-wrapped lines and a menu toggle "Info hints" saved in config), structure/group info panel top left, minimap
+  2x (440x300, 128 tiles across, click to recentre), toolbar centred left of the minimap, off-screen arrows drawn by
+  the HUD on top of panels (the camp arrow was hidden under the old minimap), `over_ui` covers every panel. Tower ammo
+  buffer 20 + 10 per level (`Tower.ammo_max`), panel shows ammo n/max. Tests adjusted for the new UI rects.
 
 
 ## v5 (2026-09-11, afternoon): John's third round of play-test feedback, all implemented

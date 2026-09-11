@@ -84,6 +84,7 @@ class Game:
         self.paused = False
         self.speed = 1                       # sim speed multiplier: 1, 2, 4
         self.show_help = False
+        self.show_hints = True               # info hints panel (menu toggle "Hints")
 
     def _new_factory(self):
         f = Factory(self.seed, self.terrain)

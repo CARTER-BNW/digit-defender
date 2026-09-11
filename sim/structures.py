@@ -30,7 +30,7 @@ Every structure has to_dict()/from_dict() from day one (save/load).
 from collections import deque
 
 from settings import (COSTS, ITEM_SPACING, MINER_BASE_PERIOD, MACHINE_BASE_PERIOD,
-                      MACHINE_BUFFER, TOWER_AMMO_MAX, TOWER_RANGE, TOWER_BASE_PERIOD,
+                      MACHINE_BUFFER, TOWER_AMMO_BASE, TOWER_AMMO_PER_LEVEL, TOWER_RANGE, TOWER_BASE_PERIOD,
                       TOWER_DMG_LEVEL_MULT, SPAWNER_BASE_PERIOD, SPAWNER_QUEUE_MAX,
                       UNIT_COSTS, GATHER_HUB_OFFSET)
 from sim import leveling
@@ -436,8 +436,13 @@ class Tower(Structure):
         self.ammo = deque()
         self.timer = 0
 
+    @property
+    def ammo_max(self):
+        """20 numbers at level 1, +10 per level (John)."""
+        return TOWER_AMMO_BASE + TOWER_AMMO_PER_LEVEL * (self.level - 1)
+
     def accept(self, value, rel, overshoot, factory):
-        if len(self.ammo) >= TOWER_AMMO_MAX:
+        if len(self.ammo) >= self.ammo_max:
             return False
         self.ammo.append(value)
         return True

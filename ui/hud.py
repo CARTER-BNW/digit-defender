@@ -5,6 +5,7 @@ import pygame
 
 from settings import COLORS, COSTS, REPAIR_COST_PER_HP, TICK_RATE, TILE_SIZE, CHUNK_SIZE, WAVE_WARNING_S
 from render import numbers
+from render import combat as rcombat
 from sim import leveling
 from sim.structures import KINDS, Belt, Miner, MathMachine, Tower, Spawner, Hub, ROLE_FEED
 
@@ -22,19 +23,29 @@ _KEYCODES = {"1": pygame.K_1, "2": pygame.K_2, "3": pygame.K_3, "4": pygame.K_4,
              "-": pygame.K_MINUS, "X": pygame.K_x}
 HOTKEYS = {_KEYCODES[k]: kind for kind, k in TOOLS}
 DISPLAY_NAMES = dict(TOOL_NAMES, hub="HQ")     # what the player calls each kind
-BTN = 64
-GAP = 6
+BTN = 62                                        # 12 buttons fit left of the 440 px minimap at 1280 wide
+GAP = 4
 
 
 class Hud:
+    """Layout (John, round 11): a right column with the balance (centred),
+    the targets, the HQ button and a hints panel (menu toggle); the wave timer
+    top centre; the clicked structure's info panel top left; a double-size
+    minimap bottom right with the toolbar centred in the space left of it."""
+    COL_W = 340                                       # right column width
+
     def __init__(self, screen):
         self.screen = screen
         self.messages = []          # [text, ttl]
         self.toolbar_rect = pygame.Rect(0, 0, 0, 0)
+        self.minimap_rect = pygame.Rect(0, 0, 0, 0)
+        self.hints_rect = pygame.Rect(0, 0, 0, 0)
+        self.rects = {}             # balance / targets panels (click-through blockers)
         self._minimap = None        # cached surface, rebuilt every few frames
         self._minimap_frame = -100
+        self._mini_origin = None    # (tx0, ty0, scale) of the cached minimap: click -> world
         self._alert_surf = None     # red screen frame (hub under attack), cached per size
-        self.hub_button = pygame.Rect(8, 72, 110, 26)
+        self.hub_button = pygame.Rect(8, 72, 120, 26)
 
     def message(self, text, ttl=2.5):
         self.messages = [m for m in self.messages if m[0] != text]
@@ -50,7 +61,8 @@ class Hud:
     def buttons(self):
         w, h = self.screen.get_size()
         total = len(TOOLS) * BTN + (len(TOOLS) - 1) * GAP
-        x0 = (w - total) // 2
+        avail = w - self.MINI_W - 16                  # centred in the space left of the minimap
+        x0 = max(8, (avail - total) // 2)
         y0 = h - BTN - 10
         out = []
         for i, (kind, key) in enumerate(TOOLS):
@@ -59,18 +71,26 @@ class Hud:
         return out
 
     def over_ui(self, pos):
-        return self.toolbar_rect.collidepoint(pos) or self.hub_button.collidepoint(pos)
+        return (self.toolbar_rect.collidepoint(pos) or self.hub_button.collidepoint(pos)
+                or self.minimap_rect.collidepoint(pos) or self.hints_rect.collidepoint(pos)
+                or any(r.collidepoint(pos) for r in self.rects.values()))
 
     def click(self, pos, game):
-        """Toolbar / hub button hit test; returns True when the click was consumed."""
+        """UI hit test; returns True when the click was consumed. The HQ button
+        recentres on the HQ, the minimap recentres on the clicked spot."""
         if self.hub_button.collidepoint(pos):
             game.go_home()
+            return True
+        if self.minimap_rect.collidepoint(pos) and self._mini_origin is not None:
+            tx0, ty0, scale = self._mini_origin
+            game.camera.x = (tx0 + (pos[0] - self.minimap_rect.x) / scale) * TILE_SIZE
+            game.camera.y = (ty0 + (pos[1] - self.minimap_rect.y) / scale) * TILE_SIZE
             return True
         for rect, kind, _ in self.buttons():
             if rect.collidepoint(pos):
                 game.set_tool(None if game.tool == kind else kind)
                 return True
-        return self.toolbar_rect.collidepoint(pos)
+        return self.over_ui(pos)
 
     # ---- drawing -------------------------------------------------------------
 
@@ -78,36 +98,45 @@ class Hud:
         screen = self.screen
         f = game.factory
         w, h = screen.get_size()
-        # balance
-        self._panel((8, 8, 260, 58))
-        screen.blit(numbers.text("Balance", 14, (170, 190, 170)), (16, 12))
-        screen.blit(numbers.text(numbers.fmt(f.balance), 28), (16, 28))
-        # hub button
+        col = self.COL_W
+        x = w - col - 8
+        # right column, top to bottom: balance (centred), targets, HQ button, hints
+        bal = pygame.Rect(x, 8, col, 58)
+        self._panel(bal)
+        t = numbers.text("Balance", 14, (170, 190, 170))
+        screen.blit(t, (bal.centerx - t.get_width() // 2, bal.y + 4))
+        t = numbers.text(numbers.fmt(f.balance), 28)
+        screen.blit(t, (bal.centerx - t.get_width() // 2, bal.y + 22))
+        tg = pygame.Rect(x, bal.bottom + 6, col, 24 + 22 * len(f.targets))
+        self._panel(tg)
+        screen.blit(numbers.text("Targets   (deliver amount x number)", 14, (170, 190, 170)), (tg.x + 8, tg.y + 4))
+        for i, tgt in enumerate(f.targets):
+            y = tg.y + 24 + i * 22
+            xx = tg.x + 8
+            screen.blit(numbers.text(f"{tgt.amount} x", 15, (200, 220, 200)), (xx, y + 2))
+            screen.blit(numbers.text(numbers.fmt(tgt.value), 18, (255, 230, 120)), (xx + 52, y))
+            screen.blit(numbers.text(f"{tgt.delivered}/{tgt.amount}", 14, (200, 220, 200)), (xx + 140, y + 3))
+            screen.blit(numbers.text(f"Lv{tgt.level}", 13, (170, 190, 170)), (xx + 208, y + 3))
+            screen.blit(numbers.text(f"+{numbers.fmt(tgt.reward)}", 16, (140, 255, 140)), (xx + 258, y + 1))
+        self.rects = {"balance": bal, "targets": tg}
         hb = self.hub_button
+        hb.update(x + col // 2 - 60, tg.bottom + 6, 120, 26)
         pygame.draw.rect(screen, COLORS["hub"], hb, border_radius=4)
         pygame.draw.rect(screen, COLORS["panel_border"], hb, 1, border_radius=4)
         label = numbers.text("HQ  [Home]", 14)
         screen.blit(label, (hb.centerx - label.get_width() // 2, hb.centery - label.get_height() // 2))
-        # targets: one slot per row, "amount x number", progress, level, bonus
-        pw = 300
-        x = w - pw
-        self._panel((x - 8, 8, pw, 24 + 22 * len(f.targets)))
-        screen.blit(numbers.text("Targets   (deliver amount x number)", 14, (170, 190, 170)), (x, 12))
-        for i, t in enumerate(f.targets):
-            y = 32 + i * 22
-            screen.blit(numbers.text(f"{t.amount} x", 15, (200, 220, 200)), (x, y + 2))
-            screen.blit(numbers.text(numbers.fmt(t.value), 18, (255, 230, 120)), (x + 48, y))
-            screen.blit(numbers.text(f"{t.delivered}/{t.amount}", 14, (200, 220, 200)), (x + 128, y + 3))
-            screen.blit(numbers.text(f"Lv{t.level}", 13, (170, 190, 170)), (x + 190, y + 3))
-            screen.blit(numbers.text(f"+{numbers.fmt(t.reward)}", 16, (140, 255, 140)), (x + 232, y + 1))
+        if getattr(game, "show_hints", True):
+            self._draw_hints(game, x, hb.bottom + 6, col)
+        else:
+            self.hints_rect = pygame.Rect(0, 0, 0, 0)
         self._draw_wave(game)
         self._draw_minimap(game)
         self._draw_toolbar(game)
-        self._draw_hover(game)
         if game.selected is not None:
             self._draw_panel(game, game.selected)
         elif game.selected_structures:
             self._draw_group_panel(game)
+        rcombat.draw_offscreen_indicators(screen, game.camera, game.combat)   # on top of the panels
         self._draw_hub_alert(game)
         self._draw_messages()
         if game.show_help:
@@ -146,7 +175,32 @@ class Hud:
                 c = numbers.text(str(cost), 12, (255, 230, 120) if balance >= cost else (255, 110, 110))
             screen.blit(c, (rect.centerx - c.get_width() // 2, rect.bottom - 13))
 
-    def _draw_hover(self, game):
+    @staticmethod
+    def _wrap(text, px, max_w):
+        """Greedy word wrap using the cached text widths."""
+        lines, cur = [], ""
+        for word in text.split():
+            cand = f"{cur} {word}" if cur else word
+            if not cur or numbers.text(cand, px).get_width() <= max_w:
+                cur = cand
+            else:
+                lines.append(cur)
+                cur = word
+        if cur:
+            lines.append(cur)
+        return lines
+
+    def _draw_hints(self, game, x, y, col):
+        """The info hints (controls, hovered tile, selection) in a panel."""
+        lines = []
+        for text in self._hint_lines(game):
+            lines.extend(self._wrap(text, 12, col - 16))
+        self.hints_rect = pygame.Rect(x, y, col, 12 + 16 * len(lines))
+        self._panel(self.hints_rect)
+        for i, line in enumerate(lines):
+            self.screen.blit(numbers.text(line, 12), (x + 8, y + 6 + i * 16))
+
+    def _hint_lines(self, game):
         lines = []
         if game.tool == "demolish":
             lines.append("Demolish   [LMB] click or drag over buildings to remove (50% refund)   [X] or [Esc] to stop")
@@ -202,17 +256,13 @@ class Hud:
         if sel is not None and sel is not s:
             lines.append(f"selected {DISPLAY_NAMES.get(sel.KIND, sel.KIND)} at ({sel.x}, {sel.y})  Lv {sel.level}"
                          f"  fed {numbers.fmt(sel.invested)}  hp {numbers.fmt(sel.hp)}/{numbers.fmt(sel.max_hp)}")
-        y = self.toolbar_rect.top - 8 - 18 * len(lines)
-        for line in lines:
-            self.screen.blit(numbers.text(line, 14), (12, y))
-            y += 18
+        return lines
 
     def _draw_panel(self, game, s):
         """Selected-structure panel: level, invested, next threshold, hp,
         rate, buffers, actions. Every number comes from sim.leveling."""
-        w, h = self.screen.get_size()
         pw, ph = 372, 190
-        x0, y0 = w - pw - 8, 8 + 24 + 22 * len(game.factory.targets) + 10
+        x0, y0 = 8, 8                                   # top left (John)
         self._panel((x0, y0, pw, ph))
         blit = self.screen.blit
         name = DISPLAY_NAMES.get(s.KIND, s.KIND)
@@ -241,7 +291,7 @@ class Hud:
             rate = f"{s.period} ticks/op   A{list(s.in_a)} B{list(s.in_b)} out {s.out if s.out is not None else '-'}"
         elif isinstance(s, Tower):
             ammo = " ".join(numbers.abbrev(v) for v in list(s.ammo)[:8]) + ("..." if len(s.ammo) > 8 else "")
-            rate = f"range {s.range}   fires every {s.period} ticks   ammo {len(s.ammo)}: {ammo}"
+            rate = f"range {s.range}   fires every {s.period} ticks   ammo {len(s.ammo)}/{s.ammo_max}: {ammo}"
             if not s.ammo:
                 rate = f"range {s.range}   NO AMMO: run a belt or a miner into any side"
         elif isinstance(s, Spawner):
@@ -294,9 +344,8 @@ class Hud:
     def _draw_group_panel(self, game):
         """Drag-box selection: counts per kind, total upgrade / repair cost."""
         group = game.selected_structures
-        w, h = self.screen.get_size()
         pw, ph = 372, 118
-        x0, y0 = w - pw - 8, 8 + 24 + 22 * len(game.factory.targets) + 10
+        x0, y0 = 8, 8                                   # top left, like the single panel
         self._panel((x0, y0, pw, ph))
         blit = self.screen.blit
         counts = {}
@@ -317,11 +366,12 @@ class Hud:
         rally = f"[RMB] gather point for {n_sp} spawner{'s' if n_sp > 1 else ''}   " if n_sp else ""
         blit(numbers.text(f"{rally}[Shift+drag] add more   [Esc] deselect", 12, (170, 190, 170)), (x0 + 10, y0 + 96))
 
-    MINI_W, MINI_H, MINI_TILES = 220, 150, 96       # panel px and tiles shown across
+    MINI_W, MINI_H, MINI_TILES = 440, 300, 128      # panel px (2x, John) and tiles shown across
 
     def _draw_minimap(self, game):
         w, h = self.screen.get_size()
         x0, y0 = w - self.MINI_W - 8, h - self.MINI_H - 8
+        self.minimap_rect = pygame.Rect(x0, y0, self.MINI_W, self.MINI_H)
         if game.frame - self._minimap_frame >= 6 or self._minimap is None:
             self._minimap_frame = game.frame
             self._minimap = self._build_minimap(game)
@@ -337,6 +387,7 @@ class Hud:
         tx0 = ccx - self.MINI_TILES / 2
         ty0 = ccy - (self.MINI_H / scale) / 2
         tiles_h = self.MINI_H / scale
+        self._mini_origin = (tx0, ty0, scale)
 
         def to_px(tx, ty):
             return int((tx - tx0) * scale), int((ty - ty0) * scale)

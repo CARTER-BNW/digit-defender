@@ -80,8 +80,6 @@ class Renderer:
                 rstruct.draw_belt_preview(screen, camera, factory, game.belt_path, getattr(game, "belt_turn", 0))
             if getattr(game, "tool", None) == "demolish":
                 rstruct.draw_demolish_cursor(screen, camera, factory, getattr(game, "hover_tile", None))
-            if combat is not None:
-                rcombat.draw_offscreen_indicators(screen, camera, combat)
         if self.debug:
             self._overlay(game)
 

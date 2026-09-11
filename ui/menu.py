@@ -60,6 +60,8 @@ class Menu:
                                 ("play", m)))
             fs = self.config.get("fullscreen", False)
             options.append((f"Fullscreen: {'On' if fs else 'Off'}", ("fullscreen", None)))
+            hints = self.config.get("hints", True)
+            options.append((f"Info hints: {'On' if hints else 'Off'}", ("hints", None)))
             options.append(("Quit", ("quit", None)))
             footer = "Up/Down or mouse, Enter to select, Del deletes the highlighted world"
             footer += ", Esc back to the game" if cont is not None else ""
@@ -81,6 +83,10 @@ class Menu:
                 return {"action": "play", "meta": meta}
             if action == "fullscreen":
                 self._toggle_fullscreen()
+                continue
+            if action == "hints":
+                self.config["hints"] = not self.config.get("hints", True)
+                persistence.save_config(self.config)
                 continue
             r = self._new_world()
             if r == QUIT:

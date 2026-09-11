@@ -156,16 +156,16 @@ def test_click_spawner_trains_and_units_are_commanded(game):
     game.update(0.05)                                          # one tick: the unit walks out
     assert len(game.combat.units) == 1 and sp.queue == 0
     u = game.combat.units[0]
-    u.x, u.y = 6.5, 6.5
+    u.x, u.y = 3.5, 6.5                                        # clear of the minimap corner
     # click the unit: selected; RMB somewhere: it gathers on that tile centre
-    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (6, 6))
-    _mouse(game, pygame.MOUSEBUTTONUP, 1, (6, 6))
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (3, 6))
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (3, 6))
     assert game.selected_units == [u] and game.selected is None
     _mouse(game, pygame.MOUSEBUTTONDOWN, 3, (9, 2))
     assert u.rally == (9.5, 2.5)
     # drag a box on empty ground around two units
     v = game.combat.spawn_unit("melee", 8.5, 8.5)
-    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (5, 5), dx=2, dy=2)
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (2, 5), dx=2, dy=2)
     assert game.box_start is not None                          # selection is decided on release
     end = _mouse(game, pygame.MOUSEMOTION, 1, (9, 9), dx=30, dy=30)
     _mouse(game, pygame.MOUSEBUTTONUP, 1, (9, 9), dx=30, dy=30)
@@ -201,15 +201,15 @@ def test_x_is_a_demolish_tool_click_or_drag(game):
     frames(game, 1)
     f = game.factory
     f.terrain = None                                           # any tile is buildable
-    belts = [f.place("belt", x, 4, 1, free=True) for x in range(3, 9)]
+    belts = [f.place("belt", x, -4, 1, free=True) for x in range(3, 9)]
     bal = f.balance
     game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_x, mod=0, unicode="x"))
     assert game.tool == "demolish"
-    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (3, 4))            # click: one belt gone, 50% back
-    assert f.structure_at(3, 4) is None and f.balance == bal + COSTS["belt"] // 2
-    _mouse(game, pygame.MOUSEMOTION, 1, (8, 4))                # fast drag skipping tiles: sweep fills the gaps
-    _mouse(game, pygame.MOUSEBUTTONUP, 1, (8, 4))
-    assert all(f.structure_at(x, 4) is None for x in range(3, 9))
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (3, -4))           # click: one belt gone, 50% back
+    assert f.structure_at(3, -4) is None and f.balance == bal + COSTS["belt"] // 2
+    _mouse(game, pygame.MOUSEMOTION, 1, (8, -4))               # fast drag skipping tiles: sweep fills the gaps
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (8, -4))
+    assert all(f.structure_at(x, -4) is None for x in range(3, 9))
     frames(game, 1)                                            # cursor draws
     game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_x, mod=0, unicode="x"))
     assert game.tool is None                                   # X again leaves the tool
@@ -239,9 +239,9 @@ def test_belt_drag_previews_then_builds_on_release(game):
     assert game.belt_path == [] and len(f.belts) == 4 and f.balance == 1000 - 4 * COSTS["belt"]
     assert [f.structure_at(*t).direction for t in ((4, -3), (5, -3), (6, -3), (6, -2))] == [E, E, S, S]
     # a plain click still places one belt; dragging from an existing belt turns it to follow
-    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (10, -3))
-    _mouse(game, pygame.MOUSEBUTTONUP, 1, (10, -3))
-    assert f.structure_at(10, -3).direction == S and len(f.belts) == 5
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (8, -3))
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (8, -3))
+    assert f.structure_at(8, -3).direction == S and len(f.belts) == 5
     _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (6, -2))
     _mouse(game, pygame.MOUSEMOTION, 1, (5, -2))
     _mouse(game, pygame.MOUSEBUTTONUP, 1, (5, -2))
@@ -332,24 +332,24 @@ def test_drag_off_the_middle_of_a_line_makes_a_t_not_a_corner(game):
     f = game.factory
     f.terrain = None
     f.balance = 1000
-    line = [f.place("belt", x, 2, E, free=True) for x in range(2, 7)]
+    line = [f.place("belt", x, -2, E, free=True) for x in range(2, 7)]
     game.set_tool("belt")
     game.build_dir = E
-    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (4, 2))            # start ON the middle belt...
-    _mouse(game, pygame.MOUSEMOTION, 1, (4, 1))                # ...and drag up one tile
-    _mouse(game, pygame.MOUSEBUTTONUP, 1, (4, 1))
-    mid, branch = f.structure_at(4, 2), f.structure_at(4, 1)
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (4, -2))           # start ON the middle belt...
+    _mouse(game, pygame.MOUSEMOTION, 1, (4, -3))               # ...and drag up one tile
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (4, -3))
+    mid, branch = f.structure_at(4, -2), f.structure_at(4, -3)
     assert mid is line[2] and mid.direction == E               # the line keeps flowing
     assert branch.direction == N
     game.update(1 / 60)                                        # links rebuild
     assert [o[2] for o in mid.outputs] == [E, N]               # T: straight on + the new branch
-    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (6, 2))            # from the END the last belt turns
-    _mouse(game, pygame.MOUSEMOTION, 1, (6, 4))
-    _mouse(game, pygame.MOUSEBUTTONUP, 1, (6, 4))
-    assert line[4].direction == S and f.structure_at(6, 3).direction == S
-    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (3, 2))            # backwards over the line: reversed
-    _mouse(game, pygame.MOUSEMOTION, 1, (2, 2))
-    _mouse(game, pygame.MOUSEBUTTONUP, 1, (2, 2))
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (6, -2))           # from the END the last belt turns
+    _mouse(game, pygame.MOUSEMOTION, 1, (6, 0))
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (6, 0))
+    assert line[4].direction == S and f.structure_at(6, -1).direction == S
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (3, -2))           # backwards over the line: reversed
+    _mouse(game, pygame.MOUSEMOTION, 1, (2, -2))
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (2, -2))
     assert line[1].direction == W and line[0].direction == W
 
 
