@@ -36,7 +36,7 @@ Add one line per file as files are created, stating what that file owns (layout:
 - `settings.py` — every tunable (grid, timestep, zoom, economy, belts, leveling, gen, combat, colors); pygame-free
 - `conftest.py` — forces SDL dummy drivers so pytest runs headless
 - `world/tiles.py` — tile-id registry (ground shades 0-5, DEPOSIT_1..9 = 11..19, NEST_GROUND/CORE) + predicates
-- `game.py` — Game: Game.load(screen, meta)/save() (autosave every AUTOSAVE_S + on exit; Esc -> menu), event loop, fixed-timestep accumulator (tick cap 4) driving factory.tick, pan (WASD/arrows/Shift, middle-drag), wheel zoom at cursor, build mode (hotkeys/toolbar, R rotate, LMB place + drag-paint belts with auto-turn, X demolish, Q pick, RMB/Esc cancel, click select), F3/F11, terrain streaming
+- `game.py` — Game: Game.load(screen, meta)/save() (autosave every AUTOSAVE_S + on exit; Esc -> menu), event loop, fixed-timestep accumulator (tick cap 4) driving factory.tick, pan (WASD/arrows/Shift, middle-drag), wheel zoom at cursor, build mode (hotkeys/toolbar, R rotate, LMB place + drag-paint belts with auto-turn, X demolish, Q pick, U upgrade, H repair, RMB/Esc cancel, click select), unit commands (click/Shift/drag-box select, RMB move or spawner gather point, click a spawner = train), F3/F11, terrain streaming
 - `world/chunk.py` — __slots__ Chunk: flat tile list, dirty/modified flags, opaque render cache (surface, surface_zoom); pygame-free
 - `world/terrain.py` — Terrain: chunk dict owner, lazy generate, get_tile/deposit_at via divmod, update(keep, unload) hysteresis, loader/saver hooks
 - `world/generator.py` — pure generate_chunk(seed,cx,cy): noise-shaded global checker, per-chunk digit blobs (forced 1/2/3 near origin, spawn clearing), nest stamping
@@ -44,17 +44,17 @@ Add one line per file as files are created, stating what that file owns (layout:
 - `render/camera.py` — Camera: world-px centre + discrete zoom index, world<->screen<->tile transforms, cursor-anchored zoom, visible/keep/unload chunk rects
 - `render/renderer.py` — chunk surfaces rendered per (chunk, zoom) and cached on the chunk, off-screen eviction, F3 overlay
 - `render/numbers.py` — abbrev(n) (1.2K), LRU-cached fonts and outlined text surfaces, reset() after pygame re-init
-- `sim/structures.py` — Structure base + Belt/Miner/MathMachine(4 ops)/Hub/Wall/Tower/Spawner: side rules (entry_side, FRONT/RIGHT/BACK/LEFT), feed rule, accept(), tick(), to_dict/from_dict, KINDS registry
-- `sim/factory.py` — Factory: structures dict + by_chunk index, typed lists, can_place/place/remove/rotate, deliver+targets, damage/repair, fixed tick order, rebuild_links (downstream-first belt order, merge priority, loop breaking), to_dict/from_dict
+- `sim/structures.py` — Structure base + Belt/Miner/MathMachine(4 ops)/Hub/Wall/Tower/Spawner: side rules (entry_side, FRONT/RIGHT/BACK/LEFT), feed rule, accept(), tick(), to_dict/from_dict, KINDS registry; belt items [value, progress, entry_rel]; Wall.links; Spawner queue/enqueue (paid units)/rally_point(factory)
+- `sim/factory.py` — Factory: structures dict + by_chunk index, typed lists, can_place/place/remove/rotate, deliver+targets, damage/repair/upgrade (balance -> fed), fixed tick order, rebuild_links (downstream-first belt order, merge priority, loop breaking, splitter rule, wall links), to_dict/from_dict
 - `sim/leveling.py` — pure formulas: level/thresholds, belt_speed, period, max_hp
 - `sim/economy.py` — Target + seeded make_target, build_cost/demolish_refund
 - `sim/serialize.py` — structure records <-> objects (stable (y,x) order)
-- `sim/combat.py` — Combat: Unit (enemies + player units), WaveState, seeded waves (budget/ring/angle), nest aggro/raids/bounty, tower+unit attacks (ranged shots debit balance), beams; ticks from Factory.tick
+- `sim/combat.py` — Combat: Unit (enemies + player units), WaveState, seeded waves (budget/ring/angle), nest aggro/raids/bounty, tower+unit attacks (ranged shots debit balance), beams, grid formations (spiral_slots/slot_near/gather), grid walking, unit_at picking, player units in to_dict; ticks from Factory.tick
 - `sim/pathing.py` — greedy_step (v1) + FlowField (Dijkstra from the hub over the base bbox, wall/structure costs, throttled rebuild)
-- `render/combat.py` — enemies/units/beams/rally flag/nest hp bars, off-screen enemy + wave-direction edge arrows
-- `render/structures.py` — cached sprites per (kind,dir,tile px,label), batched blits of structures + belt items, ghost/side-role/selection/health-bar drawing
+- `render/combat.py` — enemies/units/beams/gather flag/selection rings + slot markers/drag box/nest hp bars, off-screen enemy + wave-direction edge arrows
+- `render/structures.py` — cached sprites per (kind,dir,tile px,label,variant), wall connectors, batched blits of structures + belt items (entry-edge corner paths), ghost/side-role/selection/tower range disc/health-bar (hub bar under label) drawing
 - `ui/hud.py` — balance, targets, toolbar (TOOLS/HOTKEYS), hover/selection info line, messages
-- `ui/menu.py` — world-select menu (Continue / New World name+seed / recent worlds / Fullscreen / Quit), blocking loop, max_frames for smoke runs
+- `ui/menu.py` — world-select menu (Continue / New World name+seed / recent worlds / Fullscreen / Quit; Esc resumes the last world), blocking loop, max_frames for smoke runs
 - `world/persistence.py` — saves/<slug>/{meta,structures,enemies}.json + chunks/*.bin, atomic write_json (.tmp -> .bak rotation), read_json .bak fallback, world registry (slugify/create/list/find_or_create), config.json, save_world/load_world
 - `tests/` — test_smoke, test_generator, test_camera, test_terrain, test_game (headless pan/zoom/streaming), test_belts, test_machines, test_economy, test_leveling
 

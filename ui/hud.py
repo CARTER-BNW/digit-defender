@@ -138,8 +138,11 @@ class Hud:
             else:
                 d = "NESW"[game.build_dir]
                 lines.append(f"Build {TOOL_NAMES[game.tool]} facing {d}   [R] rotate  [LMB] place  [X] demolish  [Esc] cancel")
+        elif game.selected_units:
+            n = len(game.selected_units)
+            lines.append(f"{n} unit{'s' if n > 1 else ''} selected   [RMB] move to a grid formation   [Shift+click] add   [Esc] deselect")
         else:
-            lines.append("[F1] help   [1-9] build tools  [R] rotate  [X] demolish  [Q] pick  [Space] pause  [ ] speed  [F3] debug")
+            lines.append("[F1] help   [1-9] build tools  [R] rotate  [X] demolish  [U] upgrade  [Q] pick  [Space] pause  [ ] speed  [F3] debug")
         tx, ty = game.hover_tile
         s = game.factory.structure_at(tx, ty)
         info = f"tile ({tx}, {ty})"
@@ -155,7 +158,10 @@ class Hud:
             elif isinstance(s, MathMachine):
                 info += f"  A{list(s.in_a)} B{list(s.in_b)} out {s.out}"
             elif isinstance(s, Tower):
-                info += f"  ammo {list(s.ammo)}"
+                info += f"  range {s.range}  ammo {list(s.ammo)}" if s.ammo else \
+                    f"  range {s.range}  NO AMMO - run a belt of numbers into its green arrow side"
+            elif isinstance(s, Spawner):
+                info += f"  queue {s.queue}  [click] train {s.UNIT} for {s.unit_cost}"
         lines.append(info)
         sel = game.selected
         if sel is not None and sel is not s:
@@ -199,24 +205,33 @@ class Hud:
         elif isinstance(s, MathMachine):
             rate = f"{s.period} ticks/op   A{list(s.in_a)} B{list(s.in_b)} out {s.out if s.out is not None else '-'}"
         elif isinstance(s, Tower):
-            rate = f"fires every {leveling.period(20, s.invested)} ticks   ammo {list(s.ammo)}"
+            ammo = " ".join(numbers.abbrev(v) for v in list(s.ammo)[:8]) + ("..." if len(s.ammo) > 8 else "")
+            rate = f"range {s.range}   fires every {s.period} ticks   ammo {len(s.ammo)}: {ammo}"
+            if not s.ammo:
+                rate = f"range {s.range}   NO AMMO: belt numbers into the green arrow side"
         elif isinstance(s, Spawner):
-            rate = f"spawns every {s.period if hasattr(s, 'period') else '?'} ticks"
+            nxt = f"next in {s.timer / TICK_RATE:.1f} s" if s.queue else f"{s.period / TICK_RATE:.0f} s per unit"
+            rate = f"[click] train {s.UNIT} for {s.unit_cost}   queue {s.queue}   {nxt}"
         elif isinstance(s, Hub):
             rate = "everything delivered here is income"
         else:
-            rate = "blocks enemies"
+            rate = "blocks enemies; joins neighbouring walls; the number is its level"
         blit(numbers.text(rate, 13, (200, 220, 200)), (x0 + 10, y0 + 100))
         # actions
         missing = s.max_hp - s.hp
         repair = f"[H] repair {int(missing * REPAIR_COST_PER_HP + 0.999)}" if missing > 0 else "[H] repair (full)"
+        up_cost = game.factory.upgrade_cost(s)
+        upgrade = f"[U] upgrade to Lv {s.level + 1} for {numbers.fmt(up_cost)}" if up_cost else "[U] max level"
         refund = int(COSTS.get(s.KIND, 0) * 0.5)
         rot = "" if s.KIND in ("miner", "wall") else "[R] rotate   "
         actions = f"{rot}[X] demolish +{refund}   {repair}" if not isinstance(s, Hub) else "the hub cannot be moved"
-        blit(numbers.text(actions, 13, (255, 230, 120)), (x0 + 10, y0 + 124))
-        roles = "sides F/R/B/L: " + " / ".join(str(r) for r in type(s).SIDE_ROLES)
+        blit(numbers.text(f"{upgrade}   {actions}", 13, (255, 230, 120)), (x0 + 10, y0 + 124))
+        if isinstance(s, Spawner):
+            roles = f"alive {game.combat.count_units_of(s)}   [RMB] on the map = gather point (new and idle units)"
+        else:
+            roles = "sides F/R/B/L: " + " / ".join(str(r) for r in type(s).SIDE_ROLES)
         blit(numbers.text(roles, 12, (170, 190, 170)), (x0 + 10, y0 + 146))
-        blit(numbers.text("in = cargo or operand, out = output, feed = levels it up", 12, (170, 190, 170)), (x0 + 10, y0 + 164))
+        blit(numbers.text("feed sides level it up too: belt numbers into a yellow side", 12, (170, 190, 170)), (x0 + 10, y0 + 164))
 
     MINI_W, MINI_H, MINI_TILES = 220, 150, 96       # panel px and tiles shown across
 
@@ -287,11 +302,13 @@ class Hud:
     HELP = [
         "1-6 belt / miner / adder / subtract / multiply / divide     7 wall   8 tower   9 0 - spawners",
         "LMB place (drag paints belts, they turn with the drag)   R rotate   X demolish (hold to sweep)   Q pick tool",
-        "click = select (panel on the right)   H repair   RMB = cancel, or set the rally point of a selected spawner",
+        "click = select (panel on the right)   H repair   U upgrade (pay balance up to the next level)   RMB = cancel",
         "wheel zoom   MMB drag / WASD pan (Shift fast)   Space pause   [ ] sim speed x1 x2 x4   F3 debug   F11 fullscreen",
         "Belts: items enter from behind or the sides; a belt pointing INTO another belt's front FEEDS it (levels it up).",
         "Machines: left side = A, right side = B, output in front, feed from behind.  Hub: deliver from any side = income.",
-        "Towers: run a belt into the arrow side; the tower fires those numbers.  Ranged units spend balance per shot.",
+        "Towers (range 10): run a belt into the green arrow side; the tower fires those numbers. Red frame = no ammo.",
+        "Spawners: click one to train a unit (costs balance); units walk to its gather point beside the hub.",
+        "Units: click or drag a box to select (Shift adds), RMB moves them in a grid; RMB on a selected spawner = gather point.",
         "Targets pay a bonus for delivering the exact number. Waves come from the red edge arrow. Hub dead = game over.",
         "F1 closes this help.",
     ]

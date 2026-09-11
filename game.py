@@ -3,6 +3,8 @@ input (pan/zoom), build mode (toolbar/hotkeys, rotate, ghost, paint-place,
 demolish), terrain streaming, rendering. The sim ticks from update() only in
 whole ticks; rendering runs at FPS.
 """
+import math
+
 import pygame
 
 from settings import (FPS, TICK_DT, MAX_TICKS_PER_FRAME, CAMERA_SPEED,
@@ -43,7 +45,7 @@ class Game:
         self.nests = NestRegistry.from_dict(enemies or {})
         wave = (meta or {}).get("wave")
         self.combat = Combat(self.factory, seed, nests=self.nests, wave=wave,
-                             raids=(wave or {}).get("raids"))
+                             raids=(wave or {}).get("raids"), units=(wave or {}).get("units"))
         self.autosave_s = AUTOSAVE_S
         self.autosave_t = 0.0
         w, h = screen.get_size()
@@ -66,6 +68,9 @@ class Game:
         self.tool = None
         self.build_dir = E
         self.selected = None
+        self.selected_units = []             # player units under command (RMB = move)
+        self.box_start = None                # screen pos where a LMB drag-select began
+        self.box_end = None
         self.painting = False
         self.last_paint = None
         self.hover_tile = (0, 0)
@@ -161,22 +166,14 @@ class Game:
             elif event.button == 1:
                 self._left_click(event.pos)
             elif event.button == 3:
-                if self.tool is None and isinstance(self.selected, Spawner):
-                    wx, wy = self.camera.screen_to_world(*event.pos)
-                    self.selected.rally = (wx / TILE_SIZE, wy / TILE_SIZE)
-                    for u in self.combat.units:
-                        if u.owner is self.selected:
-                            u.rally = self.selected.rally
-                    self.hud.message("Rally point set", 1.2)
-                else:
-                    self.set_tool(None)
-                    self.selected = None
+                self._right_click(event.pos)
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 2:
                 self.dragging = False
             elif event.button == 1:
                 self.painting = False
                 self.last_paint = None
+                self._end_box(event.pos)
         elif event.type == pygame.MOUSEMOTION:
             self.hover_tile = cam.screen_to_tile(*event.pos)
             if self.dragging:
@@ -184,6 +181,8 @@ class Game:
                 cam.move(-event.rel[0] / z, -event.rel[1] / z)
             elif self.painting and self.tool and not self.hud.over_ui(event.pos):
                 self._paint(self.hover_tile)
+            elif self.box_start is not None:
+                self.box_end = event.pos
         elif event.type == pygame.VIDEORESIZE:
             cam.resize(event.w, event.h)
 
@@ -200,8 +199,9 @@ class Game:
         if key == pygame.K_ESCAPE:
             if self.tool is not None:
                 self.set_tool(None)
-            elif self.selected is not None:
+            elif self.selected is not None or self.selected_units:
                 self.selected = None
+                self.selected_units = []
             else:
                 self.result = "menu"
                 self.running = False
@@ -224,6 +224,8 @@ class Game:
             self.pick()
         elif key == pygame.K_h:
             self.repair()
+        elif key == pygame.K_u:
+            self.upgrade()
         elif key == pygame.K_HOME:
             self.go_home()
         elif key == pygame.K_SPACE:
@@ -262,6 +264,9 @@ class Game:
             self.build_dir = s.direction
 
     def _left_click(self, pos):
+        """Build with a tool; otherwise pick a unit (Shift adds), select a
+        structure (a spawner also trains one unit), or start a drag box on
+        open ground."""
         if self.hud.click(pos, self):
             return
         tile = self.camera.screen_to_tile(*pos)
@@ -270,8 +275,79 @@ class Game:
             self.painting = True
             self.last_paint = tile
             self.try_place(tile, verbose=True)
+            return
+        shift = bool(pygame.key.get_mods() & pygame.KMOD_SHIFT)
+        wx, wy = self.camera.screen_to_world(*pos)
+        u = self.combat.unit_at(wx / TILE_SIZE, wy / TILE_SIZE)
+        if u is not None:
+            self.selected = None
+            if not shift:
+                self.selected_units = [u]
+            elif u in self.selected_units:
+                self.selected_units.remove(u)
+            else:
+                self.selected_units.append(u)
+            return
+        s = self.factory.structure_at(*tile)
+        self.selected = s
+        if s is not None:
+            self.selected_units = []
+            if isinstance(s, Spawner):
+                self.train(s)
+            return
+        if not shift:
+            self.selected_units = []
+        self.box_start = self.box_end = pos
+
+    def _end_box(self, pos):
+        """Finish a drag-select: every player unit inside the box joins the
+        selection (a tiny box is just a click on empty ground)."""
+        if self.box_start is None:
+            return
+        x0, y0 = self.box_start
+        x1, y1 = pos
+        self.box_start = self.box_end = None
+        if abs(x1 - x0) < 4 and abs(y1 - y0) < 4:
+            return
+        ax, ay = self.camera.screen_to_world(min(x0, x1), min(y0, y1))
+        bx, by = self.camera.screen_to_world(max(x0, x1), max(y0, y1))
+        for u in self.combat.units:
+            if u.dead or u in self.selected_units:
+                continue
+            if ax <= u.x * TILE_SIZE <= bx and ay <= u.y * TILE_SIZE <= by:
+                self.selected_units.append(u)
+        if self.selected_units:
+            self.hud.message(f"{len(self.selected_units)} units selected   [RMB] move", 1.5)
+
+    def _right_click(self, pos):
+        """Cancel the tool; else move the selected units / set the selected
+        spawner's gather point at the cursor; else clear the selection."""
+        if self.tool is not None:
+            self.set_tool(None)
+            return
+        wx, wy = self.camera.screen_to_world(*pos)
+        gx, gy = wx / TILE_SIZE, wy / TILE_SIZE
+        live = [u for u in self.selected_units if not u.dead]
+        if live:
+            self.combat.gather(live, gx, gy)
+            self.hud.message(f"Moving {len(live)} unit{'s' if len(live) > 1 else ''}", 1.0)
+        elif isinstance(self.selected, Spawner):
+            sp = self.selected
+            sp.rally = (math.floor(gx) + 0.5, math.floor(gy) + 0.5)
+            self.combat.gather([u for u in self.combat.units if u.owner is sp], *sp.rally)
+            self.hud.message("Gather point set", 1.2)
         else:
-            self.selected = self.factory.structure_at(*tile)
+            self.selected = None
+            self.selected_units = []
+
+    def train(self, sp):
+        """Queue one unit at a spawner (pays its unit cost)."""
+        err = sp.enqueue(self.factory)
+        if err:
+            self.hud.message(f"Cannot train: {err}", 1.5)
+            return False
+        self.hud.message(f"{TOOL_NAMES[sp.KIND]} unit queued ({sp.queue} waiting)", 1.2)
+        return True
 
     def try_place(self, tile, verbose=False):
         tx, ty = tile
@@ -280,7 +356,10 @@ class Game:
             if verbose and reason != "occupied":
                 self.hud.message(reason)
             return None
-        return self.factory.place(self.tool, tx, ty, self.build_dir)
+        s = self.factory.place(self.tool, tx, ty, self.build_dir)
+        if s is not None and verbose and self.tool == "tower":
+            self.hud.message("Tower placed: run a belt of numbers into its green arrow side for ammo", 3.5)
+        return s
 
     def _paint(self, tile):
         """Drag-place: belts follow the drag direction (the previous belt turns
@@ -305,6 +384,22 @@ class Game:
         cx, cy = (hub.x, hub.y) if hub is not None else (0, 0)
         self.camera.x = (cx + 0.5) * TILE_SIZE
         self.camera.y = (cy + 0.5) * TILE_SIZE
+
+    def upgrade(self):
+        """[U]: pay balance to lift the selected/hovered structure one level."""
+        target = self.selected or self.factory.structure_at(*self.hover_tile)
+        if target is None:
+            return 0
+        cost = self.factory.upgrade_cost(target)
+        if cost is None:
+            self.hud.message("Already at max level", 1.5)
+            return 0
+        paid = self.factory.upgrade(target)
+        if paid:
+            self.hud.message(f"{TOOL_NAMES.get(target.KIND, target.KIND)} upgraded to Lv {target.level} for {paid}", 1.5)
+        else:
+            self.hud.message(f"Upgrade needs {cost}", 1.5)
+        return paid
 
     def repair(self):
         target = self.selected or self.factory.structure_at(*self.hover_tile)
@@ -356,6 +451,8 @@ class Game:
         for ev in self.factory.events:
             self._on_event(ev)
         self.factory.events.clear()
+        if self.selected_units and any(u.dead for u in self.selected_units):
+            self.selected_units = [u for u in self.selected_units if not u.dead]
         if self.factory.hub_destroyed and not self.game_over:
             self.game_over = True
             self.set_tool(None)

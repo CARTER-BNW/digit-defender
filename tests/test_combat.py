@@ -4,9 +4,9 @@ import math
 
 from settings import (TICK_RATE, WAVE_FIRST_S, WAVE_BUDGET_BASE, WAVE_BUDGET_GROWTH,
                       WAVE_MIN_RADIUS, ENEMY_STATS, UNIT_STATS, TOWER_RANGE, NEST_BOUNTY,
-                      SPAWNER_UNIT_CAP, FLOW_COST_WALL)
+                      SPAWNER_QUEUE_MAX, UNIT_COSTS, GATHER_HUB_OFFSET, FLOW_COST_WALL)
 from sim.factory import Factory
-from sim.combat import Combat, wave_budget, wave_interval_ticks, ENEMY, PLAYER
+from sim.combat import Combat, wave_budget, wave_interval_ticks, spiral_slots, ENEMY, PLAYER
 from sim.pathing import FlowField, greedy_step
 from sim.structures import N, E, S, W
 from sim import nests as nestmod
@@ -170,20 +170,99 @@ def test_melee_is_free_and_units_rally():
     assert u.dist_to(2.5, 0.5) < 0.5                     # walked back to the rally point
 
 
-def test_spawner_cap_and_level_scaling():
-    f, c = world()
-    sp = f.place("spawner_melee", 5, 5, S, free=True)
+def test_spawner_trains_only_queued_units_and_charges_for_them():
+    f, c = world(balance=120)
+    sp = f.place("spawner_melee", 8, 0, S, free=True)
     run(f, 2000)
-    assert c.count_units_of(sp) == SPAWNER_UNIT_CAP
-    assert all(u.owner is sp and u.rally == sp.rally_point() for u in c.units)
-    sp.invested = 100                                     # level 2: +1 cap, stronger units
-    run(f, 600)
-    assert c.count_units_of(sp) == SPAWNER_UNIT_CAP + 1
+    assert c.units == [] and sp.queue == 0                 # nothing spawns on its own
+    assert sp.enqueue(f) is None and f.balance == 120 - UNIT_COSTS["melee"]
+    assert sp.enqueue(f) is None and f.balance == 20
+    assert sp.enqueue(f) == "need 50" and sp.queue == 2    # broke: refused, nothing charged
+    assert sp.label() == "2"
+    run(f, 1)                                              # timer was ready: first unit at once
+    assert len(c.units) == 1 and sp.queue == 1 and sp.timer == sp.period
+    run(f, sp.period - 1)
+    assert len(c.units) == 1
+    run(f, 1)
+    assert len(c.units) == 2 and sp.queue == 0 and sp.label() is None
+    assert all(u.owner is sp for u in c.units)
+    f.balance = 10 ** 6
+    for _ in range(SPAWNER_QUEUE_MAX + 2):
+        sp.enqueue(f)
+    assert sp.queue == SPAWNER_QUEUE_MAX and sp.enqueue(f) == "queue full"
+    sp.invested = 100                                      # level 2: faster training, stronger units
+    assert sp.period < 200
+    run(f, sp.period * 2 + 2)
     strong = [u for u in c.units if u.level == 2]
     assert strong and strong[0].max_hp > UNIT_STATS["melee"]["hp"]
     d = sp.to_dict()
+    assert d["queue"] == sp.queue
     sp.rally = (9.5, 9.5)
     assert sp.to_dict()["rally"] == [9.5, 9.5]
+
+
+def test_units_gather_beside_the_hub_in_a_grid():
+    f, c = world()
+    sp = f.place("spawner_ranged", 12, 1, S, free=True)    # east of the hub
+    assert sp.rally_point(f) == (GATHER_HUB_OFFSET + 0.5, 0.5)
+    for _ in range(5):
+        sp.enqueue(f)
+    run(f, sp.period * 4 + 2)
+    assert len(c.units) == 5
+    slots = [u.rally for u in c.units]
+    assert len(set(slots)) == 5                            # one tile each, never stacked
+    assert all(s[0] % 1 == 0.5 and s[1] % 1 == 0.5 for s in slots)   # tile centres
+    assert all((math.floor(s[0]), math.floor(s[1])) not in f.structures for s in slots)
+    assert max(math.hypot(s[0] - 3.5, s[1] - 0.5) for s in slots) <= 1.5   # compact
+    run(f, 400)
+    assert all((u.x, u.y) == u.rally for u in c.units)     # arrived exactly on the grid
+    # move the group: new compact grid around the target, still one per tile
+    c.gather(c.units, 20.2, -7.7)
+    assert (20.5, -7.5) in [u.rally for u in c.units]
+    assert len({u.rally for u in c.units}) == 5
+    run(f, 600)
+    assert all((u.x, u.y) == u.rally for u in c.units)
+    # a unit knocked off-grid re-centres first, then walks straight down its column
+    u = c.units[0]
+    u.x, u.y = 30.3, 2.9
+    c.gather([u], 30.5, 10.5)
+    run(f, 3)
+    assert (u.x, u.y) == (30.5, 2.5)
+    xs = set()
+    for _ in range(300):
+        f.tick()
+        xs.add(u.x)
+    assert xs == {30.5} and (u.x, u.y) == (30.5, 10.5)
+    first = list(spiral_slots(4.4, -2.2, 1))
+    assert first[0] == (4.5, -2.5) and len(first) == 9 and len(set(first)) == 9
+
+
+def test_slots_skip_structures_and_other_units():
+    f, c = world()
+    for x in range(2, 6):
+        f.place("wall", x, 0, N, free=True)                # a wall line east of the hub
+    a = c.spawn_unit("melee", 2.5, 0.5, rally=(3.5, 1.5))
+    slot = c.slot_near(3.5, 0.5)
+    assert slot not in [(3.5, 0.5), (3.5, 1.5)] and (math.floor(slot[0]), math.floor(slot[1])) not in f.structures
+    b = c.spawn_unit("melee", 2.5, 0.5, rally=slot)
+    c.gather([a, b], 3.5, 0.5)
+    assert a.rally != b.rally and all((math.floor(r[0]), math.floor(r[1])) not in f.structures
+                                      for r in (a.rally, b.rally))
+
+
+def test_wall_links_follow_neighbours():
+    f, c = world()
+    a = f.place("wall", 10, 10, N, free=True)
+    b = f.place("wall", 11, 10, N, free=True)
+    d = f.place("wall", 10, 11, N, free=True)
+    f.rebuild_links()
+    assert a.links == (1 << E) | (1 << S) and b.links == (1 << W) and d.links == (1 << N)
+    assert a.label() == "1"
+    f.remove(11, 10)
+    f.rebuild_links()
+    assert a.links == (1 << S)
+    a.invested = 100
+    assert a.label() == "2"
 
 
 def test_nest_aggro_raid_and_destruction_bounty():
@@ -246,3 +325,21 @@ def test_wave_state_roundtrip_and_determinism():
     d = ca.to_dict()
     c3 = Combat(fa, 9, wave=d, raids=d["raids"])
     assert c3.wave.number == ca.wave.number and c3.wave.next_at_tick == ca.wave.next_at_tick
+
+
+def test_player_units_survive_a_save_round_trip():
+    f, c = world()
+    sp = f.place("spawner_heavy", 6, 6, S, free=True)
+    sp.enqueue(f)
+    run(f, 1)
+    u = c.units[0]
+    u.hp = 77
+    e = c.spawn_enemy("grunt", 40.5, 40.5)
+    d = c.to_dict()
+    assert len(d["units"]) == 1 and d["units"][0]["kind"] == "heavy" and d["next_uid"] == c.next_uid
+    c2 = Combat(f, 1, wave=d, raids=d["raids"], units=d["units"])
+    assert len(c2.units) == 1 and c2.enemies == []              # enemies disperse, units stay
+    v = c2.units[0]
+    assert (v.uid, v.kind, v.x, v.y, v.hp, v.level) == (u.uid, "heavy", u.x, u.y, 77, 1)
+    assert v.owner is sp and v.rally == u.rally and c2.next_uid == c.next_uid
+    assert Combat(f, 1, wave={"number": 0, "next_at_tick": 5, "angle": 0.0}).units == []   # old saves

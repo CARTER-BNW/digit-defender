@@ -16,8 +16,8 @@ from functools import lru_cache
 import pygame
 
 from settings import (COLORS, TEXT_MIN_ZOOM, TILE_SIZE, ITEM_SPACING, SPRITE_DIR,
-                      MINER_PULSE_TICKS, CHUNK_SIZE)
-from sim.structures import DIR_VEC, KINDS, ROLE_IN, ROLE_OUT, ROLE_FEED
+                      MINER_PULSE_TICKS, CHUNK_SIZE, TOWER_RANGE)
+from sim.structures import DIR_VEC, KINDS, ROLE_IN, ROLE_OUT, ROLE_FEED, BACK
 from render import numbers
 
 ROLE_COLORS = {ROLE_IN: COLORS["side_input"], ROLE_OUT: COLORS["side_output"],
@@ -160,7 +160,7 @@ def sprite(kind, direction, tp, label=None, level=1, variant=0):
     above 1 get a small badge in the top-right corner. `variant` is the
     belt's input-side mask (its shape)."""
     surf = _sprite(kind, direction, tp, label, variant)
-    if level > 1 and tp >= 16:
+    if level > 1 and tp >= 16 and kind != "wall":      # walls show their level as the label
         surf = surf.copy()
         badge = numbers.text(str(level), max(8, tp // 3), (255, 230, 120))
         surf.blit(badge, (surf.get_width() - badge.get_width() - 1, 0))
@@ -194,6 +194,44 @@ def _belt_procedural(direction, variant, tp):
     return _convert(surf)
 
 
+def _wall_sprite(direction, links, tp, label):
+    """A wall block with a connector bar to every neighbouring wall (`links`
+    = bitmask of world sides) and its level in the middle. wall.png, if
+    present, replaces the block; the connectors are drawn underneath it."""
+    base = COLORS["wall"]
+    surf = pygame.Surface((tp, tp), pygame.SRCALPHA)
+    block = max(3, int(round(tp * 0.64)))
+    b0 = (tp - block) // 2
+    lw = max(2, int(round(tp * 0.36)))
+    l0 = (tp - lw) // 2
+    reach = b0 + max(1, tp // 16)                     # overlap the block a little
+    for d in range(4):
+        if not links & (1 << d):
+            continue
+        if d == 0:
+            rect = (l0, 0, lw, reach)
+        elif d == 2:
+            rect = (l0, tp - reach, lw, reach)
+        elif d == 1:
+            rect = (tp - reach, l0, reach, lw)
+        else:
+            rect = (0, l0, reach, lw)
+        pygame.draw.rect(surf, _darker(base, 0.8), rect)
+        if tp >= 12:
+            pygame.draw.rect(surf, _darker(base, 0.45), rect, 1)
+    png = load_png("wall")
+    if png is not None:
+        surf.blit(_png_sprite(png, direction, tp), (0, 0))
+    else:
+        rad = max(1, tp // 10)
+        pygame.draw.rect(surf, base, (b0, b0, block, block), border_radius=rad)
+        pygame.draw.rect(surf, _darker(base, 0.45), (b0, b0, block, block), max(1, tp // 16),
+                         border_radius=rad)
+    if label and tp >= 12:
+        numbers.blit_centered(surf, numbers.glyph(label, max(8, int(tp * 0.4))), tp // 2, tp // 2)
+    return _convert(surf)
+
+
 @lru_cache(maxsize=2048)
 def _sprite(kind, direction, tp, label=None, variant=0):
     cls = KINDS[kind]
@@ -202,6 +240,8 @@ def _sprite(kind, direction, tp, label=None, variant=0):
     if kind == "belt":
         img = _belt_png(direction, variant, size)
         return _convert(img.copy()) if img is not None else _belt_procedural(direction, variant, tp)
+    if kind == "wall":
+        return _wall_sprite(direction, variant, tp, label)
     png = load_png(kind)
     if png is not None:
         surf = _png_sprite(png, direction, size).copy()
@@ -251,6 +291,7 @@ def draw_structures(screen, camera, factory, chunk_rect, frac=0.0):
     by_chunk = factory.by_chunk
     blits = []
     item_blits = []
+    empty_towers = []
     drawn_big = set()
     for cy in range(cy0, cy1 + 1):
         for cx in range(cx0, cx1 + 1):
@@ -268,13 +309,19 @@ def draw_structures(screen, camera, factory, chunk_rect, frac=0.0):
                     continue
                 sx = s.x * tp + ox
                 sy = s.y * tp + oy
-                if s.KIND == "belt":
+                kind = s.KIND
+                if kind == "belt":
                     blits.append((sprite("belt", s.direction, tp, None, s.level,
                                          s.in_sides | (s.out_sides << 4)), (sx, sy)))
+                elif kind == "wall":
+                    blits.append((sprite("wall", s.direction, tp, s.label(), s.level, s.links), (sx, sy)))
                 else:
-                    blits.append((sprite(s.KIND, s.direction, tp, s.label(), s.level), (sx, sy)))
-                if s.KIND == "belt" and s.items:
+                    blits.append((sprite(kind, s.direction, tp, s.label(), s.level), (sx, sy)))
+                    if kind == "tower" and not s.ammo:
+                        empty_towers.append((sx, sy))
+                if kind == "belt" and s.items:
                     dx, dy = DIR_VEC[s.direction]
+                    d_in = s.direction
                     cxp = sx + half
                     cyp = sy + half
                     lead = s.speed * frac
@@ -282,22 +329,34 @@ def draw_structures(screen, camera, factory, chunk_rect, frac=0.0):
                     outs = s.outputs
                     n_out = len(outs)
                     branching = any(o[2] != s.direction for o in outs)
-                    for i, (value, p) in enumerate(reversed(s.items)):    # head first
+                    for i, item in enumerate(reversed(s.items)):    # head first
+                        value, p = item[0], item[1]
                         q = p + lead
                         if q > limit:
                             q = limit
                         limit = q - ITEM_SPACING
                         spr = item_sprite(value, tp, with_text)
-                        off = (q - 0.5) * tp
-                        vx, vy = dx, dy
-                        if branching and q > 0.5:
-                            # past the centre, head for the branch this item will take
-                            side = outs[(s.rr + i) % n_out][2]
-                            vx, vy = DIR_VEC[side]
+                        if q < 0.5:
+                            # first half: slide in from the edge the item entered
+                            # through (a side entry curves through the centre)
+                            entry = (d_in + (item[2] if len(item) > 2 else BACK)) % 4
+                            vx, vy = DIR_VEC[entry]
+                            off = (0.5 - q) * tp
+                        else:
+                            off = (q - 0.5) * tp
+                            vx, vy = dx, dy
+                            if branching:
+                                # past the centre, head for the branch this item will take
+                                side = outs[(s.rr + i) % n_out][2]
+                                vx, vy = DIR_VEC[side]
                         item_blits.append((spr, (int(cxp + vx * off) - spr.get_width() // 2,
                                                  int(cyp + vy * off) - spr.get_height() // 2)))
     screen.blits(blits, doreturn=False)
     screen.blits(item_blits, doreturn=False)
+    if empty_towers and tp >= 8:                      # a tower with nothing to fire
+        th = max(1, tp // 12)
+        for sx, sy in empty_towers:
+            pygame.draw.rect(screen, (230, 60, 60), (sx, sy, tp, tp), th)
 
 
 def draw_miner_pulses(screen, camera, factory, chunk_rect):
@@ -342,11 +401,41 @@ def draw_side_roles(screen, camera, cls, x, y, direction):
         pygame.draw.rect(screen, color, rect)
 
 
+@lru_cache(maxsize=8)
+def _range_surface(r, color):
+    surf = pygame.Surface((2 * r + 2, 2 * r + 2), pygame.SRCALPHA)
+    pygame.draw.circle(surf, (*color, 26), (r + 1, r + 1), r)
+    pygame.draw.circle(surf, (*color, 150), (r + 1, r + 1), r, 1)
+    return surf
+
+
+def draw_range(screen, camera, x, y, radius_tiles, color=(120, 220, 255)):
+    """Translucent disc of radius_tiles around the centre of tile (x, y)."""
+    tp = camera.tile_px
+    ox, oy = camera.screen_origin()
+    r = int(radius_tiles * tp)
+    surf = _range_surface(r, color)
+    screen.blit(surf, (int((x + 0.5) * tp + ox) - r - 1, int((y + 0.5) * tp + oy) - r - 1))
+
+
+def draw_tower_ranges(screen, camera, factory, selected, hover_tile):
+    """Range disc of the selected tower, or of the one under the cursor."""
+    s = selected if (selected is not None and selected.KIND == "tower") else None
+    if s is None and hover_tile is not None:
+        h = factory.structure_at(*hover_tile)
+        if h is not None and h.KIND == "tower":
+            s = h
+    if s is not None:
+        draw_range(screen, camera, s.x, s.y, s.range)
+
+
 def draw_ghost(screen, camera, kind, x, y, direction, ok, cost):
     cls = KINDS[kind]
     tp = camera.tile_px
     r = cls.SIZE // 2
     sx, sy = camera.tile_to_screen(x - r, y - r)
+    if kind == "tower":
+        draw_range(screen, camera, x, y, TOWER_RANGE)
     spr = sprite(kind, direction, tp, None).copy()
     spr.set_alpha(150)
     screen.blit(spr, (sx, sy))
@@ -368,7 +457,8 @@ def draw_selection(screen, camera, s):
 
 
 def draw_health_bars(screen, camera, factory):
-    """Bars under damaged structures only (Factory.damaged)."""
+    """Bars for damaged structures only (Factory.damaged): above a 1x1
+    structure; for the hub a narrow bar just under its label."""
     if not factory.damaged:
         return
     tp = camera.tile_px
@@ -381,8 +471,18 @@ def draw_health_bars(screen, camera, factory):
             continue
         r = s.SIZE // 2
         sx, sy = camera.tile_to_screen(s.x - r, s.y - r)
-        w = tp * s.SIZE
-        pygame.draw.rect(screen, COLORS["hp_bar_bg"], (sx, sy - 4, w, 3))
-        pygame.draw.rect(screen, COLORS["hp_bar"], (sx, sy - 4, int(w * s.hp / s.max_hp), 3))
+        frac = s.hp / s.max_hp
+        if s.SIZE > 1:
+            size = tp * s.SIZE
+            label_px = max(8, int(tp * 0.38))
+            bw, bh = tp, max(3, tp // 8)
+            bx = sx + size // 2 - bw // 2
+            by = sy + size // 2 + label_px // 2 + 2
+        else:
+            bw, bh = tp, 3
+            bx, by = sx, sy - 4
+        pygame.draw.rect(screen, COLORS["hp_bar_bg"], (bx, by, bw, bh))
+        pygame.draw.rect(screen, COLORS["hp_bar"] if frac > 0.5 else (230, 160, 60) if frac > 0.25 else (230, 70, 60),
+                         (bx, by, int(bw * frac), bh))
     for s in healed:
         factory.damaged.discard(s)

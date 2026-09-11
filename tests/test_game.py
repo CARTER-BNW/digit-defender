@@ -132,3 +132,65 @@ def test_building_while_paused_links_immediately(game):
     for _ in range(60 * 3):
         game.update(1 / 60)
     assert game.factory.stats["mined"] >= 1
+
+
+def _mouse(game, kind, button, tile, dx=16, dy=16, rel=(0, 0)):
+    pos = game.camera.tile_to_screen(*tile)
+    pos = (pos[0] + dx, pos[1] + dy)
+    if kind == pygame.MOUSEMOTION:
+        game.handle_event(pygame.event.Event(kind, pos=pos, rel=rel, buttons=(1, 0, 0)))
+    else:
+        game.handle_event(pygame.event.Event(kind, button=button, pos=pos))
+    return pos
+
+
+def test_click_spawner_trains_and_units_are_commanded(game):
+    from settings import UNIT_COSTS
+    frames(game, 1)
+    sp = game.factory.place("spawner_melee", 4, 4, 2, free=True)
+    bal = game.factory.balance
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (4, 4))          # click = select + queue one
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (4, 4))
+    assert game.selected is sp and sp.queue == 1
+    assert game.factory.balance == bal - UNIT_COSTS["melee"]
+    game.update(0.05)                                          # one tick: the unit walks out
+    assert len(game.combat.units) == 1 and sp.queue == 0
+    u = game.combat.units[0]
+    u.x, u.y = 6.5, 6.5
+    # click the unit: selected; RMB somewhere: it gathers on that tile centre
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (6, 6))
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (6, 6))
+    assert game.selected_units == [u] and game.selected is None
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 3, (9, 2))
+    assert u.rally == (9.5, 2.5)
+    # drag a box on empty ground around two units
+    v = game.combat.spawn_unit("melee", 8.5, 8.5)
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (5, 5), dx=2, dy=2)
+    assert game.box_start is not None and game.selected_units == []
+    end = _mouse(game, pygame.MOUSEMOTION, 1, (9, 9), dx=30, dy=30)
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (9, 9), dx=30, dy=30)
+    assert game.box_start is None and set(game.selected_units) == {u, v}
+    frames(game, 2)                                            # draws rings/box without error
+    # RMB on a selected spawner sets its gather point (tile centre)
+    game.selected_units = []
+    game.selected = sp
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 3, (9, 9))
+    assert sp.rally == (9.5, 9.5)
+    # Esc clears a unit selection before it leaves to the menu
+    game.selected_units = [u]
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE, mod=0, unicode=""))
+    assert game.selected_units == [] and game.running
+
+
+def test_u_key_upgrades_hovered_structure(game):
+    frames(game, 1)
+    game.factory.balance = 150
+    w = game.factory.place("wall", 3, 3, 0, free=True)
+    game.hover_tile = (3, 3)
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_u, mod=0, unicode="u"))
+    assert w.level == 2 and game.factory.balance == 50
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_u, mod=0, unicode="u"))
+    assert w.level == 2 and game.factory.balance == 50      # cannot afford the next 100
+    game.factory.rebuild_links()
+    game.selected = w
+    frames(game, 2)                                          # panel shows the upgrade line

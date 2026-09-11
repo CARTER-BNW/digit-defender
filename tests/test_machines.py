@@ -93,7 +93,7 @@ def test_processing_rate_and_ordering():
     for _ in range(41 + MACHINE_BASE_PERIOD * 2):
         f.tick()
     assert out.items                       # at least one 2 produced
-    assert all(v == 2 for v, _ in out.items)
+    assert all(it[0] == 2 for it in out.items)
     assert m.period == MACHINE_BASE_PERIOD
     m.invested = 100                       # level 2 -> faster
     assert m.period == round(MACHINE_BASE_PERIOD / 1.25)

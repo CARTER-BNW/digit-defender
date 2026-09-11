@@ -19,7 +19,7 @@ def run(f, n):
 
 
 def items_on(belt):
-    return [v for v, _ in belt.items]
+    return [it[0] for it in belt.items]
 
 
 def test_entry_side_table():
@@ -62,7 +62,7 @@ def test_items_stay_sorted_and_spaced_under_flood():
     run(f, 600)
     total = 0
     for b in belts:
-        ps = [p for _, p in b.items]
+        ps = [it[1] for it in b.items]
         assert ps == sorted(ps)
         for a, c in zip(ps, ps[1:]):
             assert c - a >= ITEM_SPACING - 1e-9
@@ -312,3 +312,46 @@ def test_only_miners_on_deposits():
     assert f.can_place("wall", 3, 2, E) == (False, "only miners go on numbers")
     assert f.can_place("miner", 2, 2, E)[0]
     assert f.can_place("belt", 4, 2, E)[0]
+
+
+def test_items_remember_their_entry_side_for_rendering():
+    """The third item field is the relative side it came in through
+    (render-only): a corner entry draws the item sliding in from that edge."""
+    f = factory()
+    a = f.place("belt", 0, 0, E, free=True)
+    corner = f.place("belt", 1, 0, S, free=True)          # E line turning south
+    a.items.append([4, 0.9, BACK])
+    run(f, 3)
+    assert corner.items and corner.items[0][2] == RIGHT      # entered through its right (world W) side
+    assert (corner.direction + corner.items[0][2]) % 4 == W
+    m = f.place("miner", 2, 0, E, free=True, value=7)       # miner east of the S-facing corner: its LEFT side
+    run(f, 41)
+    sides = {it[2] for it in corner.items}
+    assert LEFT in sides
+    # round trip keeps the side; old two-field saves default to BACK
+    d = corner.to_dict()
+    assert all(len(it) == 3 for it in d["items"])
+    from sim.structures import Belt
+    again = Belt.from_dict(d)
+    assert [it[2] for it in again.items] == [it[2] for it in corner.items]
+    old = Belt.from_dict({"x": 0, "y": 0, "dir": E, "items": [[5, 0.25]]})
+    assert old.items == [[5, 0.25, BACK]]
+
+
+def test_parallel_line_corner_does_not_split_its_neighbour():
+    """John: two parallel E lines; turning one belt of the lower line south
+    must not turn the belt above it into a T splitter. Only a belt that
+    starts beside a line (nothing feeding it) is a branch."""
+    f = factory()
+    top = [f.place("belt", x, 0, E, free=True) for x in range(0, 4)]
+    bottom = [f.place("belt", x, 1, E, free=True) for x in range(0, 4)]
+    f.rotate(1, 1)                                   # bottom[1] now faces S: a corner
+    assert bottom[1].direction == S
+    f.rebuild_links()
+    assert [o[2] for o in top[1].outputs] == [E]     # no side output into the corner
+    assert top[1].out_sides == 1 << E
+    assert bottom[1].in_sides == 1 << W and bottom[1].outputs == []
+    # a fresh belt started beside the top line with nothing feeding it is still a branch
+    f.place("belt", 2, -1, N, free=True)
+    f.rebuild_links()
+    assert [o[2] for o in top[2].outputs] == [E, N]

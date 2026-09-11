@@ -53,11 +53,17 @@ class Renderer:
             rstruct.draw_structures(screen, camera, factory, rect, getattr(game, "render_frac", 0.0))
             rstruct.draw_miner_pulses(screen, camera, factory, rect)
             rstruct.draw_health_bars(screen, camera, factory)
-            if getattr(game, "selected", None) is not None:
-                rstruct.draw_selection(screen, camera, game.selected)
+            selected = getattr(game, "selected", None)
+            rstruct.draw_tower_ranges(screen, camera, factory, selected, getattr(game, "hover_tile", None))
+            if selected is not None:
+                rstruct.draw_selection(screen, camera, selected)
             combat = factory.combat
             if combat is not None:
-                rcombat.draw_combat(screen, camera, combat, getattr(game, "selected", None))
+                box = None
+                if getattr(game, "box_start", None) is not None:
+                    box = (game.box_start, game.box_end)
+                rcombat.draw_combat(screen, camera, combat, selected,
+                                    getattr(game, "selected_units", ()), box)
             ghost = game.ghost() if hasattr(game, "ghost") else None
             if ghost is not None:
                 rstruct.draw_ghost(screen, camera, *ghost)

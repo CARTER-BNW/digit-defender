@@ -61,8 +61,14 @@ class Menu:
             fs = self.config.get("fullscreen", False)
             options.append((f"Fullscreen: {'On' if fs else 'Off'}", ("fullscreen", None)))
             options.append(("Quit", ("quit", None)))
-            key = self._select(None, options, "Up/Down or mouse, Enter to select, Esc to quit")
-            if key in (QUIT, BACK) or key[0] == "quit":
+            footer = ("Up/Down or mouse, Enter to select, Esc back to the game" if cont is not None
+                      else "Up/Down or mouse, Enter to select")
+            key = self._select(None, options, footer)
+            if key == BACK:                              # Esc closes the menu: back into the last world
+                if cont is None:
+                    continue
+                return {"action": "play", "meta": cont}
+            if key == QUIT or key[0] == "quit":
                 return {"action": "quit"}
             action, meta = key
             if action == "play":

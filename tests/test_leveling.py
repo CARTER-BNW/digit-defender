@@ -122,3 +122,20 @@ def test_panel_numbers_match_formulas():
     assert leveling.next_threshold(250) == 400
     assert b.max_hp == leveling.max_hp("belt", 250) == 270
     assert abs(b.speed - leveling.belt_speed(250)) < 1e-12
+
+
+def test_upgrade_pays_balance_up_to_the_next_level():
+    from sim.factory import Factory
+    from sim.structures import N
+    f = Factory(seed=1, balance=250)
+    w = f.place("wall", 3, 3, N, free=True)
+    w.hp = 150
+    assert f.upgrade_cost(w) == 100
+    assert f.upgrade(w) == 100 and f.balance == 150
+    assert w.invested == 100 and w.level == 2 and w.max_hp == BASE_HP["wall"] + 100
+    assert w.hp == 250                                  # feeding heals too (capped at max)
+    assert f.upgrade_cost(w) == 100                     # 200 - 100
+    assert f.upgrade(w) == 100 and w.level == 3 and f.balance == 50
+    assert f.upgrade(w) == 0 and f.balance == 50        # cannot afford 200
+    w.invested = LEVEL_THRESHOLDS[-1]
+    assert f.upgrade_cost(w) is None and f.upgrade(w) == 0

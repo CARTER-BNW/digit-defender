@@ -18,10 +18,10 @@ from settings import (TICK_RATE, UNIT_STATS, ENEMY_STATS, WAVE_FIRST_S, WAVE_INT
                       WAVE_BUDGET_GROWTH, WAVE_SPAWN_MARGIN, WAVE_MIN_RADIUS, WAVE_MIX,
                       UNIT_AGGRO_TILES, UNIT_LEVEL_MULT, ENEMY_ATTACK_RANGE, FLOW_REFRESH_TICKS,
                       NEST_AGGRO_TILES, NEST_RAID_PERIOD_S, NEST_RAID_SIZE, NEST_BOUNTY,
-                      NEST_REGION, CHUNK_SIZE)
+                      NEST_REGION, CHUNK_SIZE, GATHER_MAX_RING)
 from sim.pathing import FlowField, greedy_step, dist_to_tiles
 from sim import nests as nestmod
-from sim.structures import Structure
+from sim.structures import Structure, Spawner
 
 ENEMY, PLAYER = 0, 1
 BEAM_TTL = 6
@@ -93,8 +93,25 @@ def wave_interval_ticks(n):
     return int(max(WAVE_INTERVAL_MIN_S, WAVE_INTERVAL_BASE_S * WAVE_INTERVAL_DECAY ** n) * TICK_RATE)
 
 
+def spiral_slots(gx, gy, max_ring=GATHER_MAX_RING):
+    """Tile centres around the tile holding (gx, gy), nearest first: the
+    centre, then each Chebyshev ring ordered by distance then (y, x). Units
+    gathering here stand one per tile, so a group forms a compact grid."""
+    tx, ty = math.floor(gx), math.floor(gy)
+    yield (tx + 0.5, ty + 0.5)
+    for r in range(1, max_ring + 1):
+        ring = []
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                if max(abs(dx), abs(dy)) == r:
+                    ring.append((dx * dx + dy * dy, dy, dx))
+        ring.sort()
+        for _, dy, dx in ring:
+            yield (tx + dx + 0.5, ty + dy + 0.5)
+
+
 class Combat:
-    def __init__(self, factory, seed, nests=None, wave=None, raids=None):
+    def __init__(self, factory, seed, nests=None, wave=None, raids=None, units=None):
         self.factory = factory
         factory.combat = self
         self.seed = seed
@@ -114,13 +131,46 @@ class Combat:
         self.known_nests = {}                  # (rx, ry) -> NestSpec near the base (alive)
         self.stats = {"kills": 0, "losses": 0, "waves": 0, "shot_cost": 0, "raids": 0}
         self._last_scan = -NEST_SCAN_TICKS
+        if units:
+            self._load_units(units)
+        if wave and "next_uid" in wave:
+            self.next_uid = max(self.next_uid, int(wave["next_uid"]))
 
     # ---- persistence ------------------------------------------------------------
 
     def to_dict(self):
+        """Wave timer, raid counters and the player's units (they cost
+        balance, so they survive a save; enemies disperse on reload)."""
         d = self.wave.to_dict()
         d["raids"] = {f"{k[0]},{k[1]}": v for k, v in sorted(self.raid_counts.items())}
+        d["next_uid"] = self.next_uid
+        d["units"] = [self._unit_record(u) for u in self.units if not u.dead]
         return d
+
+    @staticmethod
+    def _unit_record(u):
+        return {"uid": u.uid, "kind": u.kind, "x": u.x, "y": u.y, "hp": u.hp, "level": u.level,
+                "owner": [u.owner.x, u.owner.y] if u.owner is not None else None,
+                "rally": list(u.rally) if u.rally is not None else None}
+
+    def _load_units(self, records):
+        structures = self.factory.structures
+        for r in records:
+            kind = r.get("kind")
+            if kind not in UNIT_STATS:
+                continue
+            owner = None
+            if r.get("owner"):
+                s = structures.get((int(r["owner"][0]), int(r["owner"][1])))
+                if isinstance(s, Spawner):
+                    owner = s
+            rally = tuple(float(v) for v in r["rally"]) if r.get("rally") else None
+            u = self.spawn_unit(kind, float(r["x"]), float(r["y"]), level=int(r.get("level", 1)),
+                                owner=owner, rally=rally)
+            u.hp = max(1, min(u.max_hp, int(r.get("hp", u.max_hp))))
+            if "uid" in r:
+                u.uid = int(r["uid"])
+                self.next_uid = max(self.next_uid, u.uid + 1)
 
     # ---- spawning -----------------------------------------------------------------
 
@@ -141,6 +191,45 @@ class Combat:
 
     def count_units_of(self, owner):
         return sum(1 for u in self.units if u.owner is owner and not u.dead)
+
+    # ---- formations ---------------------------------------------------------------
+
+    def _free_slot(self, slots, taken):
+        """First slot from the iterator that is open ground and not already
+        someone's gather slot. Falls back to the last candidate."""
+        structures = self.factory.structures
+        pos = None
+        for pos in slots:
+            if (math.floor(pos[0]), math.floor(pos[1])) in structures:
+                continue
+            if any(abs(t[0] - pos[0]) < 0.5 and abs(t[1] - pos[1]) < 0.5 for t in taken):
+                continue
+            return pos
+        return pos
+
+    def slot_near(self, gx, gy):
+        """Gather slot for one new unit near (gx, gy), avoiding every live
+        unit's slot and every structure tile."""
+        taken = [u.rally for u in self.units if not u.dead and u.rally is not None]
+        return self._free_slot(spiral_slots(gx, gy), taken)
+
+    def gather(self, units, gx, gy):
+        """Send `units` to a grid formation around (gx, gy): one tile each,
+        spiralling out from the centre, flowing around structures and around
+        units that are not part of the group. Deterministic (uid order)."""
+        group = sorted((u for u in units if not u.dead), key=lambda u: u.uid)
+        ids = {id(u) for u in group}
+        taken = [u.rally for u in self.units
+                 if not u.dead and u.rally is not None and id(u) not in ids]
+        slots = spiral_slots(gx, gy)
+        for u in group:
+            u.rally = self._free_slot(slots, taken)
+            taken.append(u.rally)
+        return group
+
+    def unit_at(self, x, y, radius=0.6):
+        """Nearest live player unit within radius tiles of a point, or None."""
+        return self.nearest_unit(x, y, radius)
 
     # ---- queries ------------------------------------------------------------------
 
@@ -384,6 +473,26 @@ class Combat:
             u.x += dx / d * u.speed
             u.y += dy / d * u.speed
 
+    def _walk_grid(self, u, x, y):
+        """Walk to (x, y) along the grid lines through the tile centres:
+        larger axis first (L-shaped paths, like the enemies), finishing
+        exactly on the target once inside its tile. The unit runs straight
+        along the row/column it is on; it only heads for the tile centre when
+        the next step turns, or when a fight knocked it off the grid."""
+        tx, ty = u.tile()
+        gtx, gty = math.floor(x), math.floor(y)
+        if tx == gtx and ty == gty:
+            self._move_toward(u, x, y)
+            return
+        cx, cy = tx + 0.5, ty + 0.5
+        sx, sy = greedy_step(tx, ty, gtx, gty)
+        on_row = abs(u.y - cy) < 1e-9
+        on_col = abs(u.x - cx) < 1e-9
+        if (sy == ty and on_row) or (sx == tx and on_col):
+            self._move_toward(u, sx + 0.5, sy + 0.5)
+        else:
+            self._move_toward(u, cx, cy)
+
     def _unit_ai(self, u):
         if u.timer > 0:
             u.timer -= 1
@@ -402,8 +511,8 @@ class Combat:
             else:
                 self._move_toward(u, cx, cy)
             return
-        if u.rally is not None and u.dist_to(*u.rally) > 0.3:
-            self._move_toward(u, *u.rally)
+        if u.rally is not None and (u.x != u.rally[0] or u.y != u.rally[1]):
+            self._walk_grid(u, *u.rally)
 
     def _enemy_ai(self, e):
         f = self.factory

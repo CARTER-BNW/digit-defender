@@ -22,6 +22,11 @@ Format: Symptom / Cause / Fix. Add an entry the moment a trap is found (`/gotcha
 - **Cause:** the Bash tool layer unescapes backslashes before bash sees the (quoted) heredoc, so a Python patch script containing an escaped newline wrote a literal line break into the source.
 - **Fix:** never route escape sequences through Bash heredocs; use the Edit/Write tools for any text containing backslashes. Always run the test suite (which imports game.py) before committing.
 
+## Belt items are 3-field lists, not (value, progress) pairs
+- **Symptom:** `ValueError: too many values to unpack` in code doing `for v, p in belt.items`.
+- **Cause:** since STATUS v5 every item is `[value, progress, entry_rel]`; the third field is render-only (corner animation) and the sim never reads it, but pair-unpacking anywhere breaks.
+- **Fix:** index (`it[0]`, `it[1]`) or unpack with `v, p, *_`. `Belt.to_dict/from_dict` accept both shapes (old two-field saves load with entry BACK); tests that hand-append items may still append pairs.
+
 ## Long Bash heredocs silently fail in this tool
 - **Symptom:** "unexpected EOF while looking for matching quote" from a multi-file heredoc command; nothing written.
 - **Cause:** suspected tool-side length limit (~8 KB) on a single Bash command; large heredocs get cut mid-line.

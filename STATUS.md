@@ -1,5 +1,34 @@
 # STATUS
-_Last updated: 2026-09-11 (v4) by Claude_
+_Last updated: 2026-09-11 (v5) by Claude_
+
+## v5 (2026-09-11, afternoon): John's third round of play-test feedback, all implemented
+- Towers: TOWER_RANGE 6 -> 10; translucent range disc on hover/select and on the build ghost; red frame + "0" label when
+  the ammo buffer is empty; placement message / hover line / panel explain "belt numbers into the green arrow side".
+- Spawners: no auto-spawn. Clicking a spawner (which also selects it) queues one unit and pays UNIT_COSTS (50/50/150,
+  idea.txt); one queued unit per period (200 ticks at Lv1, faster with level); queue count replaces the M/H/R letter;
+  SPAWNER_QUEUE_MAX 9; `queue` saved.
+- Units: grid formations - `spiral_slots` / `Combat.slot_near` / `Combat.gather` hand out tile-centre slots spiralling
+  out from the gather point, skipping structure tiles and other units' slots; default gather point 3 tiles from the hub
+  centre on the spawner's side; units walk along grid lines (larger axis first, re-centre only to turn, exact arrival);
+  click / Shift+click / drag box selects units (yellow rings, slot markers), RMB moves them, RMB on a selected spawner
+  moves its gather point (and its idle units). Player units are now saved (meta wave.units) since they cost balance.
+- Belt corners: items are `[value, progress, entry_rel]`; the renderer draws the first half of a belt from the entry
+  edge to the centre, so a side entry curves through the corner instead of jumping from one edge to another. Old
+  two-field saves load as BACK. Tests index items instead of unpacking pairs (docs/GOTCHAS.md).
+- Walls: `Wall.links` bitmask rebuilt with the links; sprite = block + connector bars to each wall neighbour (wall.png,
+  if it arrives, is drawn on top) + the level number in the middle (no corner badge for walls).
+- Upgrades: `[U]` (Factory.upgrade) pays balance = next threshold - invested and feeds it (1:1, heals too); panel and
+  help explain both paths (feed a yellow side, or pay). Answer to "how do I upgrade belts/spawners/walls".
+- Hub hp bar: one tile wide, just under the HUB label (1x1 structures keep the bar above them).
+- Menu: Esc resumes the last world instead of quitting (footer says so); with no world Esc is ignored.
+- Splitter rule tightened: only a straight (back-fed) belt branches, and only into a side belt with no cargo source of
+  its own - a corner in one of two parallel lines no longer T-joins them, and a turned belt does not split into its old
+  tail.
+- Verification: 106 tests (9 new/rewritten); scratch verify_feedback2.py real-window screenshots (range disc, red
+  no-ammo frame, wall connectors with levels 1/2/3, unit grids beside the hub, hub bar, spawner queue "4", corner
+  item motion) and a save/load round trip that kept a trained heavy unit, its owner link and the queue.
+- **Open:** tower feed sides may still confuse (see HANDOFF rough edges); no dequeue/refund; balance re-probe with
+  paid units; Phase 4 design checkbox; Phase 6 leftovers (sounds, stats, blueprints).
 
 ## v4 (2026-09-11, morning): John's first play-test feedback, two rounds, all implemented
 - Round 1 (commit 0b652c5): belts drawn as strips with a much smaller, darker arrow; belt numbers plain (no circle) and

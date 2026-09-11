@@ -244,6 +244,24 @@ class Factory:
         self.damaged.discard(s)
         return cost
 
+    @staticmethod
+    def upgrade_cost(s):
+        """Balance needed to feed s up to its next level (1 balance = 1 fed,
+        the same rate the hub pays for a delivered number); None at max."""
+        from sim import leveling
+        nxt = leveling.next_threshold(s.invested)
+        return None if nxt is None else nxt - s.invested
+
+    def upgrade(self, s):
+        """Pay balance to lift s to its next level (idea.txt: balance is spent
+        to create / improve / repair). Returns the cost paid, or 0."""
+        cost = self.upgrade_cost(s)
+        if not cost or self.balance < cost:
+            return 0
+        self.balance -= cost
+        s.feed(cost)
+        return cost
+
     # ---- tick --------------------------------------------------------------
 
     def tick(self):
@@ -285,17 +303,38 @@ class Factory:
                 if nb.SIDE_ROLES[rel] == ROLE_IN:
                     outs.append((nb, rel))
             m.outputs = outs
-        # belt outputs: the front target plus belts beside it that lead straight away
+        # belts that already receive cargo (from a line, a miner or a machine),
+        # and those receiving it through a side (corners and merges)
+        pushed = set()
+        side_fed = set()
+        for s in self.belts + self.machines:
+            nxt = s.next
+            if isinstance(nxt, Belt) and s.next_rel != FRONT:
+                pushed.add(id(nxt))
+                if s.next_rel != BACK:
+                    side_fed.add(id(nxt))
+        for m in self.miners:
+            for nb, rel in m.outputs:
+                if isinstance(nb, Belt):
+                    pushed.add(id(nb))
+                    if rel != BACK:
+                        side_fed.add(id(nb))
+        # belt outputs: the front target plus, for a straight (back-fed) belt,
+        # belts beside it that lead straight away and have no cargo source of
+        # their own. A belt that merely starts beside a line is a branch (that
+        # is how T-junctions are made); the corner of a parallel line, or the
+        # old tail left beside a turned belt, is not (John, 2026-09-11).
         for b in self.belts:
             outs = []
             if b.next is not None:
                 outs.append((b.next, b.next_rel, b.direction))
-            for rel in (LEFT, RIGHT):
-                d = (b.direction + rel) % 4
-                dx, dy = DIR_VEC[d]
-                nb = structures.get((b.x + dx, b.y + dy))
-                if isinstance(nb, Belt) and nb.direction == d:
-                    outs.append((nb, BACK, d))
+            if id(b) not in side_fed:
+                for rel in (LEFT, RIGHT):
+                    d = (b.direction + rel) % 4
+                    dx, dy = DIR_VEC[d]
+                    nb = structures.get((b.x + dx, b.y + dy))
+                    if isinstance(nb, Belt) and nb.direction == d and id(nb) not in pushed:
+                        outs.append((nb, BACK, d))
             b.outputs = outs
             b.feeders = []
             b.in_sides = 0
@@ -319,6 +358,12 @@ class Factory:
             nb = mc.next
             if isinstance(nb, Belt) and mc.next_rel != FRONT:
                 nb.in_sides |= 1 << DIR_VEC.index((mc.x - nb.x, mc.y - nb.y))
+        for w in self.walls:                         # walls join their wall neighbours
+            links = 0
+            for d, (dx, dy) in enumerate(DIR_VEC):
+                if isinstance(structures.get((w.x + dx, w.y + dy)), Wall):
+                    links |= 1 << d
+            w.links = links
         for b in self.belts:
             if len(b.feeders) > 1:
                 b.feeders.sort(key=lambda f: (

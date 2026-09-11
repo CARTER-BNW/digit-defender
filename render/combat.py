@@ -19,10 +19,11 @@ def _bar(screen, x, y, w, frac, color):
     pygame.draw.rect(screen, color, (x, y, max(0, int(w * frac)), 3))
 
 
-def draw_combat(screen, camera, combat, selected=None):
+def draw_combat(screen, camera, combat, selected=None, selected_units=(), box=None):
     tp = camera.tile_px
     ox, oy = camera.screen_origin()
     w, h = screen.get_size()
+    chosen = {id(u) for u in selected_units}
     # beams first (under the units)
     for x0, y0, x1, y1, value, ttl, side in combat.beams:
         color = (255, 140, 70) if side == ENEMY else (120, 220, 255)
@@ -49,18 +50,33 @@ def draw_combat(screen, camera, combat, selected=None):
             continue
         r = max(2, int(tp * (0.36 if u.kind == "heavy" else 0.28)))
         color = UNIT_COLORS.get(u.kind, COLORS["unit"])
+        if id(u) in chosen:
+            pygame.draw.circle(screen, (255, 255, 120), (sx, sy), r + max(2, tp // 8), max(1, tp // 16))
+            if u.rally is not None and (u.x != u.rally[0] or u.y != u.rally[1]):
+                gx, gy = int(u.rally[0] * tp + ox), int(u.rally[1] * tp + oy)
+                q = max(2, tp // 6)
+                pygame.draw.rect(screen, (255, 255, 120), (gx - q, gy - q, 2 * q, 2 * q), 1)
         pygame.draw.rect(screen, color, (sx - r, sy - r, 2 * r, 2 * r), border_radius=max(1, r // 3))
         pygame.draw.rect(screen, (10, 40, 50), (sx - r, sy - r, 2 * r, 2 * r), 1, border_radius=max(1, r // 3))
         if u.shot is not None and tp >= 12:
             pygame.draw.circle(screen, (255, 255, 255), (sx, sy), max(1, r // 3))
         if u.hp < u.max_hp and tp >= 8:
             _bar(screen, sx - r, sy - r - 5, 2 * r, u.hp / u.max_hp, COLORS["hp_bar"])
-    # rally flag of the selected spawner
+    # gather flag of the selected spawner
     if selected is not None and hasattr(selected, "rally_point"):
-        rx, ry = selected.rally_point()
+        rx, ry = selected.rally_point(combat.factory)
         sx, sy = int(rx * tp + ox), int(ry * tp + oy)
         pygame.draw.line(screen, (255, 255, 120), (sx, sy), (sx, sy - tp), 2)
         pygame.draw.polygon(screen, (255, 255, 120), [(sx, sy - tp), (sx + tp // 2, sy - tp * 3 // 4), (sx, sy - tp // 2)])
+    # drag box while selecting units
+    if box is not None:
+        (x0, y0), (x1, y1) = box
+        rect = pygame.Rect(min(x0, x1), min(y0, y1), abs(x1 - x0), abs(y1 - y0))
+        if rect.width >= 4 or rect.height >= 4:
+            fill = pygame.Surface(rect.size, pygame.SRCALPHA)
+            fill.fill((120, 220, 255, 40))
+            screen.blit(fill, rect.topleft)
+            pygame.draw.rect(screen, (120, 220, 255), rect, 1)
     # nest core hp bars
     for key, spec in combat.known_nests.items():
         if key not in combat.nests.damage:

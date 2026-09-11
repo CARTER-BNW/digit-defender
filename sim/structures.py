@@ -12,8 +12,10 @@ THE FEED RULE (docs/PLAN.md section 3.5): an item entering through a side that
 is not a cargo input is consumed as feed: invested += value, hp += value
 (capped). invested drives level, speed/rate and max_hp.
   Belt:     BACK/LEFT/RIGHT = cargo (tail / side merge), FRONT (head-on) = feed.
-            Outputs: the structure in front plus any belt beside it that points
-            straight away; items alternate evenly between outputs (splitter).
+            Outputs: the structure in front plus, for a straight (back-fed)
+            belt, any belt beside it that points straight away and has no
+            cargo source of its own; items alternate evenly between outputs
+            (splitter / T-junction). Corners and merges never branch.
   Machine:  LEFT = operand A, RIGHT = operand B, BACK = feed, FRONT refuses
   Hub:      every side = income
   Miner:    pushes its digit into EVERY adjacent cargo input (belt back/side,
@@ -27,7 +29,8 @@ from collections import deque
 
 from settings import (COSTS, ITEM_SPACING, MINER_BASE_PERIOD, MACHINE_BASE_PERIOD,
                       MACHINE_BUFFER, TOWER_AMMO_MAX, TOWER_RANGE, TOWER_BASE_PERIOD,
-                      TOWER_DMG_LEVEL_MULT, SPAWNER_BASE_PERIOD, SPAWNER_UNIT_CAP)
+                      TOWER_DMG_LEVEL_MULT, SPAWNER_BASE_PERIOD, SPAWNER_QUEUE_MAX,
+                      UNIT_COSTS, GATHER_HUB_OFFSET)
 from sim import leveling
 
 N, E, S, W = 0, 1, 2, 3
@@ -135,9 +138,12 @@ class Structure:
 
 
 class Belt(Structure):
-    """items: [[value, progress], ...] sorted by progress ascending; the head
-    (about to leave) is items[-1]. Spacing >= ITEM_SPACING is enforced from
-    the head backwards, which is what makes backpressure propagate."""
+    """items: [[value, progress, entry], ...] sorted by progress ascending; the
+    head (about to leave) is items[-1]. Spacing >= ITEM_SPACING is enforced
+    from the head backwards, which is what makes backpressure propagate.
+    `entry` is the relative side (BACK/LEFT/RIGHT) the item came in through;
+    render-only (the item is drawn entering from that edge), never read by
+    the sim."""
     __slots__ = ("items", "feeders", "in_sides", "outputs", "out_sides", "rr")
     KIND = "belt"
     HAS_OUTPUT = True
@@ -168,7 +174,7 @@ class Belt(Structure):
                 return False
             if p > room:
                 p = room
-        items.insert(0, [value, p])
+        items.insert(0, [value, p, rel])
         return True
 
     def tick(self, factory):
@@ -214,13 +220,15 @@ class Belt(Structure):
 
     def to_dict(self):
         d = super().to_dict()
-        d["items"] = [[v, p] for v, p in self.items]
+        d["items"] = [list(it) for it in self.items]
         if self.rr:
             d["rr"] = self.rr
         return d
 
     def _load_extra(self, d):
-        self.items = [[int(v), float(p)] for v, p in d.get("items", [])]
+        # older saves stored [value, progress]; those items came from behind
+        self.items = [[int(it[0]), float(it[1]), int(it[2]) if len(it) > 2 else BACK]
+                      for it in d.get("items", [])]
         self.rr = int(d.get("rr", 0))
 
 
@@ -393,8 +401,17 @@ class Hub(Structure):
 
 
 class Wall(Structure):
-    __slots__ = ()
+    """Blocks enemies. `links` is a bitmask of world sides (1 << dir) with a
+    wall next door, rebuilt with the links; the renderer joins linked walls."""
+    __slots__ = ("links",)
     KIND = "wall"
+
+    def __init__(self, x, y, direction=N):
+        super().__init__(x, y, direction)
+        self.links = 0
+
+    def label(self):
+        return str(self.level)
 
 
 class Tower(Structure):
@@ -418,11 +435,15 @@ class Tower(Structure):
         return True
 
     def label(self):
-        return str(len(self.ammo)) if self.ammo else None
+        return str(len(self.ammo))
 
     @property
     def period(self):
         return leveling.period(TOWER_BASE_PERIOD, self.invested)
+
+    @property
+    def range(self):
+        return TOWER_RANGE
 
     def damage_for(self, value):
         return int(round(value * (1 + TOWER_DMG_LEVEL_MULT * (self.level - 1))))
@@ -455,59 +476,83 @@ class Tower(Structure):
 
 
 class Spawner(Structure):
-    """Spawns player units at its front tile on a timer, up to a cap that
-    grows with level; units gather at the rally point (right-click)."""
-    __slots__ = ("timer", "rally")
+    """Trains player units on demand: clicking the spawner queues one unit
+    (enqueue: costs UNIT_COSTS balance); one queued unit walks out of the
+    front tile every `period` ticks and takes a free grid slot around the
+    gather point (rally; default: next to the hub). Nothing spawns on its own."""
+    __slots__ = ("timer", "rally", "queue")
     UNIT = None
     SIDE_ROLES = (ROLE_OUT, ROLE_FEED, ROLE_FEED, ROLE_FEED)
 
     def __init__(self, x, y, direction=S):
         super().__init__(x, y, direction)
-        self.timer = SPAWNER_BASE_PERIOD // 4
+        self.timer = 0
         self.rally = None
+        self.queue = 0
 
     def label(self):
-        return self.UNIT[0].upper()
+        return str(self.queue) if self.queue else None
 
     @property
     def period(self):
         return leveling.period(SPAWNER_BASE_PERIOD, self.invested)
 
     @property
-    def cap(self):
-        return SPAWNER_UNIT_CAP + (self.level - 1)
+    def unit_cost(self):
+        return UNIT_COSTS[self.UNIT]
 
-    def rally_point(self):
+    def enqueue(self, factory):
+        """Pay for one more unit. Returns the reason it failed, or None."""
+        if self.queue >= SPAWNER_QUEUE_MAX:
+            return "queue full"
+        cost = self.unit_cost
+        if factory.balance < cost:
+            return f"need {cost}"
+        factory.balance -= cost
+        self.queue += 1
+        return None
+
+    def rally_point(self, factory=None):
+        """Where trained units gather: the set point, else beside the hub on
+        this spawner's side (two tiles clear of the hub edge)."""
         if self.rally is not None:
             return tuple(self.rally)
-        fx, fy = self.front_tile()
-        dx, dy = DIR_VEC[self.direction]
-        return (fx + 0.5 + dx, fy + 0.5 + dy)
+        hub = factory.hub if factory is not None else None
+        if hub is None:
+            fx, fy = self.front_tile()
+            dx, dy = DIR_VEC[self.direction]
+            return (fx + 0.5 + dx, fy + 0.5 + dy)
+        dx, dy = self.x - hub.x, self.y - hub.y
+        r = GATHER_HUB_OFFSET
+        if abs(dx) >= abs(dy):
+            return (hub.x + (r if dx >= 0 else -r) + 0.5, hub.y + 0.5)
+        return (hub.x + 0.5, hub.y + (r if dy >= 0 else -r) + 0.5)
 
     def tick(self, factory):
-        combat = factory.combat
-        if combat is None:
-            return
         if self.timer > 0:
             self.timer -= 1
-            return
-        if combat.count_units_of(self) >= self.cap:
+        combat = factory.combat
+        if combat is None or self.queue <= 0 or self.timer > 0:
             return
         fx, fy = self.front_tile()
+        slot = combat.slot_near(*self.rally_point(factory))
         combat.spawn_unit(self.UNIT, fx + 0.5, fy + 0.5, level=self.level, owner=self,
-                          rally=self.rally_point())
+                          rally=slot)
+        self.queue -= 1
         self.timer = self.period
 
     def to_dict(self):
         d = super().to_dict()
         d["timer"] = self.timer
         d["rally"] = list(self.rally) if self.rally is not None else None
+        d["queue"] = self.queue
         return d
 
     def _load_extra(self, d):
         self.timer = int(d.get("timer", 0))
         r = d.get("rally")
         self.rally = (float(r[0]), float(r[1])) if r else None
+        self.queue = int(d.get("queue", 0))
 
 
 class SpawnerRanged(Spawner):

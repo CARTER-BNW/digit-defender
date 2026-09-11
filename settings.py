@@ -92,13 +92,16 @@ WAVE_BUDGET_GROWTH = 1.25           # budget = BASE * GROWTH**n
 WAVE_SPAWN_MARGIN = 12              # tiles beyond the structure bounding box
 WAVE_MIN_RADIUS = 30                # tiles from origin, minimum
 WAVE_WARNING_S = 60                 # edge arrow shows the coming wave direction this early
-TOWER_RANGE = 6                     # tiles
+TOWER_RANGE = 10                    # tiles (John: towers cover a radius of 10)
 TOWER_BASE_PERIOD = 20              # ticks between shots (level shortens it)
 TOWER_DMG_LEVEL_MULT = 0.5          # dmg = ammo value * (1 + mult * (level - 1))
-SPAWNER_BASE_PERIOD = 200           # ticks between unit spawns (10 s)
-SPAWNER_UNIT_CAP = 3                # live units per spawner at level 1 (+1 per level)
+SPAWNER_BASE_PERIOD = 200           # ticks to train one queued unit (10 s)
+SPAWNER_QUEUE_MAX = 9               # units a spawner can hold in its queue
+UNIT_COSTS = {"ranged": 50, "melee": 50, "heavy": 150}   # balance per queued unit (idea.txt)
 UNIT_LEVEL_MULT = 0.25              # unit hp/dmg * (1 + mult * (spawner level - 1))
 UNIT_AGGRO_TILES = 12               # units chase enemies this close
+GATHER_HUB_OFFSET = 3               # default gather point: this many tiles from the hub centre
+GATHER_MAX_RING = 24                # formation slots spiral out at most this far
 ENEMY_ATTACK_RANGE = 1.2            # tiles (melee contact)
 FLOW_COST_WALL = 40
 FLOW_COST_STRUCT = 15
