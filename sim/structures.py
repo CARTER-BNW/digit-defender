@@ -136,7 +136,7 @@ class Belt(Structure):
     """items: [[value, progress], ...] sorted by progress ascending; the head
     (about to leave) is items[-1]. Spacing >= ITEM_SPACING is enforced from
     the head backwards, which is what makes backpressure propagate."""
-    __slots__ = ("items", "feeders")
+    __slots__ = ("items", "feeders", "in_sides")
     KIND = "belt"
     HAS_OUTPUT = True
     SIDE_ROLES = (ROLE_OUT, ROLE_IN, ROLE_IN, ROLE_IN)
@@ -145,6 +145,7 @@ class Belt(Structure):
         super().__init__(x, y, direction)
         self.items = []
         self.feeders = []      # upstream belts (rebuilt with links)
+        self.in_sides = 0      # bitmask of WORLD sides (1 << dir) that push cargo in (render shapes)
 
     @property
     def speed(self):

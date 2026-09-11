@@ -59,8 +59,8 @@ def _arrow(surf, cx, cy, direction, size, color):
 
 @lru_cache(maxsize=64)
 def load_png(kind):
-    """assets/sprites/<kind>.png or None. Magenta becomes transparent when the
-    file has no alpha channel (Paint cannot save transparency)."""
+    """assets/sprites/<kind>.png or None. Pure white and pure magenta pixels
+    become transparent (Paint cannot save transparency)."""
     path = os.path.join(ASSET_ROOT, f"{kind}.png")
     if not os.path.exists(path):
         return None
@@ -68,29 +68,97 @@ def load_png(kind):
         img = pygame.image.load(path)
     except pygame.error:
         return None
-    if img.get_flags() & pygame.SRCALPHA:
-        return _convert(img)
-    img.set_colorkey((255, 0, 255))
-    return _convert(img)
+    out = pygame.Surface(img.get_size(), pygame.SRCALPHA)
+    out.blit(img, (0, 0))
+    try:
+        import numpy as np
+        import pygame.surfarray as sa
+        rgb = sa.pixels3d(out)
+        alpha = sa.pixels_alpha(out)
+        white = (rgb[..., 0] == 255) & (rgb[..., 1] == 255) & (rgb[..., 2] == 255)
+        magenta = (rgb[..., 0] == 255) & (rgb[..., 1] == 0) & (rgb[..., 2] == 255)
+        alpha[white | magenta] = 0
+        del rgb, alpha
+    except (ImportError, pygame.error):
+        out.set_colorkey((255, 255, 255))
+    return _convert(out)
 
 
-def _png_sprite(img, direction, size):
-    """Rotate an up-facing image for `direction` and scale it to size px."""
-    if direction:
-        img = pygame.transform.rotate(img, -90 * direction)    # clockwise steps
+def _rotate_cw(img, quarter_turns):
+    """Rotate by quarter turns clockwise (pygame's positive angle is CCW)."""
+    q = quarter_turns % 4
+    return pygame.transform.rotate(img, -90 * q) if q else img
+
+
+def _fit(img, size):
     if img.get_width() != size:
         img = (pygame.transform.smoothscale(img, (size, size)) if size < img.get_width()
                else pygame.transform.scale(img, (size, size)))
     return img
 
 
+def _png_sprite(img, direction, size):
+    """Sprites are drawn facing LEFT (W); rotate clockwise to face `direction`."""
+    return _fit(_rotate_cw(img, (direction - 3) % 4), size)
+
+
+# belt shape files, as drawn: the set of open (connected) world sides
+BELT_SHAPES = {
+    "belt": {3, 1},              # straight: W (output, arrow) + E
+    "belt_corner": {2, 1},       # L: S + E
+    "belt_t": {2, 3, 1},         # T: S + W + E (closed at N)
+    "belt_cross": {0, 1, 2, 3},
+}
+
+
+def belt_openings(direction, in_sides):
+    """World sides a belt connects: its front plus every cargo input side."""
+    opens = {direction}
+    for d in range(4):
+        if in_sides & (1 << d) and d != direction:
+            opens.add(d)
+    if len(opens) == 1:                              # nothing feeding it: show a straight belt
+        opens.add((direction + 2) % 4)
+    return opens
+
+
+def _belt_png(direction, in_sides, size):
+    """Pick the shape file whose rotated openings match, or None."""
+    opens = belt_openings(direction, in_sides)
+    n = len(opens)
+    if n == 2:
+        a, b = sorted(opens)
+        name = "belt" if (b - a) == 2 else "belt_corner"
+    elif n == 3:
+        name = "belt_t"
+    else:
+        name = "belt_cross"
+    img = load_png(name)
+    if img is None:
+        img = load_png("belt")
+        if img is None:
+            return None
+        name = "belt"
+    drawn = BELT_SHAPES[name]
+    if name == "belt":
+        r = (direction - 3) % 4                      # the arrow must point at the output
+    else:
+        for r in range(4):
+            if {(d + r) % 4 for d in drawn} == opens:
+                break
+        else:
+            r = 0
+    return _fit(_rotate_cw(img, r), size)
+
+
 # ---- sprites ----------------------------------------------------------------------------
 
 @lru_cache(maxsize=4096)
-def sprite(kind, direction, tp, label=None, level=1):
+def sprite(kind, direction, tp, label=None, level=1, variant=0):
     """Surface for one structure: tp px per tile (hub is 3 tiles). Levels
-    above 1 get a small badge in the top-right corner."""
-    surf = _sprite(kind, direction, tp, label)
+    above 1 get a small badge in the top-right corner. `variant` is the
+    belt's input-side mask (its shape)."""
+    surf = _sprite(kind, direction, tp, label, variant)
     if level > 1 and tp >= 16:
         surf = surf.copy()
         badge = numbers.text(str(level), max(8, tp // 3), (255, 230, 120))
@@ -99,27 +167,43 @@ def sprite(kind, direction, tp, label=None, level=1):
     return surf
 
 
+def _belt_procedural(direction, in_sides, tp):
+    """Strip from every open side to the centre plus a small dark arrow."""
+    surf = pygame.Surface((tp, tp), pygame.SRCALPHA)
+    base = COLORS["belt"]
+    wpx = max(2, int(round(tp * BELT_WIDTH)))
+    off = (tp - wpx) // 2
+    half = tp // 2
+    for d in belt_openings(direction, in_sides):
+        if d == 0:
+            rect = (off, 0, wpx, half + wpx // 2)
+        elif d == 2:
+            rect = (off, half - wpx // 2, wpx, tp - (half - wpx // 2))
+        elif d == 1:
+            rect = (half - wpx // 2, off, tp - (half - wpx // 2), wpx)
+        else:
+            rect = (0, off, half + wpx // 2, wpx)
+        pygame.draw.rect(surf, base, rect)
+    if tp >= 12:
+        # thin edge around the whole shape, then the arrow toward the output
+        mask = pygame.mask.from_surface(surf)
+        for pt in mask.outline():
+            surf.set_at(pt, COLORS["belt_edge"])
+        _arrow(surf, tp / 2, tp / 2, direction, max(2, tp * 0.11), COLORS["belt_arrow"])
+    return _convert(surf)
+
+
 @lru_cache(maxsize=2048)
-def _sprite(kind, direction, tp, label=None):
+def _sprite(kind, direction, tp, label=None, variant=0):
     cls = KINDS[kind]
     size = tp * cls.SIZE
     base = COLORS.get(kind, (200, 0, 200))
+    if kind == "belt":
+        img = _belt_png(direction, variant, size)
+        return _convert(img.copy()) if img is not None else _belt_procedural(direction, variant, tp)
     png = load_png(kind)
     if png is not None:
         surf = _png_sprite(png, direction, size).copy()
-    elif kind == "belt":
-        surf = pygame.Surface((size, size), pygame.SRCALPHA)
-        wpx = max(2, int(round(tp * BELT_WIDTH)))
-        off = (tp - wpx) // 2
-        if direction in (0, 2):                   # N/S: vertical strip
-            rect = (off, 0, wpx, tp)
-        else:
-            rect = (0, off, tp, wpx)
-        pygame.draw.rect(surf, base, rect)
-        if tp >= 12:
-            pygame.draw.rect(surf, COLORS["belt_edge"], rect, 1)
-            _arrow(surf, size / 2, size / 2, direction, max(2, tp * 0.11), COLORS["belt_arrow"])
-        return _convert(surf)
     else:
         surf = pygame.Surface((size, size), pygame.SRCALPHA)
         pad = max(1, tp // 10)
@@ -183,7 +267,10 @@ def draw_structures(screen, camera, factory, chunk_rect, frac=0.0):
                     continue
                 sx = s.x * tp + ox
                 sy = s.y * tp + oy
-                blits.append((sprite(s.KIND, s.direction, tp, s.label(), s.level), (sx, sy)))
+                if s.KIND == "belt":
+                    blits.append((sprite("belt", s.direction, tp, None, s.level, s.in_sides), (sx, sy)))
+                else:
+                    blits.append((sprite(s.KIND, s.direction, tp, s.label(), s.level), (sx, sy)))
                 if s.KIND == "belt" and s.items:
                     dx, dy = DIR_VEC[s.direction]
                     cxp = sx + half

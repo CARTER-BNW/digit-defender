@@ -248,3 +248,20 @@ def test_miner_outputs_on_all_four_sides_but_never_feeds():
     w = f2.place("wall", 1, 0, N, free=True)
     run(f2, 100)
     assert w.invested == 0 and f2.stats["mined"] == 0 and m2.timer == 0
+
+
+def test_belt_connection_sides_for_sprites():
+    f = factory()
+    a = f.place("belt", 1, 0, E, free=True)        # straight, fed from the west
+    b = f.place("belt", 2, 0, S, free=True)        # corner: fed from its west side
+    c = f.place("belt", 2, 1, S, free=True)        # straight, fed from the north
+    m = f.place("miner", 3, 1, W, free=True, value=1)   # miner east of c pushes into c's side
+    f.place("belt", 0, 0, E, free=True)            # feeds a from the west
+    f.rebuild_links()
+    W_, N_, E_ = 1 << W, 1 << N, 1 << E
+    assert a.in_sides == W_
+    assert b.in_sides == W_
+    assert c.in_sides == N_ | E_                   # a T: back + one side
+    f.place("belt", 1, 1, E, free=True)            # feeds c from the west too
+    f.rebuild_links()
+    assert c.in_sides == N_ | E_ | W_               # a cross

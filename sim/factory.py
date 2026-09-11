@@ -292,6 +292,20 @@ class Factory:
         for b in self.belts:
             if len(b.feeders) > 1:
                 b.feeders.sort(key=lambda f: (_MERGE_PRIORITY[f.next_rel], f.y, f.x))
+        # connection sides for belt sprites: which world sides deliver cargo
+        for b in self.belts:
+            mask = 0
+            for fdr in b.feeders:
+                mask |= 1 << ((fdr.direction + 2) % 4)
+            b.in_sides = mask
+        for m in self.miners:
+            for nb, rel in m.outputs:
+                if isinstance(nb, Belt):
+                    nb.in_sides |= 1 << DIR_VEC.index((m.x - nb.x, m.y - nb.y))
+        for mc in self.machines:
+            nb = mc.next
+            if isinstance(nb, Belt) and mc.next_rel != FRONT:
+                nb.in_sides |= 1 << ((mc.direction + 2) % 4)
         ordered = []
         visited = set()
 
