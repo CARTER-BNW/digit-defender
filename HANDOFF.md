@@ -36,8 +36,8 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
    (fixed level price), click = select (panel on the right; decided on
    release), drag a box — even one that starts on a belt — = select every structure inside (U/H apply to all; group
    panel; Shift+click adds one) and/or units, click a spawner = train one unit,
-   click / Shift+click / drag a box = select units, RMB = move selected units (grid formation) or set a selected
-   spawner's gather point or cancel,
+   click / Shift+click / drag a box = select units, RMB = move selected units (grid formation) or set the gather
+   point of the selected spawner(s) (a boxed group shares one point; their idle units regroup) or cancel,
    wheel zoom, MMB drag pan, WASD pan (Shift fast), F3 debug, Space pause, [ ] sim speed x1/x2/x4, F1 help overlay,
    Home or the HUB button = camera back to the hub, F6 spawn an enemy at the cursor, F7 trigger the next wave,
    F11 fullscreen, Esc = cancel tool / clear selection / menu (Esc in the menu = back into the game; Del in the menu

@@ -42,7 +42,9 @@ _Last updated: 2026-09-11 (v6) by Claude_
   delivery of the number counts toward the amount; done -> bonus value*amount*1.5+20 and the slot's next level grows
   number and amount each by a seeded random 25-75% (`sim/economy.py`: initial_targets / next_level / top_up; Target has
   slot/level/value/amount/delivered/reward). Panel shows "amount x number  delivered/amount  Lv  +bonus". Old saves
-  ({value,reward}, 3 slots) still load. Tests 122 -> N (see git log).
+  ({value,reward}, 3 slots) still load. Tests 122 -> 123.
+- Round 9 (same evening): RMB with a boxed group of spawners sets one gather point for all of them (their units regroup
+  there); a gather flag is drawn for every selected spawner; group panel / hover line say so. Tests 123 -> 124.
 
 
 ## v5 (2026-09-11, afternoon): John's third round of play-test feedback, all implemented

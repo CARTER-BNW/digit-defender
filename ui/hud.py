@@ -172,7 +172,9 @@ class Hud:
         elif game.selected_structures:
             n = len(game.selected_structures)
             up = sum(c for c in (game.factory.upgrade_cost(s) for s in game.selected_structures) if c)
-            lines.append(f"{n} structures selected   [U] upgrade all for {numbers.fmt(up)}   [H] repair all   [Shift+drag] add   [Esc] deselect")
+            rally = "   [RMB] gather point" if any(isinstance(s, Spawner) for s in game.selected_structures) else ""
+            lines.append(f"{n} structures selected   [U] upgrade all for {numbers.fmt(up)}   [H] repair all{rally}"
+                         "   [Shift+drag] add   [Esc] deselect")
         else:
             lines.append("[F1] help   [1-9] build  [X] demolish  [R] rotate  [U] upgrade  [Q] pick  drag a box = select  [Space] pause  [ ] speed  [F3] debug")
         tx, ty = game.hover_tile
@@ -310,7 +312,9 @@ class Hud:
         rep = int(missing * REPAIR_COST_PER_HP + 0.999) if missing else 0
         blit(numbers.text(f"[U] upgrade all for {numbers.fmt(up)}   [H] repair all for {numbers.fmt(rep)}", 13, (255, 230, 120)),
              (x0 + 10, y0 + 74))
-        blit(numbers.text("[Shift+drag] add more   [Esc] deselect", 12, (170, 190, 170)), (x0 + 10, y0 + 96))
+        n_sp = sum(1 for s in group if isinstance(s, Spawner))
+        rally = f"[RMB] gather point for {n_sp} spawner{'s' if n_sp > 1 else ''}   " if n_sp else ""
+        blit(numbers.text(f"{rally}[Shift+drag] add more   [Esc] deselect", 12, (170, 190, 170)), (x0 + 10, y0 + 96))
 
     MINI_W, MINI_H, MINI_TILES = 220, 150, 96       # panel px and tiles shown across
 
@@ -391,7 +395,8 @@ class Hud:
         "Hub: deliver from any side = income.  Feed sides (yellow) level belts/walls/spawners; U levels anything.",
         "Towers (range 10): run a belt or put a miner beside one, any side; it fires those numbers. Red frame = no ammo.",
         "Spawners: click one to train a unit (costs balance); units walk to its gather point beside the hub.",
-        "Units: click or drag a box to select (Shift adds), RMB moves them in a grid; RMB on a selected spawner = gather point.",
+        "Units: click or drag a box to select (Shift adds), RMB moves them in a grid; RMB with spawners selected (one or a",
+        "boxed group) = their gather point; their idle units regroup there.",
         "Targets: deliver the shown amount of that number for the bonus; the slot then levels up (bigger number and amount).",
         "Waves come from the red edge arrow. Hub dead = game over.",
         "Enemies shoot from 3-5 tiles and melee up close; each level costs 25% more than the last, no cap.",

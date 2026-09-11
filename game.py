@@ -396,14 +396,21 @@ class Game:
         wx, wy = self.camera.screen_to_world(*pos)
         gx, gy = wx / TILE_SIZE, wy / TILE_SIZE
         live = [u for u in self.selected_units if not u.dead]
+        spawners = [s for s in self._group() if isinstance(s, Spawner)]
+        if not spawners and isinstance(self.selected, Spawner):
+            spawners = [self.selected]
         if live:
             self.combat.gather(live, gx, gy)
             self.hud.message(f"Moving {len(live)} unit{'s' if len(live) > 1 else ''}", 1.0)
-        elif isinstance(self.selected, Spawner):
-            sp = self.selected
-            sp.rally = (math.floor(gx) + 0.5, math.floor(gy) + 0.5)
-            self.combat.gather([u for u in self.combat.units if u.owner is sp], *sp.rally)
-            self.hud.message("Gather point set", 1.2)
+        elif spawners:
+            # one gather point for every selected spawner; their idle units regroup there
+            point = (math.floor(gx) + 0.5, math.floor(gy) + 0.5)
+            ids = {id(s) for s in spawners}
+            for sp in spawners:
+                sp.rally = point
+            self.combat.gather([u for u in self.combat.units if id(u.owner) in ids], *point)
+            n = len(spawners)
+            self.hud.message("Gather point set" if n == 1 else f"Gather point set for {n} spawners", 1.2)
         else:
             self.selected = None
             self.selected_units = []

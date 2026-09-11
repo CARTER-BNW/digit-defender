@@ -351,3 +351,23 @@ def test_drag_off_the_middle_of_a_line_makes_a_t_not_a_corner(game):
     _mouse(game, pygame.MOUSEMOTION, 1, (2, 2))
     _mouse(game, pygame.MOUSEBUTTONUP, 1, (2, 2))
     assert line[1].direction == W and line[0].direction == W
+
+
+def test_right_click_sets_gather_point_for_a_boxed_group_of_spawners(game):
+    frames(game, 1)
+    f = game.factory
+    f.terrain = None
+    a = f.place("spawner_melee", 3, 2, 2, free=True)
+    b = f.place("spawner_ranged", 5, 2, 2, free=True)
+    ua = game.combat.spawn_unit("melee", 3.5, 7.5, owner=a, rally=(3.5, 7.5))     # outside the box
+    ub = game.combat.spawn_unit("ranged", 5.5, 7.5, owner=b, rally=(5.5, 7.5))
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (2, 1), dx=4, dy=4)   # box both spawners
+    _mouse(game, pygame.MOUSEMOTION, 1, (6, 2), dx=20, dy=20)
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (6, 2), dx=20, dy=20)
+    assert game.selected_structures == [a, b] and game.selected_units == []
+    frames(game, 1)                                                # flags for both draw
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 3, (9, 6))
+    assert a.rally == b.rally == (9.5, 6.5)
+    assert ua.rally != ub.rally                                    # their units regroup there, one tile each
+    assert all(abs(u.rally[0] - 9.5) <= 1 and abs(u.rally[1] - 6.5) <= 1 for u in (ua, ub))
+    assert game.selected_structures == [a, b]                      # the group stays selected

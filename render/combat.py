@@ -19,11 +19,15 @@ def _bar(screen, x, y, w, frac, color):
     pygame.draw.rect(screen, color, (x, y, max(0, int(w * frac)), 3))
 
 
-def draw_combat(screen, camera, combat, selected=None, selected_units=(), box=None):
+def draw_combat(screen, camera, combat, selected=None, selected_units=(), box=None, flag_spawners=None):
+    """flag_spawners: spawners whose gather flag is drawn (default: the
+    selected one)."""
     tp = camera.tile_px
     ox, oy = camera.screen_origin()
     w, h = screen.get_size()
     chosen = {id(u) for u in selected_units}
+    if flag_spawners is None:
+        flag_spawners = [selected] if hasattr(selected, "rally_point") else []
     # beams first (under the units)
     for x0, y0, x1, y1, value, ttl, side in combat.beams:
         color = (255, 140, 70) if side == ENEMY else (120, 220, 255)
@@ -62,9 +66,13 @@ def draw_combat(screen, camera, combat, selected=None, selected_units=(), box=No
             pygame.draw.circle(screen, (255, 255, 255), (sx, sy), max(1, r // 3))
         if u.hp < u.max_hp and tp >= 8:
             _bar(screen, sx - r, sy - r - 5, 2 * r, u.hp / u.max_hp, COLORS["hp_bar"])
-    # gather flag of the selected spawner
-    if selected is not None and hasattr(selected, "rally_point"):
-        rx, ry = selected.rally_point(combat.factory)
+    # gather flags of the selected spawner(s)
+    drawn = set()
+    for sp in flag_spawners:
+        rx, ry = sp.rally_point(combat.factory)
+        if (rx, ry) in drawn:
+            continue
+        drawn.add((rx, ry))
         sx, sy = int(rx * tp + ox), int(ry * tp + oy)
         pygame.draw.line(screen, (255, 255, 120), (sx, sy), (sx, sy - tp), 2)
         pygame.draw.polygon(screen, (255, 255, 120), [(sx, sy - tp), (sx + tp // 2, sy - tp * 3 // 4), (sx, sy - tp // 2)])

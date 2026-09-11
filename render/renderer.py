@@ -68,8 +68,11 @@ class Renderer:
                 box = None
                 if getattr(game, "box_start", None) is not None:
                     box = (game.box_start, game.box_end)
+                flags = [s for s in (group or ()) if hasattr(s, "rally_point")]
+                if selected is not None and hasattr(selected, "rally_point"):
+                    flags.append(selected)
                 rcombat.draw_combat(screen, camera, combat, selected,
-                                    getattr(game, "selected_units", ()), box)
+                                    getattr(game, "selected_units", ()), box, flags)
             ghost = game.ghost() if hasattr(game, "ghost") else None
             if ghost is not None:
                 rstruct.draw_ghost(screen, camera, *ghost)
