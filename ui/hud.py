@@ -211,7 +211,8 @@ class Hud:
         missing = s.max_hp - s.hp
         repair = f"[H] repair {int(missing * REPAIR_COST_PER_HP + 0.999)}" if missing > 0 else "[H] repair (full)"
         refund = int(COSTS.get(s.KIND, 0) * 0.5)
-        actions = f"[R] rotate   [X] demolish +{refund}   {repair}" if not isinstance(s, Hub) else "the hub cannot be moved"
+        rot = "" if s.KIND in ("miner", "wall") else "[R] rotate   "
+        actions = f"{rot}[X] demolish +{refund}   {repair}" if not isinstance(s, Hub) else "the hub cannot be moved"
         blit(numbers.text(actions, 13, (255, 230, 120)), (x0 + 10, y0 + 124))
         roles = "sides F/R/B/L: " + " / ".join(str(r) for r in type(s).SIDE_ROLES)
         blit(numbers.text(roles, 12, (170, 190, 170)), (x0 + 10, y0 + 146))
