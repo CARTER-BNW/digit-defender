@@ -79,7 +79,11 @@ class Renderer:
             if getattr(game, "belt_path", None):
                 rstruct.draw_belt_preview(screen, camera, factory, game.belt_path, getattr(game, "belt_turn", 0))
             if getattr(game, "tool", None) == "demolish":
-                rstruct.draw_demolish_cursor(screen, camera, factory, getattr(game, "hover_tile", None))
+                box = None
+                if getattr(game, "demolish_start", None) is not None and game.demolish_end is not None:
+                    box = (game.demolish_start, game.demolish_end)
+                rstruct.draw_demolish_cursor(screen, camera, factory, getattr(game, "hover_tile", None),
+                                             box, game.demolish_targets())
         if self.debug:
             self._overlay(game)
 

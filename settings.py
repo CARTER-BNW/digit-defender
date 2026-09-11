@@ -87,10 +87,10 @@ NEST_HOME_DISTANCE = 100            # one camp always sits this many tiles from 
 NEST_AGGRO_TILES = 48
 
 # --- combat -------------------------------------------------------------------
-WAVE_FIRST_S = 300
-WAVE_INTERVAL_BASE_S = 240
-WAVE_INTERVAL_MIN_S = 90
-WAVE_INTERVAL_DECAY = 0.97          # interval = max(MIN, BASE * DECAY**n)
+WAVE_FIRST_S = 600                  # John (round 16): a wave every 10 minutes, flat (was 5 min, then 240 s * 0.97^n, min 90 s)
+WAVE_INTERVAL_BASE_S = 600
+WAVE_INTERVAL_MIN_S = 600
+WAVE_INTERVAL_DECAY = 1.0           # interval = max(MIN, BASE * DECAY**n)
 WAVE_BUDGET_BASE = 20
 WAVE_BUDGET_GROWTH = 1.25           # budget = BASE * GROWTH**n
 WAVE_SPAWN_MARGIN = 12              # tiles beyond the structure bounding box
@@ -112,7 +112,7 @@ POST_MAX_SHIFT = 3.0                # attackers spread to a free tile at most th
 UNIT_PASSABLE_KINDS = ("belt", "bridge")   # player units walk over these; every other structure blocks them (John)
 UNIT_PATH_BUDGET = 4000             # A* expansions per route before a unit gives up and holds
 REPAIR_UNIT_CAPACITY = 500          # numbers a repair unit carries (John); refills at the HQ from the balance
-REPAIR_UNIT_SEARCH = 16             # tiles around a repair unit it looks for damage in
+REPAIR_UNIT_SEARCH = None           # tiles around a repair unit it looks for damage in; None = anywhere (John: unlimited)
 REPAIR_HP_PER_NUMBER = 5            # = 1 / REPAIR_COST_PER_HP: a repair unit fixes hp at the same price as [H]
 ENEMY_ATTACK_RANGE = 1.5            # tiles (melee contact, diagonals included so 8 attackers fit around a tile)
 FLOW_COST_WALL = 40

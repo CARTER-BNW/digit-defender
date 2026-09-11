@@ -291,8 +291,9 @@ towers level through the balance upgrade `[U]` instead).
   field fall back to v1 greedy.
 
 ### 3.8 Waves
-`WaveState {number, next_at_tick}`. First wave at 5 min; interval `max(90s, 240s · 0.97^n)`;
-budget `= 20 · 1.25^n` spent on a unit mix. Spawn ring: bounding box of all structures
+`WaveState {number, next_at_tick}`. First wave at 10 min and one every 10 min after, flat (John,
+2026-09-12; originally 5 min then `max(90s, 240s · 0.97^n)` — the settings still express the
+decaying form with DECAY 1.0); budget `= 20 · 1.25^n` spent on a unit mix. Spawn ring: bounding box of all structures
 inflated by 12 tiles (min radius 30 from origin), deterministic-per-wave rng angle.
 HUD countdown + red edge arrows in the last 30 s.
 

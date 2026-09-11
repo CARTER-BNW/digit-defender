@@ -74,6 +74,8 @@ class Game:
         self.selected_structures = []        # drag-box multi-select: [U] / [H] apply to all
         self.box_start = None                # screen pos where a LMB drag-select began
         self.box_end = None
+        self.demolish_start = None           # screen pos where a demolish-tool drag began (box on release)
+        self.demolish_end = None
         self.click_target = None             # structure under a pending click (selected on release)
         self.painting = False
         self.last_paint = None
@@ -191,12 +193,16 @@ class Game:
                     self._commit_belt_path()
                 self.painting = False
                 self.last_paint = None
+                if self.demolish_start is not None:
+                    self._end_demolish(event.pos)
                 self._end_box(event.pos)
         elif event.type == pygame.MOUSEMOTION:
             self.hover_tile = cam.screen_to_tile(*event.pos)
             if self.dragging:
                 z = cam.zoom
                 cam.move(-event.rel[0] / z, -event.rel[1] / z)
+            elif self.demolish_start is not None:
+                self.demolish_end = event.pos
             elif self.painting and self.tool and not self.hud.over_ui(event.pos):
                 self._paint(self.hover_tile)
             elif self.box_start is not None:
@@ -237,8 +243,12 @@ class Game:
             self.set_tool(None if self.tool == kind else kind)
         elif key == pygame.K_r:
             self.rotate()
-        elif key == pygame.K_DELETE:             # one-shot; [X] is the demolish tool
-            self.demolish(self.hover_tile)
+        elif key == pygame.K_DELETE:             # the selection (box or single), else the hovered one
+            group = self._group() or ([self.selected] if self.selected is not None else [])
+            if group:
+                self.demolish_many(group)
+            else:
+                self.demolish(self.hover_tile)
         elif key == pygame.K_q:
             self.pick()
         elif key == pygame.K_h:
@@ -272,6 +282,7 @@ class Game:
         self.belt_path = []
         self.belt_turn = 0
         self.painting = False
+        self.demolish_start = self.demolish_end = None
         if kind is not None:
             self.selected = None
             self.selected_structures = []
@@ -302,6 +313,9 @@ class Game:
         tile = self.camera.screen_to_tile(*pos)
         self.hover_tile = tile
         if self.tool is not None:
+            if self.tool == "demolish":
+                self.demolish_start = self.demolish_end = pos    # a box, demolished on release
+                return
             self.painting = True
             self.last_paint = tile
             if self.tool == "belt":
@@ -309,8 +323,6 @@ class Game:
                 self.belt_anchor = tile
                 self.belt_axis = None
                 self.belt_turn = 0
-            elif self.tool == "demolish":
-                self.demolish(tile)
             else:
                 self.try_place(tile, verbose=True)
             return
@@ -377,18 +389,11 @@ class Game:
                 continue
             if ax <= u.x * TILE_SIZE <= bx and ay <= u.y * TILE_SIZE <= by:
                 self.selected_units.append(u)
-        tx0, ty0 = math.floor(ax / TILE_SIZE), math.floor(ay / TILE_SIZE)
-        tx1, ty1 = math.floor(bx / TILE_SIZE), math.floor(by / TILE_SIZE)
         seen = {id(s) for s in self.selected_structures}
-        by_chunk = self.factory.by_chunk
-        for cy in range(ty0 // CHUNK_SIZE, ty1 // CHUNK_SIZE + 1):
-            for cx in range(tx0 // CHUNK_SIZE, tx1 // CHUNK_SIZE + 1):
-                for s in by_chunk.get((cx, cy), ()):
-                    if id(s) in seen:
-                        continue
-                    if any(tx0 <= tx <= tx1 and ty0 <= ty <= ty1 for tx, ty in s.tiles()):
-                        seen.add(id(s))
-                        self.selected_structures.append(s)
+        for s in self._structures_in_box((x0, y0), (x1, y1)):
+            if id(s) not in seen:
+                seen.add(id(s))
+                self.selected_structures.append(s)
         self.selected_structures.sort(key=lambda s: (s.y, s.x))
         if len(self.selected_structures) == 1 and not self.selected_units:
             self.selected = self.selected_structures[0]
@@ -425,6 +430,66 @@ class Game:
         name = self.combat.next_formation(live, step)
         self.hud.message(f"Formation: {name}", 1.2)
         return name
+
+    def _structures_in_box(self, a, b):
+        """Structures with a tile inside the screen rectangle a-b, in (y, x)
+        order (drag-box selection and the demolish box)."""
+        (x0, y0), (x1, y1) = a, b
+        ax, ay = self.camera.screen_to_world(min(x0, x1), min(y0, y1))
+        bx, by = self.camera.screen_to_world(max(x0, x1), max(y0, y1))
+        tx0, ty0 = math.floor(ax / TILE_SIZE), math.floor(ay / TILE_SIZE)
+        tx1, ty1 = math.floor(bx / TILE_SIZE), math.floor(by / TILE_SIZE)
+        seen = set()
+        out = []
+        by_chunk = self.factory.by_chunk
+        for cy in range(ty0 // CHUNK_SIZE, ty1 // CHUNK_SIZE + 1):
+            for cx in range(tx0 // CHUNK_SIZE, tx1 // CHUNK_SIZE + 1):
+                for s in by_chunk.get((cx, cy), ()):
+                    if id(s) in seen:
+                        continue
+                    if any(tx0 <= tx <= tx1 and ty0 <= ty <= ty1 for tx, ty in s.tiles()):
+                        seen.add(id(s))
+                        out.append(s)
+        out.sort(key=lambda s: (s.y, s.x))
+        return out
+
+    def demolish_targets(self):
+        """What the demolish tool would remove right now: the structures in
+        the box being dragged, or the one under the cursor."""
+        if self.demolish_start is not None and self.demolish_end is not None:
+            (x0, y0), (x1, y1) = self.demolish_start, self.demolish_end
+            if abs(x1 - x0) >= 4 or abs(y1 - y0) >= 4:
+                return [s for s in self._structures_in_box(self.demolish_start, self.demolish_end)
+                        if s is not self.factory.hub]
+        s = self.factory.structure_at(*self.hover_tile)
+        return [s] if s is not None and s is not self.factory.hub else []
+
+    def _end_demolish(self, pos):
+        """Release with the demolish tool: a tiny box removes the structure
+        under the cursor, a real box removes everything inside it (the HQ
+        never); refunds add up. Esc / RMB before the release cancels."""
+        start, self.demolish_start = self.demolish_start, None
+        self.demolish_end = None
+        if start is None:
+            return 0
+        if abs(pos[0] - start[0]) < 4 and abs(pos[1] - start[1]) < 4:
+            s = self.demolish(self.camera.screen_to_tile(*pos))
+            return 1 if s is not None else 0
+        return self.demolish_many(self._structures_in_box(start, pos))
+
+    def demolish_many(self, structures):
+        """Remove every structure of the list (refund each); says how many."""
+        before = self.factory.balance
+        n = 0
+        for s in list(structures):
+            if self.factory.structure_at(s.x, s.y) is s and self.factory.remove(s.x, s.y) is not None:
+                n += 1
+                if s is self.selected:
+                    self.selected = None
+        self.selected_structures = self._group()
+        if n:
+            self.hud.message(f"Demolished {n} structure{'s' if n != 1 else ''}, +{self.factory.balance - before} back", 2)
+        return n
 
     def _right_click(self, pos):
         """Cancel the tool; else move the selected units / set the selected
@@ -521,8 +586,8 @@ class Game:
             yield (x, y)
 
     def _paint(self, tile):
-        """Drag with a tool held: belts extend the preview path; the demolish
-        tool sweeps; other kinds place on every tile crossed."""
+        """Drag with a tool held: belts extend the preview path; other kinds
+        place on every tile crossed (the demolish tool drags a box instead)."""
         if tile == self.last_paint:
             return
         last = self.last_paint if self.last_paint is not None else tile
@@ -531,9 +596,6 @@ class Game:
                 self._straight_belt_path(tile)     # Shift: one straight run and one square corner
             else:
                 self._extend_belt_path(tile)
-        elif self.tool == "demolish":
-            for t in self._tiles_between(last, tile):
-                self.demolish(t)
         else:
             for t in self._tiles_between(last, tile):
                 self.try_place(t)

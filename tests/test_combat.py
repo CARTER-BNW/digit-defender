@@ -91,8 +91,8 @@ def test_greedy_step_and_flow_outside_field():
 def test_wave_budget_interval_and_spawn_ring():
     assert wave_budget(0) == WAVE_BUDGET_BASE
     assert wave_budget(3) == WAVE_BUDGET_BASE * WAVE_BUDGET_GROWTH ** 3
-    assert wave_interval_ticks(0) == 240 * TICK_RATE
-    assert wave_interval_ticks(100) == 90 * TICK_RATE
+    assert wave_interval_ticks(0) == wave_interval_ticks(100) == 600 * TICK_RATE   # every 10 minutes, flat (John)
+    assert WAVE_FIRST_S == 600
     f, c = world()
     assert Combat(Factory(seed=1), 1).wave.next_at_tick == WAVE_FIRST_S * TICK_RATE
     c.wave.next_at_tick = f.tick_count + 1
@@ -109,7 +109,7 @@ def test_wave_budget_interval_and_spawn_ring():
     c.wave.next_at_tick = f.tick_count + 1
     run(f, 2)
     assert len(c.enemies) > n0
-    assert c.wave.next_at_tick > f.tick_count + 89 * TICK_RATE
+    assert c.wave.next_at_tick == f.tick_count - 1 + 600 * TICK_RATE
 
 
 def test_tower_kills_with_ammo_and_holds_without():

@@ -196,26 +196,70 @@ def test_u_key_upgrades_hovered_structure(game):
     frames(game, 2)                                          # panel shows the upgrade line
 
 
-def test_x_is_a_demolish_tool_click_or_drag(game):
+def test_x_is_a_demolish_tool_click_or_box(game):
     from settings import COSTS
     frames(game, 1)
     f = game.factory
     f.terrain = None                                           # any tile is buildable
     belts = [f.place("belt", x, -4, 1, free=True) for x in range(3, 9)]
+    walls = [f.place("wall", x, -6, 0, free=True) for x in range(3, 9)]
     bal = f.balance
     game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_x, mod=0, unicode="x"))
     assert game.tool == "demolish"
-    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (3, -4))           # click: one belt gone, 50% back
-    assert f.structure_at(3, -4) is None and f.balance == bal + COSTS["belt"] // 2
-    _mouse(game, pygame.MOUSEMOTION, 1, (8, -4))               # fast drag skipping tiles: sweep fills the gaps
-    _mouse(game, pygame.MOUSEBUTTONUP, 1, (8, -4))
-    assert all(f.structure_at(x, -4) is None for x in range(3, 9))
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (3, -4))           # click: nothing until the release...
+    assert f.structure_at(3, -4) is belts[0] and game.demolish_start is not None
     frames(game, 1)                                            # cursor draws
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (3, -4))             # ...then one belt gone, 50% back
+    assert f.structure_at(3, -4) is None and f.balance == bal + COSTS["belt"] // 2
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (4, -7), dx=4, dy=4)    # drag a box over both rows (John)
+    _mouse(game, pygame.MOUSEMOTION, 1, (8, -4), dx=28, dy=28)
+    assert len(game.demolish_targets()) == 10 and f.count() == 12   # preview only
+    frames(game, 1)                                            # red box + frames draw
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (8, -4), dx=28, dy=28)
+    assert all(f.structure_at(x, -4) is None and f.structure_at(x, -6) is None for x in range(4, 9))
+    assert f.structure_at(3, -6) is walls[0]                   # outside the box
+    assert any("Demolished 10" in m[0] for m in game.hud.messages)
+    # a box over the HQ never removes it; Esc mid-drag cancels the box
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (-4, -4), dx=4, dy=4)
+    _mouse(game, pygame.MOUSEMOTION, 1, (3, -6), dx=28, dy=28)
+    assert game.demolish_targets() == [walls[0]]
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE, mod=0, unicode=""))
+    assert game.tool is None and game.demolish_start is None and f.structure_at(3, -6) is walls[0]
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (3, -6), dx=28, dy=28)
+    assert f.structure_at(3, -6) is walls[0] and f.hub is not None and game.running
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_x, mod=0, unicode="x"))
     game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_x, mod=0, unicode="x"))
     assert game.tool is None                                   # X again leaves the tool
-    game.set_tool("demolish")
-    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE, mod=0, unicode=""))
-    assert game.tool is None and game.running
+
+
+def test_del_removes_the_selection_and_c_shows_unit_costs(game):
+    from ui.hud import unit_cost_summary
+    frames(game, 1)
+    f = game.factory
+    f.terrain = None
+    walls = [f.place("wall", x, 3, 0, free=True) for x in (3, 4, 5)]
+    a = f.place("spawner_ranged", 3, 5, 2, free=True)
+    b = f.place("spawner_ranged", 5, 5, 2, free=True)
+    h = f.place("spawner_heavy", 7, 5, 2, free=True)
+    assert unit_cost_summary([a, b, h]) == "250 (Ranged 50 x2, Heavy 150)"
+    assert unit_cost_summary([h]) == "150 (Heavy 150)"
+    game.selected_structures = list(walls)
+    bal = f.balance
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DELETE, mod=0, unicode=""))
+    assert all(f.structure_at(x, 3) is None for x in (3, 4, 5)) and game.selected_structures == []
+    assert f.balance == bal + 3 * 2                            # 50% of three walls
+    game.selected = h
+    game.hover_tile = (3, 5)                                   # the hovered spawner is NOT the one removed
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DELETE, mod=0, unicode=""))
+    assert f.structure_at(7, 5) is None and f.structure_at(3, 5) is a and game.selected is None
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DELETE, mod=0, unicode=""))
+    assert f.structure_at(3, 5) is None                        # nothing selected: the hovered one
+    game.selected_structures = [b]
+    game.selected = None
+    frames(game, 1)                                            # group panel with the [C] cost line draws
+    game.selected_structures = []
+    game.selected = b
+    frames(game, 1)                                            # single spawner panel with "50 each"
 
 
 def test_belt_drag_previews_then_builds_on_release(game):

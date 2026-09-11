@@ -1,18 +1,20 @@
 # HANDOFF — Digit Defender
-_Last updated: 2026-09-12 (v7, after John's round 15: formations, patrols, walls block units, repair units) by Claude_
+_Last updated: 2026-09-12 (v8, after John's round 16: demolish box, Del on a selection, unit costs on spawner panels,
+10-minute waves, repair units with unlimited range) by Claude_
 
 New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHASES.md (checkpoints), docs/GOTCHAS.md.
 
 ## Live state
 - **Phases 0-5 are built and verified** (tests + real-window runs + screenshots). Phase 6 (polish) is in progress.
-  143 pytest tests green (`python -m pytest -q`, ~8 s). Last commit: round 15 (formations, patrol, A* routing around
-  walls, repair spawner/unit, bridge drops onto a belt, clearer build refusals; 2026-09-12).
+  144 pytest tests green (`python -m pytest -q`, ~9 s). Last commit: round 16 (demolish box + Del on a selection,
+  spawner panels show unit costs, waves every 10 min, repair range unlimited; 2026-09-12).
 - **Round 15 (2026-09-12)**: with units selected the WHEEL cycles the group's formation (box / line / column / wedge /
   ring; it sticks to the group for every later move; Ctrl+wheel still zooms) and a MIDDLE CLICK sets a patrol between
   the units' rally slots and a second formation at the click (RMB move ends it). Player units no longer walk through
   walls or buildings: they route around them with A* (`sim.pathing.route`, cached per unit, re-checked when the layout
   changes) and hold when shut in; belts and bridges are still walked over. New `[=]` Repair spawner (100) trains repair
-  units (100; red with a white cross): they heal the nearest damaged building or unit within 16 tiles, 25 hp per action
+  units (100; red with a white cross): they heal the nearest damaged building or unit anywhere (round 16: unlimited
+  range; `REPAIR_UNIT_SEARCH` None), 25 hp per action
   from a load of 500 numbers at 5 hp per number (the [H] price), and walk to the HQ for a new load (debited from the
   balance; they wait there while broke). A bridge can be dropped straight onto a belt (the belt's numbers carry on
   across it). A click that cannot build now says why ("occupied by a Tower", "belt kept its direction: it feeds a line").
@@ -46,8 +48,9 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
 ## Health check (what "working" looks like)
 1. `python -m pytest -q` -> all green.
 2. `python main.py --world smoke --frames 120` -> window opens on a fresh world with the hub, exits 0, `saves/smoke/` written.
-3. In game: 1 = belt, 2 = miner (needs a deposit), 3-6 = machines, 7 = wall, 8 = tower, 9/0/- = spawners, X = demolish
-   tool (click or drag over buildings, 50% refund; X/Esc leaves it; Del = one-shot); R rotate, LMB place (belts: hold
+3. In game: 1 = belt, 2 = miner (needs a deposit), 3-6 = machines, 7 = wall, 8 = tower, 9/0/-/= = spawners, X = demolish
+   tool (click a building or drag a box over many, removed on release, 50% refund; X/Esc leaves it; Del = remove the
+   selection, else the hovered one); R rotate, LMB place (belts: hold
    and drag = transparent preview path that auto-turns, Shift = one straight run + one square corner, R during the
    drag turns every belt a quarter (twice = the line runs backwards), release builds it, drag back undoes; a drag off
    the middle of a line leaves that belt alone so the new belt is a T branch, from a line's end the last belt turns,
@@ -162,7 +165,8 @@ tests must keep their tiles clear of the right column (x >= 932 px) and the mini
    spending ceil(hp / REPAIR_HP_PER_NUMBER) numbers from `carry` (capacity REPAIR_UNIT_CAPACITY 500); at 0 it walks
    to the nearest free tile touching the HQ (`_hub_side_tile`) and takes min(500, balance) from the balance (event
    "refill"); a new unit spawns empty and fetches its first load. Heal beams are green (`HEAL` side).
-7. Waves: first at 5 min, interval max(90 s, 240*0.97^n), budget 20*1.25^n, spawn ring = base bbox + 12 tiles (min radius
+7. Waves: every 10 minutes flat (first at 10 min; John, round 16 — was 5 min then max(90 s, 240*0.97^n)), budget
+   20*1.25^n, spawn ring = base bbox + 12 tiles (min radius
    30), direction pre-rolled (edge arrow in the last 60 s). Enemies use the hub flow field (walls 40, other structures 15)
    when inside it, greedy otherwise; whatever blocks gets meleed. Every enemy also shoots while advancing (John, round
    5): `shot_dmg` at the nearest unit, else the nearest structure (`Combat.nearest_structure_in`, a bounded tile scan),
@@ -205,8 +209,14 @@ tests must keep their tiles clear of the right column (x >= 932 px) and the mini
 - Formations are axis-aligned (a line is always east-west, a column north-south, a wedge points north); they do not
   turn toward the move direction. While attacking, units still spread over attack posts (nearest free tile), so a
   formation bends into an arc around the target rather than holding its exact shape.
-- Repair units look 16 tiles around wherever they stand; station one (RMB) near the walls it should look after. A
-  repair unit's first load is fetched from the HQ right after training (the unit itself costs 100, the load 500).
+- Repair units go to whatever is damaged anywhere, nearest first (John, round 16); with a big base they may walk a
+  long way, and a route that needs more than UNIT_PATH_BUDGET expansions falls back to greedy walking (can stall at a
+  wall). A repair unit's first load is fetched from the HQ right after training (the unit costs 100, the load 500).
+- Waves come every 10 minutes flat (round 16; WAVE_FIRST_S / BASE / MIN = 600, DECAY 1.0). Saves keep their running
+  countdown for the next wave, then switch to the 10-minute interval.
+- The demolish tool is a box: press, drag, release (nothing is removed until the release; Esc / RMB cancels); a tiny
+  box removes the one building under the cursor. Del removes the selection (boxed group or single), else the hovered
+  one. The HQ is never removed.
 - With units selected the wheel no longer zooms (Ctrl+wheel does); Esc clears the selection.
 - Deposits: at most one blob per chunk (chance 0.45), digit weights decay**(digit-1) with decay 0.45 near the origin
   -> 0.8 far out (`world/generator.py`); re-probe the economy since 4-9 are now much rarer near the hub.

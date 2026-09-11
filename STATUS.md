@@ -1,5 +1,20 @@
 # STATUS
-_Last updated: 2026-09-12 (v7) by Claude_
+_Last updated: 2026-09-12 (v8) by Claude_
+
+## v8 (2026-09-12): John's round 16 - demolish box, Del on a selection, unit costs, 10-minute waves (tests 143 -> 144)
+- "I can't click and drag to delete": the demolish tool [X] now drags a BOX (red translucent rect, a frame on every
+  structure inside, "demolish N = +refund" at the corner) and removes everything inside on release; a tiny box removes
+  the one under the cursor; Esc / RMB before the release cancels; the HQ is never removed. The old 1-tile-wide sweep
+  along the drag is gone (`Game._end_demolish`, `demolish_targets`, `_structures_in_box` shared with the select box).
+  Del removes the selection (boxed group or single) with a "Demolished N, +refund back" message, else the hovered one.
+- Spawner panels show what [C] costs: single panel "[click] or [C] train a Ranged unit: 50 each   queue 2 (100 paid)";
+  the group panel and the hints line say "[C] train a unit at each of 3 spawners for 250 (Ranged 50 x2, Heavy 150)"
+  (`hud.unit_cost_summary`); the hover line names the unit and its price; the group panel also totals [Del] refunds.
+- Waves every 10 minutes, flat: WAVE_FIRST_S = WAVE_INTERVAL_BASE_S = WAVE_INTERVAL_MIN_S = 600, DECAY 1.0 (was 5 min
+  then 240 s * 0.97^n, min 90 s). Existing saves keep their current countdown, then run 10-minute intervals.
+- Repair units: unlimited range (REPAIR_UNIT_SEARCH None): the nearest damaged unit or building anywhere, nearest first.
+- **Open:** as v7 (John's (-22,2)/(-26,1) Test Lab reports need his layout; formations do not turn; economy not
+  re-balanced; Phase 4 design checkbox; Phase 6 leftovers).
 
 ## v7 (2026-09-12): John's round 15 - formations, patrols, walls block units, repair units (tests 134 -> 143)
 - Middle CLICK with units selected = patrol: `Combat.patrol` hands the group a second formation at the click (`patrol`
@@ -17,7 +32,7 @@ _Last updated: 2026-09-12 (v7) by Claude_
   column assign by the units' current x / y so they do not cross; saved per unit (`formation`, `anchor`).
 - Repair spawner `[=]` (COSTS 100, hp 120) and repair unit (UNIT_COSTS 100; UNIT_STATS hp 40, speed 0.18, heal 25 per
   10 ticks, never fights): heals the nearest damaged player unit (self included) or damaged structure within
-  REPAIR_UNIT_SEARCH 16 tiles from a load of REPAIR_UNIT_CAPACITY 500 numbers at REPAIR_HP_PER_NUMBER 5 hp each (the [H]
+  REPAIR_UNIT_SEARCH (16 tiles here; unlimited since v8) from a load of REPAIR_UNIT_CAPACITY 500 numbers at REPAIR_HP_PER_NUMBER 5 hp each (the [H]
   price; `Factory.heal`, `damaged_structures()` sorted for determinism); empty -> walks to the nearest free tile touching
   the HQ and takes min(500, balance) (event "refill" -> HUD message; waits while broke). Drawn red with a white cross and
   its load underneath; green heal beams (`HEAL`); toolbar button and procedural spawner sprite carry the cross; toolbar

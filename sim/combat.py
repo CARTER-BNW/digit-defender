@@ -912,9 +912,9 @@ class Combat:
 
     def _repair_ai(self, u):
         """Repair unit (John): heal the nearest damaged building or unit
-        within REPAIR_UNIT_SEARCH tiles, spending carried numbers; with the
-        load gone, walk to the HQ and take a new load from the balance (wait
-        there while broke). True when the unit is busy with that."""
+        (anywhere, unless REPAIR_UNIT_SEARCH limits it), spending carried
+        numbers; with the load gone, walk to the HQ and take a new load from
+        the balance (wait there while broke). True when the unit is busy."""
         f = self.factory
         if u.carry <= 0:
             hub = f.hub
@@ -971,8 +971,9 @@ class Combat:
 
     def _repair_target(self, u):
         """Nearest damaged player unit (itself included) or damaged structure
-        within reach; ties go to units, then (y, x) / uid."""
-        best, best_d = None, REPAIR_UNIT_SEARCH
+        within REPAIR_UNIT_SEARCH tiles (None = anywhere; John: a repair unit
+        fixes and heals anything); ties go to units, then (y, x) / uid."""
+        best, best_d = None, (REPAIR_UNIT_SEARCH if REPAIR_UNIT_SEARCH else float("inf"))
         for v in self.units:
             if v.dead or v.hp >= v.max_hp:
                 continue

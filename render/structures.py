@@ -16,7 +16,7 @@ from functools import lru_cache
 import pygame
 
 from settings import (COLORS, COSTS, TEXT_MIN_ZOOM, TILE_SIZE, ITEM_SPACING, SPRITE_DIR,
-                      MINER_PULSE_TICKS, CHUNK_SIZE, TOWER_RANGE)
+                      MINER_PULSE_TICKS, CHUNK_SIZE, TOWER_RANGE, DEMOLISH_REFUND)
 from sim.structures import DIR_VEC, KINDS, ROLE_IN, ROLE_OUT, ROLE_FEED, BACK, Belt
 from render import numbers
 
@@ -541,19 +541,39 @@ def draw_belt_preview(screen, camera, factory, path, turn=0):
         screen.blit(txt, (sx + tp + 2, sy))
 
 
-def draw_demolish_cursor(screen, camera, factory, tile):
-    """Red frame around what the demolish tool would remove."""
+def draw_demolish_cursor(screen, camera, factory, tile, box=None, targets=()):
+    """Red frame around what the demolish tool would remove: the structure
+    under the cursor, or (while dragging) a red box with a frame on every
+    structure inside it and the count + refund at the corner."""
+    tp = camera.tile_px
+    if box is not None:
+        (x0, y0), (x1, y1) = box
+        rect = pygame.Rect(min(x0, x1), min(y0, y1), abs(x1 - x0), abs(y1 - y0))
+        if rect.width >= 4 or rect.height >= 4:
+            fill = pygame.Surface(rect.size, pygame.SRCALPHA)
+            fill.fill((255, 70, 70, 45))
+            screen.blit(fill, rect.topleft)
+            pygame.draw.rect(screen, (255, 70, 70), rect, 1)
+            refund = 0
+            for s in targets:
+                r = s.SIZE // 2
+                sx, sy = camera.tile_to_screen(s.x - r, s.y - r)
+                pygame.draw.rect(screen, (255, 90, 90), (sx, sy, tp * s.SIZE, tp * s.SIZE), 1)
+                refund += int(s.cost * DEMOLISH_REFUND)
+            n = len(targets)
+            label = numbers.text(f"demolish {n} = +{refund}" if n else "nothing here", 14, (255, 110, 110))
+            screen.blit(label, (rect.right + 4, rect.top))
+            return
     if tile is None:
         return
-    tp = camera.tile_px
     s = factory.structure_at(*tile)
-    if s is not None:
+    if s is not None and s is not factory.hub:
         r = s.SIZE // 2
         sx, sy = camera.tile_to_screen(s.x - r, s.y - r)
         size = tp * s.SIZE
         pygame.draw.rect(screen, (255, 70, 70), (sx - 1, sy - 1, size + 2, size + 2), 2)
         if tp >= 12:
-            screen.blit(numbers.text(f"+{int(s.cost * 0.5)}", 14, (255, 110, 110)), (sx + size + 2, sy))
+            screen.blit(numbers.text(f"+{int(s.cost * DEMOLISH_REFUND)}", 14, (255, 110, 110)), (sx + size + 2, sy))
     else:
         sx, sy = camera.tile_to_screen(*tile)
         pygame.draw.rect(screen, (200, 70, 70), (sx, sy, tp, tp), 1)

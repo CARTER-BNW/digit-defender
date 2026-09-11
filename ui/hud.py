@@ -28,6 +28,20 @@ BTN = 60                                        # button size; shrinks so every 
 GAP = 3
 
 
+def unit_cost_summary(spawners):
+    """What one [C] press costs at these spawners: the total, then the price
+    per unit kind, e.g. "250 (Ranged 50 x2, Heavy 150)"."""
+    total = sum(s.unit_cost for s in spawners)
+    counts = {}
+    for s in spawners:
+        counts[s.KIND] = counts.get(s.KIND, 0) + 1
+    parts = []
+    for kind, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
+        cost = next(s.unit_cost for s in spawners if s.KIND == kind)
+        parts.append(f"{TOOL_NAMES.get(kind, kind)} {cost}" + (f" x{n}" if n > 1 else ""))
+    return f"{numbers.fmt(total)} ({', '.join(parts)})"
+
+
 class Hud:
     """Layout (John, round 11): a right column with the balance (centred),
     the targets, the HQ button and a hints panel (menu toggle); the wave timer
@@ -215,7 +229,13 @@ class Hud:
     def _hint_lines(self, game):
         lines = []
         if game.tool == "demolish":
-            lines.append("Demolish   [LMB] click or drag over buildings to remove (50% refund)   [X] or [Esc] to stop")
+            if game.demolish_start is not None:
+                n = len(game.demolish_targets())
+                lines.append(f"Demolish box: {n} structure{'s' if n != 1 else ''} inside   release to remove them (50% refund)   "
+                             "[Esc] or [RMB] cancel")
+            else:
+                lines.append("Demolish   [LMB] click a building, or drag a box over many, to remove them (50% refund)   "
+                             "[X] or [Esc] to stop")
         elif game.tool == "belt":
             n = len(game.belt_path)
             if n:
@@ -249,14 +269,16 @@ class Hud:
             repairs = [u for u in live if u.heal is not None]
             if repairs:
                 loads = ", ".join(f"{u.carry}/{REPAIR_UNIT_CAPACITY}" for u in repairs[:6])
-                lines.append(f"repair units carry {loads}: they fix damaged buildings and heal units within "
-                             f"{REPAIR_UNIT_SEARCH} tiles, and fetch more numbers from the HQ when empty")
+                where = f"within {REPAIR_UNIT_SEARCH} tiles" if REPAIR_UNIT_SEARCH else "anywhere"
+                lines.append(f"repair units carry {loads}: they fix damaged buildings and heal units {where}, "
+                             f"nearest first, and fetch more numbers from the HQ when empty")
         elif game.selected_structures:
             n = len(game.selected_structures)
             up = sum(c for c in (game.factory.upgrade_cost(s) for s in game.selected_structures) if c)
-            rally = "   [RMB] gather point" if any(isinstance(s, Spawner) for s in game.selected_structures) else ""
-            lines.append(f"{n} structures selected   [U] upgrade all for {numbers.fmt(up)}   [H] repair all{rally}"
-                         "   [Shift+drag] add   [Esc] deselect")
+            spawners = [s for s in game.selected_structures if isinstance(s, Spawner)]
+            rally = f"   [C] train a unit at each spawner for {unit_cost_summary(spawners)}   [RMB] gather point" if spawners else ""
+            lines.append(f"{n} structures selected   [U] upgrade all for {numbers.fmt(up)}   [H] repair all   "
+                         f"[Del] demolish all{rally}   [Shift+drag] add   [Esc] deselect")
         else:
             lines.append("[F1] help   [1-9] build  [X] demolish  [R] rotate  [U] upgrade  [Q] pick  drag a box = select  [Space] pause  [ ] speed  [F3] debug")
         tx, ty = game.hover_tile
@@ -279,7 +301,7 @@ class Hud:
                 info += f"  range {s.range}  ammo {list(s.ammo)}" if s.ammo else \
                     f"  range {s.range}  NO AMMO - run a belt or a miner into any side"
             elif isinstance(s, Spawner):
-                info += f"  queue {s.queue}  [click] train {s.UNIT} for {s.unit_cost}"
+                info += f"  queue {s.queue}  [click] or [C] train a {TOOL_NAMES[s.KIND]} unit for {s.unit_cost}"
         lines.append(info)
         sel = game.selected
         if sel is not None and sel is not s:
@@ -290,27 +312,19 @@ class Hud:
     def _draw_panel(self, game, s):
         """Selected-structure panel: level, invested, next threshold, hp,
         rate, buffers, actions. Every number comes from sim.leveling."""
-        pw, ph = 372, 190
+        ph = 190
         x0, y0 = 8, 8                                   # top left (John)
-        self._panel((x0, y0, pw, ph))
-        blit = self.screen.blit
+        rows = []                                       # (dy, surface); the panel grows to the widest line
         name = DISPLAY_NAMES.get(s.KIND, s.KIND)
         facing = "" if s.KIND in ("miner", "wall", "hub", "tower", "bridge") else f"  facing {'NESW'[s.direction]}"
-        blit(numbers.text(f"{name}  ({s.x}, {s.y}){facing}", 15), (x0 + 10, y0 + 8))
-        blit(numbers.text(f"Level {s.level}", 22, (255, 230, 120)), (x0 + 10, y0 + 28))
+        rows.append((8, numbers.text(f"{name}  ({s.x}, {s.y}){facing}", 15)))
+        rows.append((28, numbers.text(f"Level {s.level}", 22, (255, 230, 120))))
         nxt = leveling.next_threshold(s.invested)
         if nxt is None:
             nxt_txt = "max level"
         else:
             nxt_txt = f"next at {numbers.fmt(nxt)}  ({numbers.fmt(nxt - s.invested)} to go)"
-        blit(numbers.text(f"fed {numbers.fmt(s.invested)}   {nxt_txt}", 14, (200, 220, 200)), (x0 + 10, y0 + 56))
-        # hp bar
-        bx, by, bw, bh = x0 + 10, y0 + 80, pw - 20, 12
-        pygame.draw.rect(self.screen, COLORS["hp_bar_bg"], (bx, by, bw, bh))
-        frac = max(0.0, min(1.0, s.hp / s.max_hp)) if s.max_hp else 0
-        pygame.draw.rect(self.screen, COLORS["hp_bar"] if frac > 0.5 else (230, 160, 60) if frac > 0.25 else (230, 70, 60),
-                         (bx, by, int(bw * frac), bh))
-        blit(numbers.text(f"hp {numbers.fmt(s.hp)} / {numbers.fmt(s.max_hp)}", 13), (bx + 4, by - 1))
+        rows.append((56, numbers.text(f"fed {numbers.fmt(s.invested)}   {nxt_txt}", 14, (200, 220, 200))))
         # rate line
         if isinstance(s, Belt):
             rate = (f"speed {s.speed * TICK_RATE:.2f} tiles/s   items {len(s.items)}   "
@@ -329,14 +343,15 @@ class Hud:
                 rate = f"range {s.range}   NO AMMO: run a belt or a miner into any side"
         elif isinstance(s, Spawner):
             nxt = f"next in {s.timer / TICK_RATE:.1f} s" if s.queue else f"{s.period / TICK_RATE:.0f} s per unit"
-            rate = f"[click] or [C] train {s.UNIT} for {s.unit_cost}   queue {s.queue}   {nxt}"
+            rate = (f"[click] or [C] train a {TOOL_NAMES[s.KIND]} unit: {s.unit_cost} each   "
+                    f"queue {s.queue} ({s.queue * s.unit_cost} paid)   {nxt}")
             if s.UNIT == "repair":
-                rate += f"   (repairs buildings, heals units; {REPAIR_UNIT_CAPACITY} numbers per load from the HQ)"
+                rate += f"   (fixes buildings, heals units; {REPAIR_UNIT_CAPACITY} numbers per load from the HQ)"
         elif isinstance(s, Hub):
             rate = "everything delivered here is income"
         else:
             rate = "blocks enemies; joins neighbouring walls; the number is its level"
-        blit(numbers.text(rate, 13, (200, 220, 200)), (x0 + 10, y0 + 100))
+        rows.append((100, numbers.text(rate, 13, (200, 220, 200))))
         # actions
         missing = s.max_hp - s.hp
         repair = f"[H] repair {int(missing * REPAIR_COST_PER_HP + 0.999)}" if missing > 0 else "[H] repair (full)"
@@ -344,18 +359,30 @@ class Hud:
         upgrade = f"[U] upgrade to Lv {s.level + 1} for {numbers.fmt(up_cost)}" if up_cost else "[U] max level"
         refund = int(COSTS.get(s.KIND, 0) * 0.5)
         rot = "" if s.KIND in ("miner", "wall", "tower", "bridge") else "[R] rotate   "
-        actions = f"{rot}[X] demolish +{refund}   {repair}" if not isinstance(s, Hub) else "the HQ cannot be moved"
-        blit(numbers.text(f"{upgrade}   {actions}", 13, (255, 230, 120)), (x0 + 10, y0 + 124))
+        actions = f"{rot}[Del] demolish +{refund}   {repair}" if not isinstance(s, Hub) else "the HQ cannot be moved"
+        rows.append((124, numbers.text(f"{upgrade}   {actions}", 13, (255, 230, 120))))
         if isinstance(s, Spawner):
             roles = f"alive {game.combat.count_units_of(s)}   [RMB] on the map = gather point (new and idle units)"
         else:
             roles = "sides F/R/B/L: " + " / ".join(str(r) for r in type(s).SIDE_ROLES)
-        blit(numbers.text(roles, 12, (170, 190, 170)), (x0 + 10, y0 + 146))
+        rows.append((146, numbers.text(roles, 12, (170, 190, 170))))
         if ROLE_FEED in type(s).SIDE_ROLES:
             hint = "feed sides level it up too: belt numbers into a yellow side"
         else:
             hint = "no feed sides here: level it up with [U]"
-        blit(numbers.text(hint, 12, (170, 190, 170)), (x0 + 10, y0 + 164))
+        rows.append((164, numbers.text(hint, 12, (170, 190, 170))))
+        pw = max(372, max(r.get_width() for _, r in rows) + 20)
+        self._panel((x0, y0, pw, ph))
+        blit = self.screen.blit
+        for dy, surf in rows:
+            blit(surf, (x0 + 10, y0 + dy))
+        # hp bar (drawn over the panel, under the rate line)
+        bx, by, bw, bh = x0 + 10, y0 + 80, pw - 20, 12
+        pygame.draw.rect(self.screen, COLORS["hp_bar_bg"], (bx, by, bw, bh))
+        frac = max(0.0, min(1.0, s.hp / s.max_hp)) if s.max_hp else 0
+        pygame.draw.rect(self.screen, COLORS["hp_bar"] if frac > 0.5 else (230, 160, 60) if frac > 0.25 else (230, 70, 60),
+                         (bx, by, int(bw * frac), bh))
+        blit(numbers.text(f"hp {numbers.fmt(s.hp)} / {numbers.fmt(s.max_hp)}", 13), (bx + 4, by - 1))
 
     def _draw_hub_alert(self, game):
         """Pulsing red frame along the screen edges while the hub takes damage."""
@@ -377,29 +404,38 @@ class Hud:
         self.screen.blit(txt, (w // 2 - txt.get_width() // 2, 46))
 
     def _draw_group_panel(self, game):
-        """Drag-box selection: counts per kind, total upgrade / repair cost."""
+        """Drag-box selection: counts per kind, total upgrade / repair /
+        demolish figures, and what [C] would cost at the spawners inside."""
         group = game.selected_structures
-        pw, ph = 372, 118
         x0, y0 = 8, 8                                   # top left, like the single panel
-        self._panel((x0, y0, pw, ph))
-        blit = self.screen.blit
+        rows = []                                       # (dy, surface); the panel grows to the widest line
         counts = {}
         for s in group:
             counts[s.KIND] = counts.get(s.KIND, 0) + 1
         kinds = ", ".join(f"{DISPLAY_NAMES.get(k, k.capitalize())} x{n}"
                           for k, n in sorted(counts.items(), key=lambda kv: -kv[1]))
-        blit(numbers.text(f"{len(group)} structures selected", 15), (x0 + 10, y0 + 8))
-        blit(numbers.text(kinds, 13, (200, 220, 200)), (x0 + 10, y0 + 30))
+        rows.append((8, numbers.text(f"{len(group)} structures selected", 15)))
+        rows.append((30, numbers.text(kinds, 13, (200, 220, 200))))
         levels = [s.level for s in group]
-        blit(numbers.text(f"levels {min(levels)} - {max(levels)}", 13, (200, 220, 200)), (x0 + 10, y0 + 50))
+        rows.append((50, numbers.text(f"levels {min(levels)} - {max(levels)}", 13, (200, 220, 200))))
         up = sum(c for c in (game.factory.upgrade_cost(s) for s in group) if c)
         missing = sum(max(0, s.max_hp - s.hp) for s in group)
         rep = int(missing * REPAIR_COST_PER_HP + 0.999) if missing else 0
-        blit(numbers.text(f"[U] upgrade all for {numbers.fmt(up)}   [H] repair all for {numbers.fmt(rep)}", 13, (255, 230, 120)),
-             (x0 + 10, y0 + 74))
-        n_sp = sum(1 for s in group if isinstance(s, Spawner))
-        rally = f"[C] queue a unit at each of {n_sp} spawner{'s' if n_sp > 1 else ''}   [RMB] gather point   " if n_sp else ""
-        blit(numbers.text(f"{rally}[Shift+drag] add more   [Esc] deselect", 12, (170, 190, 170)), (x0 + 10, y0 + 96))
+        refund = sum(int(COSTS.get(s.KIND, 0) * 0.5) for s in group)
+        rows.append((74, numbers.text(f"[U] upgrade all for {numbers.fmt(up)}   [H] repair all for {numbers.fmt(rep)}   "
+                                      f"[Del] demolish all +{numbers.fmt(refund)}", 13, (255, 230, 120))))
+        spawners = [s for s in group if isinstance(s, Spawner)]
+        dy = 96
+        if spawners:
+            n_sp = len(spawners)
+            rows.append((dy, numbers.text(f"[C] train a unit at each of {n_sp} spawner{'s' if n_sp > 1 else ''} for "
+                                          f"{unit_cost_summary(spawners)}   [RMB] gather point", 12, (255, 230, 120))))
+            dy += 18
+        rows.append((dy, numbers.text("[Shift+drag] add more   [Esc] deselect", 12, (170, 190, 170))))
+        pw = max(372, max(r.get_width() for _, r in rows) + 20)
+        self._panel((x0, y0, pw, dy + 22))
+        for off, surf in rows:
+            self.screen.blit(surf, (x0 + 10, y0 + off))
 
     MINI_W, MINI_H, MINI_TILES = 440, 300, 128      # panel px (2x, John) and tiles shown across
 
@@ -479,20 +515,22 @@ class Hud:
         "B = bridge: two lines cross without mixing (whatever enters a side leaves through the opposite side);",
         "a bridge can be dropped straight onto a belt of a finished line (the belt's numbers carry on across it).",
         "Drag off the MIDDLE of a line to branch it; from its END the last belt turns; dragging backwards reverses it.",
-        "X = demolish tool: click or drag over buildings (50% refund), X or Esc to stop.   Del = remove the hovered one",
+        "X = demolish tool: click a building or drag a box over many (50% refund), X or Esc to stop.   Del = remove",
+        "the selected building(s) (a boxed group too), else the one under the cursor.",
         "click = select (panel on the right); drag a box = select many (U upgrades / H repairs them all)   RMB = cancel",
         "wheel zoom   MMB drag / WASD pan (Shift fast)   Space pause   [ ] sim speed x1 x2 x4   F3 debug   F11 fullscreen",
         "Belts: items enter from behind or the sides; a belt pointing INTO another belt's front FEEDS it (levels it up).",
         "Machines: every side but the front is an input (left = A, right = B, back = the emptier one); output in front.",
         "HQ: deliver from any side = income.  Feed sides (yellow) level belts/walls/spawners; U levels anything.",
         "Towers (range 10): run a belt or put a miner beside one, any side; it fires those numbers. Red frame = no ammo.",
-        "Spawners: click one (or press C with one or a boxed group selected) to train a unit (costs balance); new units",
-        "walk to its gather point beside the HQ. RMB with spawners selected = gather point for units trained from then on.",
+        "Spawners: click one (or press C with one or a boxed group selected) to train a unit (Ranged 50, Melee 50, Heavy 150,",
+        "Repair 100; the panel shows the price); new units walk to its gather point beside the HQ. RMB with spawners",
+        "selected = gather point for units trained from then on.   Waves come every 10 minutes.",
         "Units: click or drag a box to select (Shift adds), RMB moves them. Attackers each take their own tile.",
         "With units selected the WHEEL cycles their formation (box, line, column, wedge, ring; it sticks to the group;",
         "Ctrl+wheel zooms) and a MIDDLE CLICK sets a patrol: they walk between their rally point and the clicked point.",
         "Units walk over belts and bridges but never through walls or buildings: leave a gap in a wall line as a gate.",
-        "= Repair spawner (100): its units (red, white cross) fix damaged buildings and heal units within 16 tiles",
+        "= Repair spawner (100): its units (red, white cross) fix damaged buildings and heal units anywhere, nearest first,",
         "from a load of 500 numbers (5 hp per number, the [H] price) and walk to the HQ for a new load when empty.",
         "Targets: deliver the shown amount of that number for the bonus; the slot then levels up (bigger number and amount).",
         "Waves come from the red edge arrow. HQ destroyed = game over.",
