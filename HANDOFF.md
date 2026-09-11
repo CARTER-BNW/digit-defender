@@ -1,28 +1,34 @@
 # HANDOFF — Digit Defender
-_Last updated: 2026-09-11 (v5, after John's second play-test feedback) by Claude_
+_Last updated: 2026-09-12 (v6, after fourteen rounds of John's play-test feedback) by Claude_
 
 New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHASES.md (checkpoints), docs/GOTCHAS.md.
 
 ## Live state
-- **Phases 0-5 are built and verified by script** (tests + real-window runs + screenshots). Phase 6 (polish) is
-  in progress. 106 pytest tests green (`python -m pytest -q`, ~4 s).
-- **John has play-tested three times; every item of his feedback is implemented** (STATUS v4 + v5). Round 3 (v5):
-  towers range 10 with a range disc (hover/select/ghost) and a red frame + "0" when out of ammo; spawners train
-  only when clicked (units cost 50/50/150 per idea.txt, queue count on the sprite, no M/H/R letter); units gather
-  one per tile in a grid beside the hub, walk along grid lines, click/drag-box select + RMB move; belt items
-  remember their entry side so corners animate as an L instead of jumping edges; walls join neighbours with
-  connector bars and show their level; `[U]` upgrade pays balance up to the next level; hub hp bar sits under
-  the HUB label, one tile wide; Esc in the menu resumes the last world; corners/merges never become splitters;
-  player units survive save/load.
-- John is drawing more sprites (miner, machines, hub...). The loader picks up `assets/sprites/<kind>.png` automatically
-  (wall.png, if it arrives, is drawn over the procedural connector bars).
+- **Phases 0-5 are built and verified** (tests + real-window runs + screenshots). Phase 6 (polish) is in progress.
+  134 pytest tests green (`python -m pytest -q`, ~7 s). Last commit: bridges + junction rules + Test Lab (2026-09-12).
+- **John play-tested fourteen rounds on 2026-09-11/12; every item is implemented** (STATUS v4-v6 list them round by
+  round, HANDOFF decisions 1-11 below hold the resulting rules). The game he now has, in one breath: a 6x6 HQ; belts
+  drawn by drag with a transparent preview (Shift = straight L, R turns the drag), items that curve through corners;
+  junctions = merge by pointing in, split only with [T] or an unfed belt starting beside a line, [B] bridge to cross;
+  machines take operands on all three non-output sides; towers take ammo from any side, range 10, buffer 20+10/level;
+  walls link and show their level; hp only moves on level-ups, [U] buys the next level at a fixed geometric price;
+  spawners train paid units on click / [C], units gather one per tile beside the HQ, are commanded RTS-style and fight
+  from distinct posts; enemies shoot while advancing and melee in contact; four levelled targets that want an amount
+  of a number and pay 10-20x; a guaranteed enemy camp 100 tiles out; sparse rarity-weighted deposits; HUD right column
+  + top-left info panel + 2x minimap + hints toggle; X demolish tool; delete worlds from the menu.
+- **Test Lab**: `python main.py --testworld` (or the menu entry "Test lab") opens a hand-built world with every part and
+  junction laid out around the HQ (legend in `world/testworld.py`). John will bug-hunt there; when he reports a tile
+  coordinate, rebuild the scene from the legend and reproduce headlessly (tests/test_testworld.py shows how).
+- John is drawing PNG sprites: 32x32 per tile (hub.png 192x192 for the 6x6 HQ; bridge.png never rotated), drawn facing
+  LEFT, pure white/magenta transparent, named by kind in `assets/sprites/` (belt shapes: belt, belt_corner, belt_t,
+  belt_cross). wall.png, if it arrives, is drawn over the procedural connector bars.
 - **Code changes need a game restart** (a running `python main.py` keeps the code it started with).
-- Directory: D:\Claude\projects\games\Digit Defender (local git on `main`, no remote). Saves in `saves/` (gitignored),
-  machine prefs in `config.json` (gitignored).
-- Run: `python main.py` (menu) or `python main.py --world NAME [--seed N]` (skip menu), `--frames N` auto-quit,
-  `--autosave S`, `--fullscreen`. `run.bat` passes args through.
+- Directory: D:\Claude\projects\games\Digit Defender (local git on `main`, no remote). Saves in `saves/` (gitignored;
+  "Test Lab" lives there too), machine prefs in `config.json` (gitignored; holds fullscreen, hints, last world).
+- Run: `python main.py` (menu) or `python main.py --world NAME [--seed N]` (skip menu), `--testworld`, `--frames N`
+  auto-quit, `--autosave S`, `--fullscreen`. `run.bat` passes args through.
 - Open design checkbox in Phase 4: John to confirm feed-side rules and voiding of <= 0 results (implemented per PLAN;
-  he has now played with them without objection, so likely just tick it).
+  he has played with them for a day without objection, so likely just tick it).
 
 ## Health check (what "working" looks like)
 1. `python -m pytest -q` -> all green.
@@ -33,15 +39,15 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
    drag turns every belt a quarter (twice = the line runs backwards), release builds it, drag back undoes; a drag off
    the middle of a line leaves that belt alone so the new belt is a T branch, from a line's end the last belt turns,
    dragging backwards over a line reverses it; other kinds place on every tile crossed), Q pick, H repair, U upgrade
-   (fixed level price), click = select (panel on the right; decided on
-   release), drag a box — even one that starts on a belt — = select every structure inside (U/H apply to all; group
-   panel; Shift+click adds one) and/or units, click a spawner = train one unit,
+   (fixed level price), T = force/release a T-junction on a belt, B = bridge tool, click = select (info panel top
+   left; decided on release), drag a box — even one that starts on a belt — = select every structure inside (U/H/T/C
+   apply to all; group panel; Shift+click adds one) and/or units, click a spawner or press C = train one unit,
    click / Shift+click / drag a box = select units, RMB = move selected units (grid formation) or set the gather
-   point of the selected spawner(s) (a boxed group shares one point; their idle units regroup) or cancel,
+   point of the selected spawner(s) for units trained from then on, or cancel,
    wheel zoom, MMB drag pan, WASD pan (Shift fast), F3 debug, Space pause, [ ] sim speed x1/x2/x4, F1 help overlay,
-   Home or the HUB button = camera back to the hub, F6 spawn an enemy at the cursor, F7 trigger the next wave,
-   F11 fullscreen, Esc = cancel tool / clear selection / menu (Esc in the menu = back into the game; Del in the menu
-   deletes the highlighted world after a confirm screen). Minimap bottom-right.
+   Home or the HQ button = camera back to the HQ, minimap click = recentre there, F6 spawn an enemy at the cursor,
+   F7 trigger the next wave, F11 fullscreen, Esc = cancel tool / clear selection / menu (Esc in the menu = back into
+   the game; Del in the menu deletes the highlighted world after a confirm screen). Minimap bottom-right (2x).
 4. Belt rules a player sees (final, round 14): a belt pointing into another belt's side or back MERGES (T / X shapes
    with several inputs). A belt SPLITS only when [T] is pressed on it, or when an unfed belt starts beside a straight
    belt (auto branch); splitting belts show small arrows at every exit and alternate items between them. [B] bridge =
@@ -155,13 +161,14 @@ tests must keep their tiles clear of the right column (x >= 932 px) and the mini
 - No way to cancel a queued unit (refund) yet; an accidental click on a spawner costs its unit price.
 - Units are picked within 0.6 tile of the click; box select needs a 4 px drag. Selected units are not saved (selection is
   transient); their slots are.
-- Four-side miners plus 2-items/tile belts changed the economy since the balance probe (income up, belt throughput 2/s at
-  base speed); paid units are a new drain; re-run scratch bot_player.py or just watch John play before touching numbers.
+- The economy has drifted far from the STATUS v3 probe: four-side miners, 2 items/tile belts, paid units, 10-20x target
+  bonuses (a level-1 target pays 350-900), fixed geometric upgrade prices, sparse deposits. Nothing has been re-balanced
+  on purpose; do a balance pass only after John says the mechanics feel right (bot_player.py in scratch is stale).
+- Auto-branch reminder: an unfed belt that starts beside a straight belt becomes a branch on its own; if John reports a
+  "surprise split", that rule is the first suspect (the exit arrows on splitting belts show it).
 - Sprite label sizes/positions were tuned for the procedural art; check them once John's miner/machine PNGs land.
-- Balance only probed by a scripted player (STATUS v3): survivable and growing through wave 4 with 2-4 belt-fed towers next to the hub;
-  a single 3-miner cannot keep a tower stocked in long fights.
 - Item spacing is half a tile (2 per tile) so numbers do not overlap; belt throughput is 2 items/s at base speed.
-- Custom PNG sprites: assets/sprites/<kind>.png, 32x32 per tile (hub 96x96), facing left (see README).
+- Custom PNG sprites: assets/sprites/<kind>.png, 32x32 per tile (hub 192x192), facing left (see README).
 - Player units are not blocked by structures (by design for now). Enemies shoot over walls (3-5 tiles); towers (10)
   and ranged units (6) outrange them.
 - Deposits: at most one blob per chunk (chance 0.45), digit weights decay**(digit-1) with decay 0.45 near the origin
@@ -171,7 +178,9 @@ tests must keep their tiles clear of the right column (x >= 932 px) and the mini
   (60k-tile cap) can cost ~200 ms when structures change during a wave (throttled to every 2 s).
 
 ## Next actions
-1. Expect more play-test feedback from John (he reports glitches with screenshots); fix, screenshot-verify, commit.
-2. When his remaining PNGs arrive: same convention (32x32, hub 96x96, facing left, white transparent); check label overlap.
-3. Tick the Phase 4 design checkbox if John confirms; then remaining Phase 6 items (sounds, stats graphs, blueprints,
+1. Expect bug reports from the Test Lab (John gives tile coordinates / screenshots): rebuild the scene from the legend
+   in `world/testworld.py`, reproduce headlessly, fix, screenshot-verify in a real window, commit (local only).
+2. When his remaining PNGs arrive: same convention (32x32, hub 192x192, facing left, white transparent); check label
+   overlap on miners/machines/spawners and the bridge.
+3. Tick the Phase 4 design checkbox if John confirms; then the remaining Phase 6 items (sounds, stats graphs, blueprints,
    balance pass) per docs/PHASES.md; keep `/phase-gate` discipline and the gotchas log.

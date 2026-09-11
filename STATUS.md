@@ -1,7 +1,8 @@
 # STATUS
-_Last updated: 2026-09-11 (v6) by Claude_
+_Last updated: 2026-09-12 (v6) by Claude_
 
-## v6 (2026-09-11, evening): John's fourth round - demolish tool, group select, belt preview
+## v6 (2026-09-11 evening to 2026-09-12): John's rounds 4-14, all implemented (tests 110 -> 134)
+Round 4 opened this entry; every later round the same day was appended below as a "Round N" bullet.
 - X is a toggle tool ("Demolish", last toolbar button, 50% refund): click removes one structure, click-and-drag sweeps;
   a fast drag walks every tile between mouse samples (`Game._tiles_between`, also used for wall/tower drag-placing, so
   no more gaps). Red frame + refund over the hovered target. Del stays a one-shot. Holding X no longer sweeps.
@@ -75,6 +76,9 @@ _Last updated: 2026-09-11 (v6) by Claude_
   merge, bridge crossing, auto branch, four machines with routed outputs, towers stocked/empty, three spawners with
   queues, levelled walls and belts); `--testworld` / menu "Test lab" opens it (built once into a world named
   "Test Lab"); tests/test_bridge.py + tests/test_testworld.py. Toolbar 13 buttons (60 px). Tests 128 -> 134.
+- **Open:** John bug-hunts in the Test Lab next; no dequeue/refund for queued units; the economy has not been
+  re-balanced after paid units, 10-20x target bonuses and sparse deposits; Phase 4 design checkbox; Phase 6 leftovers
+  (sounds, stats graphs, blueprints, balance pass). HANDOFF v6 is the cold-start document.
 
 
 ## v5 (2026-09-11, afternoon): John's third round of play-test feedback, all implemented
