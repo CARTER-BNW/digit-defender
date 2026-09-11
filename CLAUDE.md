@@ -20,6 +20,7 @@ Design is finalized and approved — @docs/PLAN.md is the authority.
 - Deps: `pip install -r requirements.txt`
 - Run: `python main.py` (menu) / `python main.py --world NAME` (skip menu) / `run.bat`
 - Tests: `python -m pytest`
+- Android: `python android\sync.py all` (sync copy -> build APK in the WSL box `dd-android` -> adb install + run + logs); `/android_update_copy` walks it with checks; `android/README.md` has the phone controls
 
 ## Ground rules (non-negotiable — rationale in @docs/PLAN.md)
 - `sim/` NEVER imports pygame. All factory/combat logic must be testable headless with pytest.
@@ -57,12 +58,17 @@ Add one line per file as files are created, stating what that file owns (layout:
 - `ui/menu.py` — world-select menu (Continue / New World name+seed / recent worlds / Fullscreen / Quit; Esc resumes the last world), blocking loop, max_frames for smoke runs
 - `world/persistence.py` — saves/<slug>/{meta,structures,enemies}.json + chunks/*.bin, atomic write_json (.tmp -> .bak rotation), read_json .bak fallback, world registry (slugify/create/list/find_or_create), config.json, save_world/load_world
 - `world/testworld.py` — the "Test Lab" layout (every part and junction type around the HQ; `build(factory)`, `is_empty`, `top_up` adds legend parts an older lab save lacks), opened by `--testworld` or the menu entry
-- `tests/` — test_smoke, test_generator, test_camera, test_terrain, test_game (headless pan/zoom/streaming/UI), test_belts, test_bridge, test_machines, test_economy, test_leveling, test_combat, test_persistence, test_testworld
+- `tests/` — test_smoke, test_generator, test_camera, test_terrain, test_game (headless pan/zoom/streaming/UI), test_belts, test_bridge, test_machines, test_economy, test_leveling, test_combat, test_persistence, test_testworld, test_android_touch (finger events through the mobile layer)
+- `android/sync.py` — Windows-side Android tool: `sync` (copy game + mobile/ into android/app, bump VERSION, rewrite buildozer.spec version, draw icon/presplash), `setup` (import the Ubuntu WSL distro `dd-android` to D:\WSL + toolchain), `build`/`clean` (wsl/build.sh: rsync to ~/dd-android, buildozer, APK back to android/bin), `install`/`run`/`logs` (adb), `status`
+- `android/mobile/touch.py` — TouchLayer: finger events -> the mouse/key events Game understands (tap = LMB, long press = RMB, one-finger drag = pan or LMB drag with a tool / Box armed, two-finger drag = pan, pinch = discrete zoom, two-finger tap = MMB), on-screen hotkey buttons (left column + right block), STATE read by the pygame patches (sticky Shift mods, last finger pos)
+- `android/mobile/entry.py` — the APK's main: MobileGame (Game + touch layer, drops SDL's mirrored mouse events, saves on APP_WILLENTERBACKGROUND, F11 no-op) and MobileMenu (soft keyboard on New World), pygame patches (Back key -> Escape in every event loop, key.get_mods, mouse.get_pos), SCALED 720-px-high canvas, saves redirected to the app's private dir; `--desktop` emulates the phone in a window (mouse = finger)
+- `android/buildozer.spec`, `android/wsl/*.sh`, `android/README.md`, `android/VERSION` — packaging config (python3, pygame, numpy, opensimplex; arm64; landscape), build-box scripts, phone controls / pipeline docs; `android/app`, `bin`, `build.log` are generated and gitignored
 
 ## Project rules
 - Discover a trap → log it in @docs/GOTCHAS.md immediately (`/gotcha`).
 - Phase gates: don't start the next phase until the current phase's checkpoints are verified (`/phase-gate`).
 - End of session: new vN entry in @STATUS.md, refresh HANDOFF.md, commit (`/session-wrap`). Local git only — no push.
+- Android copy: after desktop changes John wants on the phone, run `/android_update_copy` (the desktop code is the master; only `android/mobile/` is phone-specific).
 - Never commit data dumps, logs, saves/, or secrets — .gitignore covers these; keep it that way.
 
 ## Pointers

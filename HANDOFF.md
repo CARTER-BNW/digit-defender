@@ -1,13 +1,22 @@
 # HANDOFF — Digit Defender
-_Last updated: 2026-09-12 (v8, after John's round 16: demolish box, Del on a selection, unit costs on spawner panels,
-10-minute waves, repair units with unlimited range) by Claude_
+_Last updated: 2026-09-12 (v9: the Android copy runs on John's Pixel 9a; `/android_update_copy` refreshes it) by Claude_
 
 New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHASES.md (checkpoints), docs/GOTCHAS.md.
 
 ## Live state
 - **Phases 0-5 are built and verified** (tests + real-window runs + screenshots). Phase 6 (polish) is in progress.
-  144 pytest tests green (`python -m pytest -q`, ~9 s). Last commits: 6606f99 (round 15) and cbf056b (round 16) on
-  2026-09-12, then this session wrap. Working tree clean.
+  156 pytest tests green (`python -m pytest -q`, ~10 s). Last commits: cbf056b (round 16), 6d00eaf (wrap v8),
+  then the Android commit of 2026-09-12 (STATUS v9).
+- **Android copy (2026-09-12, STATUS v9):** `android/` = the untouched desktop game + `android/mobile/` (touch
+  layer: tap / long press / drags / pinch / two-finger tap + on-screen hotkey buttons; `entry.py` is the APK's
+  main), packaged by python-for-android inside the WSL distro `dd-android` (Ubuntu on `D:\WSL`, everything on
+  D:, no Docker - John's call). `python android\sync.py all` = sync copy -> build -> adb install -> run -> log
+  dump; `/android_update_copy` is the checked walkthrough; `android/README.md` has the pipeline table and the
+  phone controls. APK 0.1.0 (pygame-ce 2.5.8, CPython 3.14, targetSdk 36, arm64) is installed on his Pixel 9a
+  and was driven by adb: menu, Test Lab running, Pause by touch, swipe pan, Back -> menu, saves in the app's
+  private dir. **John has not played it yet**; expect touch-feel feedback (button sizes, 1.5x text, soft
+  keyboard on New World). Every build trap hit is in docs/GOTCHAS.md (five Android entries); keep the game on
+  APIs pygame-ce offers on Android (no SysFont: `consolas` falls back to the default font there).
 - **John play-tested sixteen rounds on 2026-09-11/12; every item is implemented** (STATUS v4-v8 list them round by
   round, HANDOFF decisions 1-11 below hold the resulting rules). The game he now has, in one breath: a 6x6 HQ; belts
   drawn by drag with a transparent preview (Shift = straight L, R turns the drag), items that curve through corners;
@@ -71,6 +80,9 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
    finished line (round 15). Numbers cannot be built on except by miners; a miner pushes into every adjacent cargo input.
 5. `python main.py --testworld` (or the menu entry "Test lab") opens the Test Lab world: every part and junction type
    laid out around the HQ (legend in `world/testworld.py`; tests/test_testworld.py checks it runs as documented).
+6. Android: `python android\sync.py status` shows the phone (`device`), the build box and the latest APK;
+   `python android\sync.py all` rebuilds and reinstalls (2-5 min after the first build); `python
+   android\app\main.py --desktop --world lab` shows the phone layout in a window with the mouse as a finger.
 
 ## Architecture in one screen (details: CLAUDE.md architecture map, docs/PLAN.md)
 - `sim/` is headless (no pygame): `factory.py` (structures dict, fixed tick order, belt chain ordering, economy, damage,
@@ -222,6 +234,10 @@ tests must keep their tiles clear of the right column (x >= 932 px) and the mini
   (60k-tile cap) can cost ~200 ms when structures change during a wave (throttled to every 2 s).
 
 ## Next actions
+0. John's first phone session: expect feedback on the touch layer (`android/mobile/touch.py`: gestures,
+   button sizes, long-press delay, text at 1.5x, world naming via the soft keyboard). Change the touch layer
+   or the desktop code, then `/android_update_copy` (sync -> build -> install -> run -> logs); the desktop code
+   stays the master and `android/app/` is never edited by hand.
 1. Expect the next round of play-test feedback (John gives tile coordinates / screenshots, usually from the Test Lab):
    rebuild the scene from the legend in `world/testworld.py`, reproduce headlessly, fix, screenshot-verify (dummy
    driver + Read the PNG is fine; keep scene tiles clear of the HUD rects), commit (local only). His existing Test Lab

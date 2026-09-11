@@ -1,5 +1,43 @@
 # STATUS
-_Last updated: 2026-09-12 (v8) by Claude_
+_Last updated: 2026-09-12 (v9) by Claude_
+
+## v9 (2026-09-12): Android copy - the game runs on John's Pixel 9a (tests 144 -> 156)
+John: "i want a copy of this game so i can play on android ... make a new command /android_update_copy".
+Everything on D: and no Docker (his call when Docker Desktop came up as a build-box candidate).
+- `android/` holds the phone build: `mobile/touch.py` (TouchLayer: tap = LMB, long press = RMB, one-finger
+  drag = pan, or the LMB drag with a build tool / [Box] armed, two-finger drag = pan, pinch = discrete zoom at
+  the pinch, two-finger tap = MMB patrol; on-screen hotkey buttons left (Rot Esc Del Pick Upg Fix Split Train
+  Shift Box HQ Form) and right (Zoom -/+ Pause Speed Help Save Menu, Load on game over), version tag),
+  `mobile/entry.py` (the APK's main: MobileGame subclasses Game through handle_event/update/draw, drops SDL's
+  mirrored mouse events, saves on APP_WILLENTERBACKGROUND, F11 no-op; MobileMenu opens the soft keyboard on
+  New World; pygame patches: Back -> Escape in every event loop, sticky Shift in key.get_mods, mouse.get_pos =
+  last finger; SCALED canvas 720 px high, Pixel 9a 2424x1080 -> 1616x720 at 1.5x; saves + config in the app's
+  private dir `files/digit_defender/`, which survives updates; hints off by default), `sync.py`
+  (sync/setup/build/clean/install/run/logs/status/all), `wsl/setup.sh` + `wsl/build.sh`, `buildozer.spec`,
+  `p4a-recipes/pygame` (pygame-ce 2.5.8 local recipe), `manifest_application_args.xml`, `VERSION`,
+  `icon.png`/`presplash.png` (drawn by sync), README with the controls. Generated and gitignored: `android/app/`
+  (the synced copy + a main.py stub), `bin/*.apk`, `build.log`.
+- Build box: Ubuntu 24.04 WSL distro `dd-android` imported to `D:\WSL\dd-android` (root; buildozer 1.6.0,
+  Cython 3.3, libltdl-dev). python-for-android master (May 2026): CPython 3.14.2, SDL 2.30.11, numpy from git,
+  NDK r28c, targetSdk 36, arm64-v8a. First build: SDK/NDK download + ~12 min compiling; rebuilds 0.5-4 min.
+- Traps hit, all in docs/GOTCHAS.md: `wsl -- bash -c script args` drops the args (env assignments instead);
+  libffi's autoreconf needs libltdl-dev; p4a's pygame 2.1.0 recipe cannot build on Python 3.14 -> local
+  pygame-ce recipe with `hostpython_prerequisites` Cython and the pyproject build backend swapped to setuptools
+  for p4a's `pip install .`; Android 16 Play Protect refuses targetSdk 33 (`INSTALL_FAILED_VERIFICATION_FAILURE`)
+  -> API 36 plus a re-created dist (p4a bakes the API into `project.properties`; build.sh now does that itself);
+  predictive back on targetSdk 36 closes the app before SDL sees the key -> `android:enableOnBackInvokedCallback="false"`.
+- Skill `/android_update_copy` (.claude/skills/android_update_copy/SKILL.md): status check, sync, optional
+  desktop-mode look, background build with log reading, install/run/logs, report.
+- Tests: `tests/test_android_touch.py` (12): tap places a belt, long press = RMB cancels the tool, one-finger
+  drag pans, belt drag builds a line, pinch zooms both ways, a second finger cancels a belt drag and pans,
+  two-finger tap, overlay buttons (Rot/Esc/Shift/Zoom/Pause/Speed, Load only on game over), Box + drag selects,
+  K_AC_BACK -> Escape in the queue, desktop mouse emulation, `entry.main --desktop` headless smoke. 156 green.
+- Verified on the phone (adb screenshots + logcat, APK 0.1.0, 25 MB): menu, Test Lab running (items flowing,
+  targets levelling, units out), Pause via a real touch, a one-finger swipe pans exactly 300 device px, Back ->
+  menu with the app alive, the save written to `files/digit_defender/saves/Test_Lab`, config `last_world`;
+  CPU ~70% of one core; no tracebacks (only pygame's missing-`consolas` warnings: default font).
+- **Open:** John has not played it yet (touch feel, button sizes, text legibility at 1.5x, the soft keyboard on
+  the New World screen); economy / Phase 4 checkbox / Phase 6 leftovers as v8.
 
 ## v8 (2026-09-12): John's round 16 - demolish box, Del on a selection, unit costs, 10-minute waves (tests 143 -> 144)
 Commits 6606f99 (round 15, see v7) and cbf056b (round 16); session wrap after that.

@@ -76,3 +76,7 @@ blueprints, pause/speed controls, balance pass.
 - [ ] Stats graphs
 - [ ] Copy/paste blueprints
 - [ ] Balance pass (after John's play test)
+- [x] Android copy (John, 2026-09-11): `android/` = the desktop game + a touch layer, packaged by
+      python-for-android in the WSL box `dd-android`, refreshed with `/android_update_copy`
+      (`python android\sync.py all`). 2026-09-12: APK 0.1.0 installed on his Pixel 9a and driven by adb
+      (menu, Test Lab running, Pause by touch, swipe pan, Back -> menu, save in the private dir); John to play-test
