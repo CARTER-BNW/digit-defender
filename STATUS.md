@@ -1,5 +1,20 @@
 # STATUS
-_Last updated: 2026-09-11 (v3) by Claude_
+_Last updated: 2026-09-11 (v4) by Claude_
+
+## v4 (2026-09-11, morning): John's first play-test feedback, two rounds, all implemented
+- Round 1 (commit 0b652c5): belts drawn as strips with a much smaller, darker arrow; belt numbers plain (no circle) and
+  ink-centred (render/numbers.glyph); numbers on miners/machines/deposits centred too; ITEM_SPACING 0.25 -> 0.5 so numbers
+  never overlap (item font 0.44 tile); stalled/T-junction jitter fixed (render interpolation obeys the spacing rule);
+  miners push their digit into every adjacent cargo input (never feed sides, so miners cannot level each other), no arrow,
+  white border pulse on each extraction (MINER_PULSE_TICKS); HUB button + Home key; PNG sprite overrides in assets/sprites.
+- Round 2 (2df4160, 1e1c19b, ea04ecd, 27937ef): sprites are drawn facing LEFT (John's convention), pure white and magenta
+  are transparent; connection-aware belt shapes (straight/corner/T/cross, rotated to match openings) using John's four
+  belt PNGs; links (belt shapes, miner outputs) rebuild immediately even while paused; no facing/rotate for miners+walls;
+  implicit splitters: belt outputs = front target + belts beside it pointing straight away, items alternate evenly
+  (round-robin cursor saved), Kahn downstream-first ordering; only miners may be placed on number tiles.
+- Tests 92 -> 97 (four-side miners, connection sides, splitter split/shape/order, deposit rule, build-while-paused).
+- **Open:** John keeps play-testing and drawing sprites; Phase 4 design checkbox; Phase 6 leftovers (sounds, stats,
+  blueprints, balance pass). Economy shifted (4-side miners, 2 items/tile) - re-probe before tuning.
 
 ## v3 (2026-09-11, overnight autonomous run): Phase 0 + Phase 1 done
 - John went to bed with "do all you can"; phases verified by running them (tests + scripted real window + screenshots), not by demo.

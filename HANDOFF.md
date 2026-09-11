@@ -1,17 +1,24 @@
 # HANDOFF — Digit Defender
-_Last updated: 2026-09-11 (v3, overnight autonomous run) by Claude_
+_Last updated: 2026-09-11 (v4, after John's first play-test feedback) by Claude_
 
 New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHASES.md (checkpoints), docs/GOTCHAS.md.
 
 ## Live state
 - **Phases 0-5 are built and verified by script** (tests + real-window runs + screenshots). Phase 6 (polish) is
-  in progress. 91+ pytest tests green (`python -m pytest -q`, ~4 s).
+  in progress. 97 pytest tests green (`python -m pytest -q`, ~4 s).
+- **John played it on 2026-09-11 and gave two rounds of feedback; all of it is implemented** (STATUS v4): belt strips with
+  small dark arrows, plain centred numbers, half-tile item spacing, miners output on all four sides (no facing) with a
+  white extraction pulse, implicit belt splitters (even round-robin), only miners on number tiles, Hub button/Home key,
+  links rebuild while paused, PNG sprite overrides (John's belt/corner/T/cross PNGs are in assets/sprites, drawn facing
+  LEFT, white = transparent).
+- John is drawing more sprites (miner, machines, hub...). The loader picks up `assets/sprites/<kind>.png` automatically.
+- **Code changes need a game restart** (a running `python main.py` keeps the code it started with).
 - Directory: D:\Claude\projects\games\Digit Defender (local git on `main`, no remote). Saves in `saves/` (gitignored),
   machine prefs in `config.json` (gitignored).
 - Run: `python main.py` (menu) or `python main.py --world NAME [--seed N]` (skip menu), `--frames N` auto-quit,
   `--autosave S`, `--fullscreen`. `run.bat` passes args through.
-- **John has not played it yet.** Everything visual was checked from screenshots by Claude. Open design checkbox in
-  Phase 4: John to confirm feed-side rules and voiding of <= 0 results (implemented per PLAN).
+- Open design checkbox in Phase 4: John to confirm feed-side rules and voiding of <= 0 results (implemented per PLAN;
+  he has now played with them without objection, so likely just tick it).
 
 ## Health check (what "working" looks like)
 1. `python -m pytest -q` -> all green.
@@ -19,8 +26,10 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
 3. In game: 1 = belt, 2 = miner (needs a deposit), 3-6 = machines, 7 = wall, 8 = tower, 9/0/- = spawners; R rotate,
    LMB place (drag paints belts that auto-turn), X demolish (hold to sweep), Q pick, H repair, click = select (panel on the
    right), RMB = cancel / set rally on a selected spawner, wheel zoom, MMB drag pan, WASD pan (Shift fast), F3 debug,
-   Space pause, [ ] sim speed x1/x2/x4, F1 help overlay, F6 spawn an enemy at the cursor, F7 trigger the next wave,
-   F11 fullscreen, Esc = cancel tool / menu. Minimap bottom-right.
+   Space pause, [ ] sim speed x1/x2/x4, F1 help overlay, Home or the HUB button = camera back to the hub,
+   F6 spawn an enemy at the cursor, F7 trigger the next wave, F11 fullscreen, Esc = cancel tool / menu. Minimap bottom-right.
+4. Belt rules a player sees: drag-paint belts; a belt beside another belt pointing straight away becomes a branch (T),
+   items alternate between branches; numbers cannot be built on except by miners; a miner pushes into every adjacent belt.
 
 ## Architecture in one screen (details: CLAUDE.md architecture map, docs/PLAN.md)
 - `sim/` is headless (no pygame): `factory.py` (structures dict, fixed tick order, belt chain ordering, economy, damage),
@@ -64,6 +73,10 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
     CHUNK_GEN_BUDGET = 24 chunks/frame (visible first). Everything positions from `Camera.screen_origin()` (no seams).
 
 ## Known rough edges / ideas (not blockers)
+- Four-side miners plus 2-items/tile belts changed the economy since the balance probe (income up, belt throughput 2/s at
+  base speed); re-run scratch bot_player.py or just watch John play before touching numbers.
+- A belt that merely starts beside another belt and points away is treated as a branch (that is how T-junctions are made).
+- Sprite label sizes/positions were tuned for the procedural art; check them once John's miner/machine PNGs land.
 - Balance only probed by a scripted player (STATUS v3): survivable and growing through wave 4 with 2-4 belt-fed towers next to the hub;
   a single 3-miner cannot keep a tower stocked in long fights; towers far from the hub (range 6) never engage.
 - Item spacing is half a tile (2 per tile) so numbers do not overlap; belt throughput is 2 items/s at base speed.
@@ -74,5 +87,7 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
   (60k-tile cap) can cost ~200 ms when structures change during a wave (throttled to every 2 s).
 
 ## Next actions
-1. John plays a fresh world for 10 minutes and notes feel/balance issues; confirm the Phase 4 design checkbox.
-2. Continue Phase 6 polish per docs/PHASES.md; keep `/phase-gate` discipline and the gotchas log.
+1. Expect more play-test feedback from John (he reports glitches with screenshots); fix, screenshot-verify, commit.
+2. When his remaining PNGs arrive: same convention (32x32, hub 96x96, facing left, white transparent); check label overlap.
+3. Tick the Phase 4 design checkbox if John confirms; then remaining Phase 6 items (sounds, stats graphs, blueprints,
+   balance pass) per docs/PHASES.md; keep `/phase-gate` discipline and the gotchas log.
