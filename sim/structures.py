@@ -22,7 +22,8 @@ is not a cargo input is consumed as feed: invested += value, hp += value
             machine A/B, hub, tower ammo) each period; never into feed sides
             (so two miners never level each other). Belts pointing into it feed it.
   Wall/Spawner: every side = feed
-  Tower:    FRONT = ammo, other sides = feed
+  Tower:    every side = ammo (no facing, no feed sides; level it with the
+            balance upgrade) — John, 2026-09-11
 Every structure has to_dict()/from_dict() from day one (save/load).
 """
 from collections import deque
@@ -415,10 +416,12 @@ class Wall(Structure):
 
 
 class Tower(Structure):
-    """Belt-fed ammo (front side); fires number lasers (Phase 5)."""
+    """Ammo arrives through any side (belts, miners, machines); fires number
+    lasers at the nearest enemy in range. A full buffer refuses, so the
+    supply belt stalls instead of wasting numbers."""
     __slots__ = ("ammo", "timer")
     KIND = "tower"
-    SIDE_ROLES = (ROLE_IN, ROLE_FEED, ROLE_FEED, ROLE_FEED)
+    SIDE_ROLES = (ROLE_IN, ROLE_IN, ROLE_IN, ROLE_IN)
 
     def __init__(self, x, y, direction=N):
         super().__init__(x, y, direction)
@@ -426,12 +429,9 @@ class Tower(Structure):
         self.timer = 0
 
     def accept(self, value, rel, overshoot, factory):
-        if rel == FRONT:
-            if len(self.ammo) >= TOWER_AMMO_MAX:
-                return False
-            self.ammo.append(value)
-            return True
-        self.feed(value)
+        if len(self.ammo) >= TOWER_AMMO_MAX:
+            return False
+        self.ammo.append(value)
         return True
 
     def label(self):

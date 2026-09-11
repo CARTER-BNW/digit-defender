@@ -244,7 +244,8 @@ outline via 4 offset blits). Below `zoom < 0.5`, belt items render as small colo
 One rule: **an item consumed through a non-cargo side is feed** — `invested += value`.
 Belts: head-on against direction = feed; side entry = merge (cargo); tail entry = cargo.
 Machines: back = feed; front = output (never accepts); left/right = operands.
-Hub: everything is cargo (income). Towers: front = ammo, other sides = feed.
+Hub: everything is cargo (income). Towers: every side = ammo, no feed sides (John, 2026-09-11;
+towers level through the balance upgrade `[U]` instead).
 - `leveling.py` pure functions: `level(kind, invested)` from threshold table (`100·2^k`);
   `belt speed = BASE + invested/10000` (user's +0.01 per 100); miner/machine/tower/spawner
   period `= BASE_PERIOD / (1 + level * RATE_STEP)`; `max_hp = BASE_HP + invested` (fed total

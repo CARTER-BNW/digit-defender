@@ -61,7 +61,8 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
    tests/test_persistence.py: save@100 + load + 100 == twin@200.
 4. Side rules (`sim/structures.py` docstring): item entering through a non-cargo side is FEED (invested += value, hp += value
    capped). Belt: back/sides cargo, head-on feed. Machine: left = A, right = B, back = feed, front refuses. Hub: all income.
-   Tower: front = ammo (arrow points at its supply belt), others feed. Wall/Spawner: all feed. sub/div <= 0 voided.
+   Tower: every side = ammo, no facing, no feed sides (John, round 3) — towers level only via `[U]`. Wall/Spawner: all
+   feed. sub/div <= 0 voided.
    Miners (John, 2026-09-11) push into every adjacent cargo input, never into feed sides, no facing. Belt outputs = the front
    target plus, for a STRAIGHT (back-fed) belt only, belts beside it that point straight away and have no cargo source of
    their own; items alternate evenly over outputs (implicit splitter; `rr` cursor saved). Corners/merges never branch and
@@ -94,8 +95,7 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
     a tower with empty ammo gets a red frame; the hub's damage bar sits under its label, one tile wide.
 
 ## Known rough edges / ideas (not blockers)
-- Towers still level (not stock) when a belt enters a non-arrow side; the placement message, hover line and panel now say
-  so. If John still trips on it, the next step is "ammo from any side" (drops the feed sides on towers).
+- Towers take ammo from every side now, so a tower cannot be belt-levelled; `[U]` is the only way to level one.
 - No way to cancel a queued unit (refund) yet; an accidental click on a spawner costs its unit price.
 - Units are picked within 0.6 tile of the click; box select needs a 4 px drag. Selected units are not saved (selection is
   transient); their slots are.

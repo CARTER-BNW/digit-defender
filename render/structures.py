@@ -252,13 +252,10 @@ def _sprite(kind, direction, tp, label=None, variant=0):
                          border_radius=max(2, tp // 6))
         pygame.draw.rect(surf, _darker(base, 0.45), (pad, pad, size - 2 * pad, size - 2 * pad),
                          max(1, tp // 16), border_radius=max(2, tp // 6))
-        if cls.HAS_OUTPUT or kind == "tower":
+        if cls.HAS_OUTPUT:
             dx, dy = DIR_VEC[direction]
             ex, ey = size / 2 + dx * (size / 2 - tp * 0.18), size / 2 + dy * (size / 2 - tp * 0.18)
-            color = COLORS["side_input"] if kind == "tower" else (240, 240, 240)
-            if kind == "tower":
-                direction = (direction + 2) % 4       # intake: arrow points inward
-            _arrow(surf, ex, ey, direction, tp * 0.16, color)
+            _arrow(surf, ex, ey, direction, tp * 0.16, (240, 240, 240))
     if label and tp >= 10:
         px = max(8, int(tp * (0.6 if len(label) == 1 else 0.38)))
         numbers.blit_centered(surf, numbers.glyph(label, px), size // 2, size // 2)

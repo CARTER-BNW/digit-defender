@@ -358,7 +358,7 @@ class Game:
             return None
         s = self.factory.place(self.tool, tx, ty, self.build_dir)
         if s is not None and verbose and self.tool == "tower":
-            self.hud.message("Tower placed: run a belt of numbers into its green arrow side for ammo", 3.5)
+            self.hud.message("Tower placed: run a belt or a miner into any side for ammo", 3.5)
         return s
 
     def _paint(self, tile):

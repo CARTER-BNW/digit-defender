@@ -27,8 +27,10 @@ _Last updated: 2026-09-11 (v5) by Claude_
 - Verification: 106 tests (9 new/rewritten); scratch verify_feedback2.py real-window screenshots (range disc, red
   no-ammo frame, wall connectors with levels 1/2/3, unit grids beside the hub, hub bar, spawner queue "4", corner
   item motion) and a save/load round trip that kept a trained heavy unit, its owner link and the queue.
-- **Open:** tower feed sides may still confuse (see HANDOFF rough edges); no dequeue/refund; balance re-probe with
-  paid units; Phase 4 design checkbox; Phase 6 leftovers (sounds, stats, blueprints).
+- Follow-up (John): towers take ammo from EVERY side - no facing, no feed sides, no intake arrow; a full buffer refuses
+  so the supply belt stalls; towers level only via [U]. PLAN 3.5 / HANDOFF decision 4 updated.
+- **Open:** no dequeue/refund; balance re-probe with paid units; Phase 4 design checkbox; Phase 6 leftovers (sounds,
+  stats, blueprints).
 
 ## v4 (2026-09-11, morning): John's first play-test feedback, two rounds, all implemented
 - Round 1 (commit 0b652c5): belts drawn as strips with a much smaller, darker arrow; belt numbers plain (no circle) and

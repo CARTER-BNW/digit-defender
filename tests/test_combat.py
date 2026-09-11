@@ -343,3 +343,21 @@ def test_player_units_survive_a_save_round_trip():
     assert (v.uid, v.kind, v.x, v.y, v.hp, v.level) == (u.uid, "heavy", u.x, u.y, 77, 1)
     assert v.owner is sp and v.rally == u.rally and c2.next_uid == c.next_uid
     assert Combat(f, 1, wave={"number": 0, "next_at_tick": 5, "angle": 0.0}).units == []   # old saves
+
+
+def test_tower_takes_ammo_from_every_side():
+    from sim.structures import FRONT, BACK, LEFT, RIGHT
+    f, c = world()
+    tower = f.place("tower", 10, 10, N, free=True)
+    for rel in (FRONT, RIGHT, BACK, LEFT):
+        assert tower.accept(4, rel, 0.0, f)
+    assert list(tower.ammo) == [4, 4, 4, 4] and tower.invested == 0    # never feed
+    tower.ammo.clear()
+    f.place("miner", 11, 10, E, free=True, value=6)        # beside it: pushes ammo in
+    b = f.place("belt", 10, 11, N, free=True)              # belt from behind: ammo too
+    b.items.append([5, 0.99, BACK])
+    run(f, 41)
+    assert sorted(tower.ammo) == [5, 6] and tower.invested == 0 and tower.level == 1
+    tower.ammo.clear()
+    tower.ammo.extend([1] * 10)
+    assert not tower.accept(9, LEFT, 0.0, f)               # full: the belt stalls instead
