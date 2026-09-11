@@ -64,6 +64,8 @@ _Last updated: 2026-09-11 (v6) by Claude_
   victim (`claim_post` / `_engage` / `_hold_post`, line-of-sight so enemies never cross a wall, crowds fan out along a
   wall line via `_structure_points`); melee ranges 1.5. (4) [C] queues a unit at the selected spawner or every spawner
   in a boxed group; RMB gather points no longer move units already out. Tests 126 -> 128.
+- Round 13: target bonus = value * amount * k, k rolled 10-20 per target (seeded; midpoint 15 when constructed
+  by hand), no flat part - 5 x 7 pays 350-700 (was 72). Economy will inflate; balance pass still pending.
 
 
 ## v5 (2026-09-11, afternoon): John's third round of play-test feedback, all implemented

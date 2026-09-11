@@ -47,8 +47,8 @@ TARGET_COUNT = 4                    # hub target slots, each with its own level 
 TARGET_LEVEL1_RANGE = (5, 9)        # level-1 target numbers: distinct picks from this range
 TARGET_BASE_AMOUNT = 5              # deliveries of its number a level-1 target wants
 TARGET_GROWTH = (0.25, 0.75)        # per level, the number and the amount each grow by a random share in this range
-TARGET_REWARD_MULT = 1.5            # bonus = number * amount * mult + flat (sim/economy.py)
-TARGET_REWARD_FLAT = 20
+TARGET_REWARD_MULT = (10, 20)       # bonus = number * amount * a seeded roll in this range (John: 5 x 7 pays 350-700)
+TARGET_REWARD_FLAT = 0
 
 # --- belts / items ------------------------------------------------------------
 BELT_BASE_SPEED = 0.05              # tiles/tick  (= 1 tile/s at 20 ticks/s)

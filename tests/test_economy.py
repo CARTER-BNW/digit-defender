@@ -63,7 +63,7 @@ def test_target_amount_progress_payout_and_level_up():
     f = Factory(seed=1, balance=0)
     f.targets[0] = Target(0, 1, 7, 3)                  # slot 0: deliver three 7s
     reward = f.targets[0].reward
-    assert reward == target_reward(7, 3) == int(7 * 3 * 1.5) + 20
+    assert reward == target_reward(7, 3) == 7 * 3 * 15   # midpoint of the 10-20x range
     f.deliver(7)
     f.deliver(7)
     assert f.targets[0].delivered == 2 and f.balance == 14 and f.targets_completed == 0
@@ -103,7 +103,12 @@ def test_targets_start_distinct_5_to_9_and_climb_a_seeded_ladder():
     assert cur.value >= 39 and cur.amount >= 39                # ten levels of at least x1.25
     # a number another slot already uses is bumped past it
     assert next_level(5, t, taken={a.value, a.value + 1}).value == a.value + 2
-    assert target_reward(10, 4) == int(10 * 4 * 1.5) + 20
+    assert target_reward(10, 4) == 10 * 4 * 15
+    assert target_reward(7, 5, 10) == 350 and target_reward(7, 5, 20) == 700   # John's example
+    for seed in range(20):                                     # every rolled bonus is 10-20x the delivery
+        for tg in Factory(seed=seed).targets + [next_level(seed, Target(1, 1, 8, 5)), next_level(seed, Target(2, 3, 30, 9))]:
+            worth = tg.value * tg.amount
+            assert worth * 10 - 1 <= tg.reward <= worth * 20 + 1, (seed, tg)
     assert [t.value for t in initial_targets(5, 7)] and len({t.value for t in initial_targets(5, 7)}) == 7
 
 

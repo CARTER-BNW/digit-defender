@@ -45,8 +45,18 @@ class Target:
         return f"Target(slot {self.slot} Lv{self.level}: {self.amount} x {self.value} -> +{self.reward})"
 
 
-def target_reward(value, amount):
-    return int(value * amount * TARGET_REWARD_MULT) + TARGET_REWARD_FLAT
+def target_reward(value, amount, mult=None):
+    """Bonus for delivering `amount` of `value`: 10-20x what was delivered
+    (the multiplier is rolled per target; the midpoint when none is given)."""
+    lo, hi = TARGET_REWARD_MULT
+    if mult is None:
+        mult = (lo + hi) / 2
+    return int(round(value * amount * mult)) + TARGET_REWARD_FLAT
+
+
+def _roll_mult(rng):
+    lo, hi = TARGET_REWARD_MULT
+    return rng.uniform(lo, hi)
 
 
 def _grow(rng, n):
@@ -61,7 +71,9 @@ def initial_targets(seed, count=TARGET_COUNT):
     rng = random.Random(f"{seed}:targets:init")
     lo, hi = TARGET_LEVEL1_RANGE
     pool = list(range(lo, max(hi, lo + count - 1) + 1))
-    return [Target(i, 1, v, TARGET_BASE_AMOUNT) for i, v in enumerate(rng.sample(pool, count))]
+    values = rng.sample(pool, count)
+    return [Target(i, 1, v, TARGET_BASE_AMOUNT, reward=target_reward(v, TARGET_BASE_AMOUNT, _roll_mult(rng)))
+            for i, v in enumerate(values)]
 
 
 def next_level(seed, target, taken=()):
@@ -71,10 +83,11 @@ def next_level(seed, target, taken=()):
     rng = random.Random(f"{seed}:target:{target.slot}:{target.level + 1}")
     value = _grow(rng, target.value)
     amount = _grow(rng, target.amount)
+    mult = _roll_mult(rng)
     taken = set(taken)
     while value in taken:
         value += 1
-    return Target(target.slot, target.level + 1, value, amount)
+    return Target(target.slot, target.level + 1, value, amount, reward=target_reward(value, amount, mult))
 
 
 def top_up(seed, targets, count=TARGET_COUNT):
