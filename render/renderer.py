@@ -51,6 +51,7 @@ class Renderer:
         if factory is not None:
             rect = (cx0, cy0, cx1, cy1)
             rstruct.draw_structures(screen, camera, factory, rect, getattr(game, "render_frac", 0.0))
+            rstruct.draw_miner_pulses(screen, camera, factory, rect)
             rstruct.draw_health_bars(screen, camera, factory)
             if getattr(game, "selected", None) is not None:
                 rstruct.draw_selection(screen, camera, game.selected)
@@ -95,7 +96,7 @@ class Renderer:
                 fill(COLORS["deposit_bg"], rect)
                 color = DEPOSIT_COLORS[digit]
                 if show_text:
-                    numbers.blit_centered(surf, numbers.text(str(digit), digit_px, color),
+                    numbers.blit_centered(surf, numbers.glyph(str(digit), digit_px, color),
                                           lx * tp + tp // 2, ly * tp + tp // 2)
                 else:
                     pad = max(1, tp // 4)

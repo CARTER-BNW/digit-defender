@@ -62,7 +62,8 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
 ## Known rough edges / ideas (not blockers)
 - Balance only probed by a scripted player (STATUS v3): survivable and growing through wave 4 with 2-4 belt-fed towers next to the hub;
   a single 3-miner cannot keep a tower stocked in long fights; towers far from the hub (range 6) never engage.
-- Items on a jammed belt overlap visually (radius 0.32 tile vs 0.25 spacing).
+- Item spacing is half a tile (2 per tile) so numbers do not overlap; belt throughput is 2 items/s at base speed.
+- Custom PNG sprites: assets/sprites/<kind>.png, 32x32 per tile (hub 96x96), facing up (see README).
 - Player units are not blocked by structures (by design for now); enemies only ever melee.
 - Combat stats (kills) are transient; the game-over line shows kills since load.
 - Phase 6 left: copy/paste blueprints, sounds, stats graphs, balance pass after a play test. Flow-field rebuild on very large bases

@@ -68,7 +68,7 @@ def test_items_stay_sorted_and_spaced_under_flood():
             assert c - a >= ITEM_SPACING - 1e-9
         assert all(0.0 <= p < 1.0 for p in ps)
         total += len(b.items)
-    assert total == 16                        # 4 per tile when jammed
+    assert total == 4 * round(1 / ITEM_SPACING)   # 2 per tile when jammed
     assert belts[-1].items[-1][1] == 1.0 - EPS
 
 
@@ -171,7 +171,7 @@ def test_backpressure_stalls_miner():
     line(f, 1, 3)                             # dead end
     run(f, 2000)
     mined = f.stats["mined"]
-    assert mined == 12                        # 3 belts * 4 items
+    assert mined == 3 * round(1 / ITEM_SPACING)   # 3 belts * 2 items
     assert miner.timer == 0                   # ready and blocked
     run(f, 200)
     assert f.stats["mined"] == mined
@@ -223,3 +223,28 @@ def test_belt_order_independent_of_insertion_order():
         return [(b.x, b.y) for b in f.belts_ordered]
     keys = [(0, 0), (1, 0), (2, 0), (3, 0), (3, 1), (2, -1), (2, -2)]
     assert build(keys) == build(list(reversed(keys)))
+
+
+def test_miner_outputs_on_all_four_sides_but_never_feeds():
+    f = factory()
+    m = f.place("miner", 5, 5, E, free=True, value=4)
+    east = f.place("belt", 6, 5, E, free=True)     # cargo from behind
+    north = f.place("belt", 5, 4, N, free=True)    # cargo from behind (belt points away)
+    west = f.place("belt", 4, 5, S, free=True)     # side entry (belt runs south past the miner)
+    south = f.place("belt", 5, 6, N, free=True)    # points INTO the miner: head-on, miner must not push
+    other = f.place("miner", 7, 5, W, free=True, value=9)   # miners never feed each other
+    run(f, 41)
+    assert items_on(east) == [4] and items_on(north) == [4] and items_on(west) == [4]
+    assert items_on(south) == []
+    assert f.stats["mined"] == 3 and m.last_emit_tick == 40
+    assert other.invested == 0 and m.invested == 0
+    # a belt pointing into the miner still feeds it
+    south.items.append([7, 0.99])
+    run(f, 1)
+    assert m.invested == 7 and not south.items
+    # a wall next to a miner is not fed by it either
+    f2 = factory()
+    m2 = f2.place("miner", 0, 0, E, free=True, value=3)
+    w = f2.place("wall", 1, 0, N, free=True)
+    run(f2, 100)
+    assert w.invested == 0 and f2.stats["mined"] == 0 and m2.timer == 0

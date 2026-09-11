@@ -28,6 +28,7 @@ class Hud:
         self.toolbar_rect = pygame.Rect(0, 0, 0, 0)
         self._minimap = None        # cached surface, rebuilt every few frames
         self._minimap_frame = -100
+        self.hub_button = pygame.Rect(8, 72, 110, 26)
 
     def message(self, text, ttl=2.5):
         self.messages = [m for m in self.messages if m[0] != text]
@@ -52,10 +53,13 @@ class Hud:
         return out
 
     def over_ui(self, pos):
-        return self.toolbar_rect.collidepoint(pos)
+        return self.toolbar_rect.collidepoint(pos) or self.hub_button.collidepoint(pos)
 
     def click(self, pos, game):
-        """Toolbar hit test; returns True when the click was consumed."""
+        """Toolbar / hub button hit test; returns True when the click was consumed."""
+        if self.hub_button.collidepoint(pos):
+            game.go_home()
+            return True
         for rect, kind, _ in self.buttons():
             if rect.collidepoint(pos):
                 game.set_tool(None if game.tool == kind else kind)
@@ -72,6 +76,12 @@ class Hud:
         self._panel((8, 8, 260, 58))
         screen.blit(numbers.text("Balance", 14, (170, 190, 170)), (16, 12))
         screen.blit(numbers.text(numbers.fmt(f.balance), 28), (16, 28))
+        # hub button
+        hb = self.hub_button
+        pygame.draw.rect(screen, COLORS["hub"], hb, border_radius=4)
+        pygame.draw.rect(screen, COLORS["panel_border"], hb, 1, border_radius=4)
+        label = numbers.text("HUB  [Home]", 14)
+        screen.blit(label, (hb.centerx - label.get_width() // 2, hb.centery - label.get_height() // 2))
         # targets
         self._panel((w - 228, 8, 220, 24 + 22 * len(f.targets)))
         screen.blit(numbers.text("Targets  (deliver exactly)", 14, (170, 190, 170)), (w - 220, 12))

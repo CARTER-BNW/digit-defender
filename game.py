@@ -224,6 +224,8 @@ class Game:
             self.pick()
         elif key == pygame.K_h:
             self.repair()
+        elif key == pygame.K_HOME:
+            self.go_home()
         elif key == pygame.K_SPACE:
             self.paused = not self.paused
         elif key == pygame.K_RIGHTBRACKET:
@@ -296,6 +298,13 @@ class Game:
                     self.factory.dirty_links = True
         self.try_place(tile)
         self.last_paint = tile
+
+    def go_home(self):
+        """Centre the camera on the hub."""
+        hub = self.factory.hub
+        cx, cy = (hub.x, hub.y) if hub is not None else (0, 0)
+        self.camera.x = (cx + 0.5) * TILE_SIZE
+        self.camera.y = (cy + 0.5) * TILE_SIZE
 
     def repair(self):
         target = self.selected or self.factory.structure_at(*self.hover_tile)

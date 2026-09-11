@@ -14,7 +14,10 @@ is not a cargo input is consumed as feed: invested += value, hp += value
   Belt:     BACK/LEFT/RIGHT = cargo (tail / side merge), FRONT (head-on) = feed
   Machine:  LEFT = operand A, RIGHT = operand B, BACK = feed, FRONT refuses
   Hub:      every side = income
-  Miner/Wall/Spawner: every side = feed
+  Miner:    pushes its digit into EVERY adjacent cargo input (belt back/side,
+            machine A/B, hub, tower ammo) each period; never into feed sides
+            (so two miners never level each other). Belts pointing into it feed it.
+  Wall/Spawner: every side = feed
   Tower:    FRONT = ammo, other sides = feed
 Every structure has to_dict()/from_dict() from day one (save/load).
 """
@@ -201,16 +204,19 @@ class Belt(Structure):
 
 
 class Miner(Structure):
-    """Emits its deposit digit onto the structure in front every period."""
-    __slots__ = ("value", "timer")
+    """Emits its deposit digit into every adjacent cargo input each period.
+    `outputs` [(structure, rel), ...] is rebuilt with the links."""
+    __slots__ = ("value", "timer", "outputs", "last_emit_tick")
     KIND = "miner"
-    HAS_OUTPUT = True
-    SIDE_ROLES = (ROLE_OUT, ROLE_FEED, ROLE_FEED, ROLE_FEED)
+    HAS_OUTPUT = False
+    SIDE_ROLES = (ROLE_OUT, ROLE_OUT, ROLE_OUT, ROLE_OUT)
 
     def __init__(self, x, y, direction=E, value=0):
         super().__init__(x, y, direction)
         self.value = value
         self.timer = self.period
+        self.outputs = []
+        self.last_emit_tick = -10 ** 9
 
     @property
     def period(self):
@@ -223,11 +229,15 @@ class Miner(Structure):
         if self.timer > 0:
             self.timer -= 1
             return
-        nxt = self.next
-        if nxt is not None and nxt.accept(self.value, self.next_rel, 0.0, factory):
+        emitted = False
+        for nb, rel in self.outputs:
+            if nb.accept(self.value, rel, 0.0, factory):
+                emitted = True
+                factory.stats["mined"] += 1
+        if emitted:
             self.timer = self.period
-            factory.stats["mined"] += 1
-        # else: output blocked; retry next tick
+            self.last_emit_tick = factory.tick_count
+        # else: every output blocked; retry next tick
 
     def to_dict(self):
         d = super().to_dict()

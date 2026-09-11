@@ -31,6 +31,8 @@ PRELOAD_CHUNKS = 1                  # ring of chunks kept generated beyond the s
 UNLOAD_MARGIN = 3                   # chunks outside this ring get dropped (hysteresis)
 CHUNK_GEN_BUDGET = 24               # max chunks generated per frame (visible ones first)
 TEXT_MIN_ZOOM = 0.5                 # below this, items/deposits draw as colored squares
+SPRITE_DIR = "assets/sprites"       # optional <kind>.png overrides: 32x32 per tile (hub 96x96), facing up
+MINER_PULSE_TICKS = 8               # white border flash after each extraction
 
 # --- economy ------------------------------------------------------------------
 START_BALANCE = 1000
@@ -51,7 +53,7 @@ TARGET_REWARD_FLAT = 20
 BELT_BASE_SPEED = 0.05              # tiles/tick  (= 1 tile/s at 20 ticks/s)
 BELT_SPEED_PER_FED = 0.0001         # tiles/tick per fed value: +0.01 tiles/tick per 100 fed (PLAN 3.5)
 MAX_BELT_SPEED = 0.5                # tiles/tick cap so items never skip a belt
-ITEM_SPACING = 0.25                 # min gap between items on a belt (4 per tile)
+ITEM_SPACING = 0.5                  # min gap between items on a belt (2 per tile; numbers must not overlap)
 MINER_BASE_PERIOD = 40              # ticks between emissions (2 s)
 MACHINE_BASE_PERIOD = 40            # ticks per operation
 MACHINE_BUFFER = 3                  # operand buffer depth per side
@@ -136,8 +138,9 @@ COLORS = {
     "nest_ground": (70, 30, 30),
     "nest_core": (160, 40, 40),
     "grid_line": (0, 0, 0),
-    "belt": (90, 90, 100),
-    "belt_arrow": (200, 200, 210),
+    "belt": (92, 92, 104),
+    "belt_arrow": (52, 52, 62),
+    "belt_edge": (60, 60, 70),
     "miner": (120, 120, 60),
     "hub": (60, 110, 200),
     "wall": (110, 110, 110),

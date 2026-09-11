@@ -62,11 +62,24 @@ def text(s, px, color=COLORS["text"], outline=True):
     return out
 
 
+@lru_cache(maxsize=4096)
+def glyph(s, px, color=COLORS["text"]):
+    """Outlined text cropped to its ink bounds, so blit_centered puts the
+    visual centre of a digit exactly on the target (font boxes are taller
+    than digits and sit them high)."""
+    surf = text(s, px, color)
+    r = surf.get_bounding_rect()
+    if r.width == 0 or r.height == 0:
+        return surf
+    return surf.subsurface(r).copy()
+
+
 def reset():
     """Drop cached Font/Surface objects. Call after pygame.init(): fonts made
     before a pygame.quit() are invalid afterwards (tests re-init a lot)."""
     font.cache_clear()
     text.cache_clear()
+    glyph.cache_clear()
 
 
 def blit_centered(surface, surf, cx, cy):

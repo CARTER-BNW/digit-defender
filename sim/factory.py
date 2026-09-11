@@ -18,7 +18,7 @@ from collections import deque
 from settings import (CHUNK_SIZE, START_BALANCE, TARGET_COUNT, COSTS)
 from sim import economy
 from sim.structures import (KINDS, Belt, Miner, MathMachine, Hub, Tower, Spawner,
-                            Wall, FRONT, BACK, LEFT, RIGHT, entry_side)
+                            Wall, FRONT, BACK, LEFT, RIGHT, entry_side, DIR_VEC, ROLE_IN)
 
 _MERGE_PRIORITY = {BACK: 0, LEFT: 1, RIGHT: 2}
 
@@ -266,12 +266,23 @@ class Factory:
                     self.spawners, self.walls):
             lst.sort(key=_key)
         structures = self.structures
-        for s in self.belts + self.miners + self.machines:
+        for s in self.belts + self.machines:
             nxt = structures.get(s.front_tile())
             if nxt is s:
                 nxt = None
             s.next = nxt
             s.next_rel = entry_side(s.direction, nxt.direction) if nxt is not None else 0
+        for m in self.miners:                        # every neighbour that takes cargo
+            outs = []
+            for d in range(4):
+                dx, dy = DIR_VEC[d]
+                nb = structures.get((m.x + dx, m.y + dy))
+                if nb is None or nb is m:
+                    continue
+                rel = entry_side(d, nb.direction)
+                if nb.SIDE_ROLES[rel] == ROLE_IN:
+                    outs.append((nb, rel))
+            m.outputs = outs
         for b in self.belts:
             b.feeders = []
         for b in self.belts:
