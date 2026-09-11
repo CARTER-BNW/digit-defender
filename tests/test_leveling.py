@@ -92,19 +92,19 @@ def test_feed_through_belts_levels_and_speeds():
     assert cargo_src.invested == 0
 
 
-def test_machine_fed_from_back_gets_faster():
+def test_machine_levels_by_upgrade_and_gets_faster():
     from sim.factory import Factory
     from sim.structures import E, W, S, N, BACK
     f = Factory(seed=1, balance=10 ** 9)
     m = f.place("adder", 5, 5, E, free=True)
     assert m.period == 40
-    m.accept(120, BACK, 0.0, f)
-    assert m.invested == 120 and m.level == 2 and m.period == 32
-    # and the belt behind it (pointing E into the machine's back) feeds it
+    assert f.upgrade(m) == 100
+    assert m.invested == 100 and m.level == 2 and m.period == 32
+    # the belt behind it (pointing E into the machine's back) delivers an operand, not feed
     back = f.place("belt", 4, 5, E, free=True)
-    back.items.append([50, 0.99])
+    back.items.append([50, 0.99, BACK])
     f.tick()
-    assert m.invested == 170 and not back.items
+    assert m.invested == 100 and not back.items and list(m.in_a) == [50]
 
 
 def test_damage_repair_and_destruction():

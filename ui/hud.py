@@ -147,10 +147,12 @@ class Hud:
         elif game.tool == "belt":
             n = len(game.belt_path)
             if n:
-                lines.append(f"Belt preview: {n} tiles, {n * COSTS['belt']}   release to build, drag back to undo   [Esc] cancel")
+                turned = f"   belts turned {game.belt_turn * 90} deg" if game.belt_turn else ""
+                lines.append(f"Belt preview: {n} tiles, {n * COSTS['belt']}   release to build   [Shift] straight   "
+                             f"[R] turn every belt{turned}   drag back = undo   [Esc] cancel")
             else:
-                lines.append(f"Build Belt facing {'NESW'[game.build_dir]}   [LMB] click, or hold and drag a path (preview), release to build"
-                             "   [R] rotate  [Esc] cancel")
+                lines.append(f"Build Belt facing {'NESW'[game.build_dir]}   [LMB] click, or hold and drag a path (Shift = straight),"
+                             " release to build   [R] rotate  [Esc] cancel")
         elif game.tool:
             if game.tool in ("miner", "wall", "tower"):
                 extra = {"miner": "   (miners push numbers out of all four sides)",
@@ -373,12 +375,15 @@ class Hud:
 
     HELP = [
         "1-6 belt / miner / adder / subtract / multiply / divide     7 wall   8 tower   9 0 - spawners     X demolish tool",
-        "LMB place; belts: hold and drag = transparent preview, release to build (drag back to undo)   R rotate   Q pick tool",
+        "LMB place; belts: hold and drag = preview, release to build; Shift = straight run + square corner; R while",
+        "dragging turns every belt (twice = the line runs backwards); drag back to undo.   R rotate   Q pick tool",
+        "Drag off the MIDDLE of a line to branch it (T-junction); from its END the last belt turns; backwards reverses.",
         "X = demolish tool: click or drag over buildings (50% refund), X or Esc to stop.   Del = remove the hovered one",
         "click = select (panel on the right); drag a box = select many (U upgrades / H repairs them all)   RMB = cancel",
         "wheel zoom   MMB drag / WASD pan (Shift fast)   Space pause   [ ] sim speed x1 x2 x4   F3 debug   F11 fullscreen",
         "Belts: items enter from behind or the sides; a belt pointing INTO another belt's front FEEDS it (levels it up).",
-        "Machines: left side = A, right side = B, output in front, feed from behind.  Hub: deliver from any side = income.",
+        "Machines: every side but the front is an input (left = A, right = B, back = the emptier one); output in front.",
+        "Hub: deliver from any side = income.  Feed sides (yellow) level belts/walls/spawners; U levels anything.",
         "Towers (range 10): run a belt or put a miner beside one, any side; it fires those numbers. Red frame = no ammo.",
         "Spawners: click one to train a unit (costs balance); units walk to its gather point beside the hub.",
         "Units: click or drag a box to select (Shift adds), RMB moves them in a grid; RMB on a selected spawner = gather point.",

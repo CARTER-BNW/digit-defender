@@ -74,7 +74,7 @@ class Renderer:
             if ghost is not None:
                 rstruct.draw_ghost(screen, camera, *ghost)
             if getattr(game, "belt_path", None):
-                rstruct.draw_belt_preview(screen, camera, factory, game.belt_path)
+                rstruct.draw_belt_preview(screen, camera, factory, game.belt_path, getattr(game, "belt_turn", 0))
             if getattr(game, "tool", None) == "demolish":
                 rstruct.draw_demolish_cursor(screen, camera, factory, getattr(game, "hover_tile", None))
             if combat is not None:

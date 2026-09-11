@@ -150,6 +150,16 @@ def find_or_create(name, seed=None):
     return create_world(name, seed)
 
 
+def delete_world(slug):
+    """Remove a world's save folder for good. True if it existed and is gone."""
+    import shutil
+    d = world_dir(slug)
+    if not d.exists():
+        return False
+    shutil.rmtree(d, ignore_errors=True)
+    return not d.exists()
+
+
 # ---- world state -----------------------------------------------------------------
 
 FACTORY_META_KEYS = ("balance", "tick_count", "targets", "targets_generated",

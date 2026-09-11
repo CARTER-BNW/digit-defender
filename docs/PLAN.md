@@ -245,7 +245,8 @@ outline via 4 offset blits). Below `zoom < 0.5`, belt items render as small colo
 ### 3.5 Improvement / leveling (Phase 4)
 One rule: **an item consumed through a non-cargo side is feed** — `invested += value`.
 Belts: head-on against direction = feed; side entry = merge (cargo); tail entry = cargo.
-Machines: back = feed; front = output (never accepts); left/right = operands.
+Machines: left/right = operands A/B, back = whichever buffer is emptier (all three sides are
+inputs — John, 2026-09-11; machines have no feed side and level via `[U]`); front = output.
 Hub: everything is cargo (income). Towers: every side = ammo, no feed sides (John, 2026-09-11;
 towers level through the balance upgrade `[U]` instead).
 - `leveling.py` pure functions: `level(invested)` from geometric level costs — level n→n+1

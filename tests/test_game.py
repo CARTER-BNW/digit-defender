@@ -299,3 +299,55 @@ def test_hub_alert_draws_while_the_hub_is_hit(game):
     frames(game, 2)                                            # hub border + screen frame draw
     game.camera.zoom_index = 0
     frames(game, 1)
+
+
+def test_belt_drag_shift_makes_an_l_and_r_turns_every_belt(game):
+    from sim.structures import E, S, N
+    frames(game, 1)
+    f = game.factory
+    f.terrain = None
+    f.balance = 1000
+    game.set_tool("belt")
+    game.build_dir = E
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (2, -4))
+    _mouse(game, pygame.MOUSEMOTION, 1, (4, -2))               # freehand diagonal: a staircase
+    assert len(game.belt_path) == 5
+    game._straight_belt_path((5, -1))                          # Shift: one run + one square corner
+    assert [(x, y) for x, y, _ in game.belt_path] == [(2, -4), (3, -4), (4, -4), (5, -4), (5, -3), (5, -2), (5, -1)]
+    assert [d for _, _, d in game.belt_path] == [E, E, E, S, S, S, S]
+    game._straight_belt_path((2, -1))                          # back in the anchor column: straight down
+    assert [(x, y) for x, y, _ in game.belt_path] == [(2, -4), (2, -3), (2, -2), (2, -1)]
+    for _ in range(2):                                         # R twice: the line runs backwards
+        game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_r, mod=0, unicode="r"))
+    assert game.belt_turn == 2
+    frames(game, 1)                                            # turned preview draws
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (2, -1))
+    assert [f.structure_at(2, y).direction for y in (-4, -3, -2, -1)] == [N, N, N, N]
+    assert game.belt_turn == 0 and game.belt_path == []
+
+
+def test_drag_off_the_middle_of_a_line_makes_a_t_not_a_corner(game):
+    from sim.structures import E, N, S, W
+    frames(game, 1)
+    f = game.factory
+    f.terrain = None
+    f.balance = 1000
+    line = [f.place("belt", x, 2, E, free=True) for x in range(2, 7)]
+    game.set_tool("belt")
+    game.build_dir = E
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (4, 2))            # start ON the middle belt...
+    _mouse(game, pygame.MOUSEMOTION, 1, (4, 1))                # ...and drag up one tile
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (4, 1))
+    mid, branch = f.structure_at(4, 2), f.structure_at(4, 1)
+    assert mid is line[2] and mid.direction == E               # the line keeps flowing
+    assert branch.direction == N
+    game.update(1 / 60)                                        # links rebuild
+    assert [o[2] for o in mid.outputs] == [E, N]               # T: straight on + the new branch
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (6, 2))            # from the END the last belt turns
+    _mouse(game, pygame.MOUSEMOTION, 1, (6, 4))
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (6, 4))
+    assert line[4].direction == S and f.structure_at(6, 3).direction == S
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (3, 2))            # backwards over the line: reversed
+    _mouse(game, pygame.MOUSEMOTION, 1, (2, 2))
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (2, 2))
+    assert line[1].direction == W and line[0].direction == W

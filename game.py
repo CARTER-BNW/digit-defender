@@ -76,6 +76,9 @@ class Game:
         self.painting = False
         self.last_paint = None
         self.belt_path = []                  # [[tx, ty, dir], ...] belt drag preview, built on release
+        self.belt_anchor = None              # tile the belt drag started on (Shift: straight L from here)
+        self.belt_axis = None                # Shift drag: first run goes along "x" or "y" (locked on first move)
+        self.belt_turn = 0                   # quarter turns [R] applied to every belt of the drag
         self.hover_tile = (0, 0)
         self.game_over = False
         self.paused = False
@@ -253,12 +256,16 @@ class Game:
     def set_tool(self, kind):
         self.tool = kind
         self.belt_path = []
+        self.belt_turn = 0
         self.painting = False
         if kind is not None:
             self.selected = None
             self.selected_structures = []
 
     def rotate(self):
+        if self.belt_path:                       # mid-drag: every belt of the path turns a quarter
+            self.belt_turn = (self.belt_turn + 1) % 4
+            return
         if self.tool is not None:
             self.build_dir = (self.build_dir + 1) % 4
             return
@@ -285,6 +292,9 @@ class Game:
             self.last_paint = tile
             if self.tool == "belt":
                 self.belt_path = [[tile[0], tile[1], self.build_dir]]   # preview; built on release
+                self.belt_anchor = tile
+                self.belt_axis = None
+                self.belt_turn = 0
             elif self.tool == "demolish":
                 self.demolish(tile)
             else:
@@ -441,7 +451,10 @@ class Game:
             return
         last = self.last_paint if self.last_paint is not None else tile
         if self.tool == "belt":
-            self._extend_belt_path(tile)
+            if pygame.key.get_mods() & pygame.KMOD_SHIFT:
+                self._straight_belt_path(tile)     # Shift: one straight run and one square corner
+            else:
+                self._extend_belt_path(tile)
         elif self.tool == "demolish":
             for t in self._tiles_between(last, tile):
                 self.demolish(t)
@@ -467,17 +480,44 @@ class Game:
             path.append([t[0], t[1], d])
             self.build_dir = d
 
+    def _straight_belt_path(self, tile):
+        """Shift drag: the path is one straight run from the anchor along the
+        axis of the first move, then one square corner to the cursor."""
+        anchor = self.belt_anchor or (self.belt_path[0][0], self.belt_path[0][1])
+        ax, ay = anchor
+        tx, ty = tile
+        if self.belt_axis is None and (tx, ty) != (ax, ay):
+            self.belt_axis = "x" if abs(tx - ax) >= abs(ty - ay) else "y"
+        corner = (tx, ay) if self.belt_axis == "x" else (ax, ty)
+        tiles = [anchor] + list(self._tiles_between(anchor, corner)) + list(self._tiles_between(corner, tile))
+        path = []
+        for i, t in enumerate(tiles):
+            if i + 1 < len(tiles):
+                nxt = tiles[i + 1]
+                d = DIR_VEC.index((nxt[0] - t[0], nxt[1] - t[1]))
+            else:
+                d = path[-1][2] if path else self.build_dir
+            path.append([t[0], t[1], d])
+        self.belt_path = path
+        self.build_dir = path[-1][2]
+
     def _commit_belt_path(self):
-        """Build the previewed belts: new belts are placed (cost checked per
-        tile), belts already on the path are turned to follow it, anything
-        else is skipped. Returns the number of belts built."""
+        """Build the previewed belts (each turned by the [R] offset): new belts
+        are placed (cost checked per tile), anything that is not a belt is
+        skipped. A belt already on the path is turned only when that cannot
+        break its line: at a line's end (nothing in front) or to reverse it.
+        A belt in the middle of a line keeps flowing, so a drag off it leaves
+        a branch beside the line: a T-junction (John). Returns belts built."""
         path, self.belt_path = self.belt_path, []
+        turn, self.belt_turn = self.belt_turn, 0
         built = 0
         reason = None
         for x, y, d in path:
+            d = (d + turn) % 4
             s = self.factory.structure_at(x, y)
             if isinstance(s, Belt):
-                if s.direction != d:
+                if s.direction != d and (self.factory.structure_at(*s.front_tile()) is None
+                                         or s.direction == (d + 2) % 4):
                     s.direction = d
                     self.factory.dirty_links = True
                 continue

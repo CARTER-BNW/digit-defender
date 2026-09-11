@@ -445,10 +445,11 @@ def draw_ghost(screen, camera, kind, x, y, direction, ok, cost):
         screen.blit(txt, (sx + tp * cls.SIZE + 2, sy))
 
 
-def draw_belt_preview(screen, camera, factory, path):
-    """Transparent belts along the drag path (shapes follow the path), tinted
-    green where a belt will be built or turned and red where it cannot be,
-    plus the tile count and cost at the end of the path."""
+def draw_belt_preview(screen, camera, factory, path, turn=0):
+    """Transparent belts along the drag path (shapes follow the path; with an
+    [R] turn every belt faces its turned direction instead), tinted green
+    where a belt will be built or turned and red where it cannot be, plus
+    the tile count and cost at the end of the path."""
     if not path:
         return
     tp = camera.tile_px
@@ -459,10 +460,11 @@ def draw_belt_preview(screen, camera, factory, path):
     new = 0
     for i, (x, y, d) in enumerate(path):
         in_sides = 0
-        if i > 0:
+        if i > 0 and not turn:
             px, py = path[i - 1][0], path[i - 1][1]
             if (px - x, py - y) in DIR_VEC:
                 in_sides = 1 << DIR_VEC.index((px - x, py - y))
+        d = (d + turn) % 4
         spr = sprite("belt", d, tp, None, 1, in_sides | ((1 << d) << 4)).copy()
         spr.set_alpha(150)
         sx, sy = camera.tile_to_screen(x, y)

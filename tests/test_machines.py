@@ -51,7 +51,7 @@ def test_operand_sides_and_front_refuses():
     m = f.place("adder", 0, 0, E, free=True)
     assert m.accept(1, LEFT, 0.0, f) and list(m.in_a) == [1]
     assert m.accept(2, RIGHT, 0.0, f) and list(m.in_b) == [2]
-    assert m.accept(50, BACK, 0.0, f) and m.invested == 50
+    assert m.accept(50, BACK, 0.0, f) and list(m.in_a) == [1, 50] and m.invested == 0   # back = emptier (tie: A)
     assert not m.accept(3, FRONT, 0.0, f)
     # a belt pointing into the machine's front stalls with its item
     belt = f.place("belt", 1, 0, W, free=True)
@@ -109,3 +109,25 @@ def test_machine_roundtrip_mid_operation():
     assert m2.to_dict() == d
     assert (m2.busy, m2.timer, m2.out, list(m2.in_a), list(m2.in_b)) == \
         (m.busy, m.timer, m.out, list(m.in_a), list(m.in_b))
+
+
+def test_machine_takes_operands_from_the_back_too():
+    """John: an adder takes any of its three non-output sides as input."""
+    from sim.factory import Factory
+    f = Factory(seed=1, balance=10 ** 9)
+    m = f.place("adder", 5, 5, E, free=True)
+    assert m.accept(3, BACK, 0.0, f) and list(m.in_a) == [3] and m.invested == 0   # emptier buffer: A
+    assert m.accept(4, BACK, 0.0, f) and list(m.in_b) == [4]                     # then B
+    assert m.accept(5, LEFT, 0.0, f) and list(m.in_a) == [3, 5]
+    assert m.accept(6, BACK, 0.0, f) and list(m.in_b) == [4, 6]                  # B is emptier now
+    assert not m.accept(1, FRONT, 0.0, f)
+    # one line from behind pairs its own numbers: 3 + 3 = 6
+    f2 = Factory(seed=1, balance=10 ** 9)
+    src = f2.place("miner", 3, 5, E, free=True, value=3)
+    src.invested = 10 ** 6
+    f2.place("belt", 4, 5, E, free=True)
+    m2 = f2.place("adder", 5, 5, E, free=True)
+    out = f2.place("belt", 6, 5, E, free=True)
+    for _ in range(300):
+        f2.tick()
+    assert out.items and all(it[0] == 6 for it in out.items) and m2.invested == 0

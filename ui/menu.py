@@ -61,8 +61,8 @@ class Menu:
             fs = self.config.get("fullscreen", False)
             options.append((f"Fullscreen: {'On' if fs else 'Off'}", ("fullscreen", None)))
             options.append(("Quit", ("quit", None)))
-            footer = ("Up/Down or mouse, Enter to select, Esc back to the game" if cont is not None
-                      else "Up/Down or mouse, Enter to select")
+            footer = "Up/Down or mouse, Enter to select, Del deletes the highlighted world"
+            footer += ", Esc back to the game" if cont is not None else ""
             key = self._select(None, options, footer)
             if key == BACK:                              # Esc closes the menu: back into the last world
                 if cont is None:
@@ -70,6 +70,12 @@ class Menu:
                 return {"action": "play", "meta": cont}
             if key == QUIT or key[0] == "quit":
                 return {"action": "quit"}
+            if key[0] == "delete":                       # Del on a world entry -> confirm -> remove
+                payload = key[1]
+                if isinstance(payload, tuple) and payload[0] == "play":
+                    if self._delete_world(payload[1]) == QUIT:
+                        return {"action": "quit"}
+                continue
             action, meta = key
             if action == "play":
                 return {"action": "play", "meta": meta}
@@ -81,6 +87,21 @@ class Menu:
                 return {"action": "quit"}
             if isinstance(r, dict):
                 return {"action": "play", "meta": r}
+
+    def _delete_world(self, meta):
+        """Confirm, then remove the world's save folder. Returns True when
+        deleted, False when kept, QUIT if the window was closed."""
+        choice = self._select(f"Delete world '{meta['name']}'?",
+                              [("No, keep it", ("no", None)), ("Yes, delete it for good", ("yes", None))],
+                              "Enter to choose, Esc keeps it")
+        if choice == QUIT:
+            return QUIT
+        if choice == BACK or choice[0] != "yes":
+            return False
+        persistence.delete_world(meta["slug"])
+        if self.config.get("last_world") == meta["slug"]:
+            self.config.pop("last_world", None)
+        return True
 
     def _toggle_fullscreen(self):
         self.config["fullscreen"] = not self.config.get("fullscreen", False)
@@ -102,6 +123,8 @@ class Menu:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         return BACK
+                    if event.key == pygame.K_DELETE:
+                        return ("delete", options[sel][1])
                     if event.key in (pygame.K_UP, pygame.K_w):
                         sel = (sel - 1) % len(options)
                     elif event.key in (pygame.K_DOWN, pygame.K_s):

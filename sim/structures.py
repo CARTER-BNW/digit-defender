@@ -16,7 +16,8 @@ level, speed/rate and max_hp; hp only moves when a level-up raises max_hp.
             belt, any belt beside it that points straight away and has no
             cargo source of its own; items alternate evenly between outputs
             (splitter / T-junction). Corners and merges never branch.
-  Machine:  LEFT = operand A, RIGHT = operand B, BACK = feed, FRONT refuses
+  Machine:  LEFT = operand A, RIGHT = operand B, BACK = whichever buffer is
+            emptier (all three are inputs; John), FRONT refuses; no feed side
   Hub:      every side = income
   Miner:    pushes its digit into EVERY adjacent cargo input (belt back/side,
             machine A/B, hub, tower ammo) each period; never into feed sides
@@ -287,11 +288,14 @@ class Miner(Structure):
 
 class MathMachine(Structure):
     """Two operand buffers (A = left side, B = right side), one output slot.
-    sub -> a-b, div -> a//b; results <= 0 are voided."""
+    The back is an input too: it tops up whichever buffer is emptier (A on
+    a tie), so any two of the three sides make a pair, and one line from
+    behind pairs its own numbers. sub -> a-b, div -> a//b; results <= 0 are
+    voided. No feed side: level machines with the balance upgrade."""
     __slots__ = ("in_a", "in_b", "out", "timer", "busy")
     OP = None
     HAS_OUTPUT = True
-    SIDE_ROLES = (ROLE_OUT, ROLE_IN, ROLE_FEED, ROLE_IN)
+    SIDE_ROLES = (ROLE_OUT, ROLE_IN, ROLE_IN, ROLE_IN)
 
     def __init__(self, x, y, direction=E):
         super().__init__(x, y, direction)
@@ -326,8 +330,7 @@ class MathMachine(Structure):
         elif rel == RIGHT:
             buf = self.in_b
         elif rel == BACK:
-            self.feed(value)
-            return True
+            buf = self.in_a if len(self.in_a) <= len(self.in_b) else self.in_b
         else:
             return False
         if len(buf) >= MACHINE_BUFFER:

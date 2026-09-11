@@ -29,15 +29,19 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
 2. `python main.py --world smoke --frames 120` -> window opens on a fresh world with the hub, exits 0, `saves/smoke/` written.
 3. In game: 1 = belt, 2 = miner (needs a deposit), 3-6 = machines, 7 = wall, 8 = tower, 9/0/- = spawners, X = demolish
    tool (click or drag over buildings, 50% refund; X/Esc leaves it; Del = one-shot); R rotate, LMB place (belts: hold
-   and drag = transparent preview path that auto-turns, release builds it, drag back undoes; other kinds place on every
-   tile crossed), Q pick, H repair, U upgrade (fixed level price), click = select (panel on the right; decided on
+   and drag = transparent preview path that auto-turns, Shift = one straight run + one square corner, R during the
+   drag turns every belt a quarter (twice = the line runs backwards), release builds it, drag back undoes; a drag off
+   the middle of a line leaves that belt alone so the new belt is a T branch, from a line's end the last belt turns,
+   dragging backwards over a line reverses it; other kinds place on every tile crossed), Q pick, H repair, U upgrade
+   (fixed level price), click = select (panel on the right; decided on
    release), drag a box — even one that starts on a belt — = select every structure inside (U/H apply to all; group
    panel; Shift+click adds one) and/or units, click a spawner = train one unit,
    click / Shift+click / drag a box = select units, RMB = move selected units (grid formation) or set a selected
    spawner's gather point or cancel,
    wheel zoom, MMB drag pan, WASD pan (Shift fast), F3 debug, Space pause, [ ] sim speed x1/x2/x4, F1 help overlay,
    Home or the HUB button = camera back to the hub, F6 spawn an enemy at the cursor, F7 trigger the next wave,
-   F11 fullscreen, Esc = cancel tool / clear selection / menu (Esc in the menu = back into the game). Minimap bottom-right.
+   F11 fullscreen, Esc = cancel tool / clear selection / menu (Esc in the menu = back into the game; Del in the menu
+   deletes the highlighted world after a confirm screen). Minimap bottom-right.
 4. Belt rules a player sees: drag-paint belts; a belt that starts beside a straight belt and points away becomes a
    branch (T), items alternate between branches; a corner or a merge never branches; numbers cannot be built on
    except by miners; a miner pushes into every adjacent belt.
@@ -65,7 +69,8 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
    tests/test_persistence.py: save@100 + load + 100 == twin@200.
 4. Side rules (`sim/structures.py` docstring): item entering through a non-cargo side is FEED (invested += value; hp
    moves only when a level-up raises max_hp — feeding never heals, repair does; John, round 6). Belt: back/sides cargo,
-   head-on feed. Machine: left = A, right = B, back = feed, front refuses. Hub: all income.
+   head-on feed. Machine: left = A, right = B, back = the emptier buffer (all three inputs; no feed side — John,
+   round 7), front refuses. Hub: all income.
    Tower: every side = ammo, no facing, no feed sides (John, round 3) — towers level only via `[U]`. Wall/Spawner: all
    feed. sub/div <= 0 voided.
    Miners (John, 2026-09-11) push into every adjacent cargo input, never into feed sides, no facing. Belt outputs = the front

@@ -30,6 +30,14 @@ _Last updated: 2026-09-11 (v6) by Claude_
   frame around the hub, red screen frame + "HUB UNDER ATTACK". (4) John: dragging from a belt only opened its panel ->
   clicks are decided on release: a tiny box selects the structure under it (spawner trains; Shift adds it to the group),
   a real drag boxes an area even when it starts on a building. Tests 113 -> 117.
+- Round 7 (same evening): (1) belt drag with Shift = one straight run from the anchor along the axis of the first move
+  plus one square corner (`Game._straight_belt_path`, axis locked per drag); R during a drag = `belt_turn`, a quarter
+  turn applied to every belt on release (twice = the whole line runs backwards), shown in the preview. (2) Menu: Del on
+  a world entry -> confirm screen -> `persistence.delete_world` removes the folder (last_world forgotten). (3) T-junction
+  fix: a belt already on a drag path is turned only at a line's end (nothing in front) or to reverse it; a belt in the
+  middle of a line keeps flowing, so dragging off it leaves a branch beside the line = T. (4) Machines take operands
+  from all three non-output sides: back tops up the emptier buffer (A on a tie), so a single line from behind pairs its
+  own numbers; machines have no feed side and level via [U]. Tests 117 -> 122.
 
 
 ## v5 (2026-09-11, afternoon): John's third round of play-test feedback, all implemented

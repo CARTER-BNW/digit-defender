@@ -186,3 +186,26 @@ def test_corrupt_structures_file_fallbacks(saves, screen):
     (d / "structures.json.bak").write_text("also bad")
     g3 = Game.load(screen, persistence.load_meta("C"))
     assert g3.factory.hub is not None and len(g3.factory.belts) == 0   # fresh factory, hub intact
+
+
+def test_delete_world_removes_the_folder(saves):
+    meta = persistence.create_world("Doomed", 5)
+    assert any(m["slug"] == meta["slug"] for m in persistence.list_worlds())
+    assert persistence.delete_world(meta["slug"])
+    assert not persistence.world_dir(meta["slug"]).exists()
+    assert all(m["slug"] != meta["slug"] for m in persistence.list_worlds())
+    assert not persistence.delete_world(meta["slug"])
+
+
+def test_menu_delete_world_confirms_then_forgets_last_world(saves, screen, monkeypatch):
+    from ui.menu import Menu, QUIT
+    meta = persistence.create_world("Gone", 9)
+    cfg = {"last_world": meta["slug"]}
+    menu = Menu(cfg)
+    monkeypatch.setattr(Menu, "_select", lambda self, *a, **k: ("no", None))
+    assert menu._delete_world(meta) is False and persistence.world_dir(meta["slug"]).exists()
+    monkeypatch.setattr(Menu, "_select", lambda self, *a, **k: ("yes", None))
+    assert menu._delete_world(meta) is True
+    assert not persistence.world_dir(meta["slug"]).exists() and "last_world" not in cfg
+    monkeypatch.setattr(Menu, "_select", lambda self, *a, **k: QUIT)
+    assert menu._delete_world(meta) == QUIT
