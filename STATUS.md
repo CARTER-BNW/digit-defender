@@ -2,17 +2,28 @@
 _Last updated: 2026-09-12 (v8) by Claude_
 
 ## v8 (2026-09-12): John's round 16 - demolish box, Del on a selection, unit costs, 10-minute waves (tests 143 -> 144)
-- "I can't click and drag to delete": the demolish tool [X] now drags a BOX (red translucent rect, a frame on every
-  structure inside, "demolish N = +refund" at the corner) and removes everything inside on release; a tiny box removes
-  the one under the cursor; Esc / RMB before the release cancels; the HQ is never removed. The old 1-tile-wide sweep
-  along the drag is gone (`Game._end_demolish`, `demolish_targets`, `_structures_in_box` shared with the select box).
-  Del removes the selection (boxed group or single) with a "Demolished N, +refund back" message, else the hovered one.
-- Spawner panels show what [C] costs: single panel "[click] or [C] train a Ranged unit: 50 each   queue 2 (100 paid)";
-  the group panel and the hints line say "[C] train a unit at each of 3 spawners for 250 (Ranged 50 x2, Heavy 150)"
-  (`hud.unit_cost_summary`); the hover line names the unit and its price; the group panel also totals [Del] refunds.
-- Waves every 10 minutes, flat: WAVE_FIRST_S = WAVE_INTERVAL_BASE_S = WAVE_INTERVAL_MIN_S = 600, DECAY 1.0 (was 5 min
-  then 240 s * 0.97^n, min 90 s). Existing saves keep their current countdown, then run 10-minute intervals.
-- Repair units: unlimited range (REPAIR_UNIT_SEARCH None): the nearest damaged unit or building anywhere, nearest first.
+Commits 6606f99 (round 15, see v7) and cbf056b (round 16); session wrap after that.
+- "I can't click and drag to delete" (`game.py`, `render/renderer.py`, `render/structures.py`): the demolish tool [X]
+  now drags a BOX (red translucent rect, a frame on every structure inside, "demolish N = +refund" at the corner) and
+  removes everything inside on release; a tiny box removes the one under the cursor; Esc / RMB before the release
+  cancels; the HQ is never removed. The old 1-tile-wide sweep along the drag is gone (`Game._end_demolish`,
+  `demolish_targets`, `_structures_in_box` shared with the select box). Del removes the selection (boxed group or
+  single) with a "Demolished N, +refund back" message, else the hovered one (`Game.demolish_many`).
+- Spawner panels show what [C] costs (`ui/hud.py`): single panel "[click] or [C] train a Ranged unit: 50 each
+  queue 2 (100 paid)"; the group panel and the hints line say "[C] train a unit at each of 3 spawners for 250
+  (Ranged 50 x2, Heavy 150)" (`hud.unit_cost_summary`); the hover line names the unit and its price; the group panel
+  also totals [Del] refunds. Both info panels now grow to their widest line instead of overflowing 372 px.
+- Waves every 10 minutes, flat (`settings.py`, `docs/PLAN.md` 3.8): WAVE_FIRST_S = WAVE_INTERVAL_BASE_S =
+  WAVE_INTERVAL_MIN_S = 600, DECAY 1.0 (was 5 min then 240 s * 0.97^n, min 90 s). Existing saves keep their current
+  countdown, then run 10-minute intervals.
+- Repair units: unlimited range (`settings.REPAIR_UNIT_SEARCH` None, `sim/combat.py` `_repair_target`): the nearest
+  damaged unit or building anywhere, nearest first. Help / hints text updated.
+- Tests (`tests/test_game.py`, `tests/test_combat.py`): demolish click-vs-box (preview count, HQ never removed, Esc
+  cancels), Del on a boxed group / a single selection / hovered fallback, `unit_cost_summary`, flat 10-minute waves.
+- Verification: dummy-driver screenshots of the demolish box over the lab (37 structures framed, label + hint line),
+  the group panel with four spawners ("for 350 (Heavy 150, Melee 50, Ranged 50, Repair 100)") and the single Heavy
+  spawner panel ("150 each, queue 1 (150 paid)"); wave timer reads "Wave 1 in 9:59"; suite green; `python main.py
+  --world smoke --frames 120` exits 0.
 - **Open:** as v7 (John's (-22,2)/(-26,1) Test Lab reports need his layout; formations do not turn; economy not
   re-balanced; Phase 4 design checkbox; Phase 6 leftovers).
 

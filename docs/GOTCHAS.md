@@ -27,6 +27,11 @@ Format: Symptom / Cause / Fix. Add an entry the moment a trap is found (`/gotcha
 - **Cause:** since STATUS v5 every item is `[value, progress, entry_rel]`; the third field is render-only (corner animation) and the sim never reads it, but pair-unpacking anywhere breaks.
 - **Fix:** index (`it[0]`, `it[1]`) or unpack with `v, p, *_`. `Belt.to_dict/from_dict` accept both shapes (old two-field saves load with entry BACK); tests that hand-append items may still append pairs.
 
+## A short scripted run shows an "empty" belt line that is actually fine
+- **Symptom:** a verification script places a miner + belts + bridge, runs 60 ticks, and the belts past the bridge carry nothing (looks like a broken link).
+- **Cause:** a new miner's timer starts at the BASE period (40 ticks) even if `invested` is raised right after placement, and level-1 belts move 1 tile/s (0.05 tiles/tick), so nothing reaches tile 5 of a line inside 60 ticks.
+- **Fix:** run 200+ ticks before judging a line (or set `miner.timer = 0`); check `stats["mined"]` and the items on the FIRST belt before suspecting the links.
+
 ## A second Combat on the same Factory silently takes over its ticks
 - **Symptom:** in a test, a unit stops moving right after a save round-trip check that built `Combat(f, ..., units=records)` on the same factory.
 - **Cause:** `Combat.__init__` sets `factory.combat = self`; `Factory.tick()` ticks whatever `combat` points at, so the original Combat (and its units) is no longer simulated.

@@ -6,31 +6,28 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
 
 ## Live state
 - **Phases 0-5 are built and verified** (tests + real-window runs + screenshots). Phase 6 (polish) is in progress.
-  144 pytest tests green (`python -m pytest -q`, ~9 s). Last commit: round 16 (demolish box + Del on a selection,
-  spawner panels show unit costs, waves every 10 min, repair range unlimited; 2026-09-12).
-- **Round 15 (2026-09-12)**: with units selected the WHEEL cycles the group's formation (box / line / column / wedge /
-  ring; it sticks to the group for every later move; Ctrl+wheel still zooms) and a MIDDLE CLICK sets a patrol between
-  the units' rally slots and a second formation at the click (RMB move ends it). Player units no longer walk through
-  walls or buildings: they route around them with A* (`sim.pathing.route`, cached per unit, re-checked when the layout
-  changes) and hold when shut in; belts and bridges are still walked over. New `[=]` Repair spawner (100) trains repair
-  units (100; red with a white cross): they heal the nearest damaged building or unit anywhere (round 16: unlimited
-  range; `REPAIR_UNIT_SEARCH` None), 25 hp per action
-  from a load of 500 numbers at 5 hp per number (the [H] price), and walk to the HQ for a new load (debited from the
-  balance; they wait there while broke). A bridge can be dropped straight onto a belt (the belt's numbers carry on
-  across it). A click that cannot build now says why ("occupied by a Tower", "belt kept its direction: it feeds a line").
-  John's Test Lab reports at (-22,2)/(-21,2) and (-26,1) were NOT reproducible from his save (nothing was built there
-  when it was saved); the bridge-on-belt and the messages are the best guess at what he hit — ask him to leave the
-  failing pieces in place next time.
-- **John play-tested fourteen rounds on 2026-09-11/12; every item is implemented** (STATUS v4-v6 list them round by
+  144 pytest tests green (`python -m pytest -q`, ~9 s). Last commits: 6606f99 (round 15) and cbf056b (round 16) on
+  2026-09-12, then this session wrap. Working tree clean.
+- **John play-tested sixteen rounds on 2026-09-11/12; every item is implemented** (STATUS v4-v8 list them round by
   round, HANDOFF decisions 1-11 below hold the resulting rules). The game he now has, in one breath: a 6x6 HQ; belts
   drawn by drag with a transparent preview (Shift = straight L, R turns the drag), items that curve through corners;
-  junctions = merge by pointing in, split only with [T] or an unfed belt starting beside a line, [B] bridge to cross;
-  machines take operands on all three non-output sides; towers take ammo from any side, range 10, buffer 20+10/level;
-  walls link and show their level; hp only moves on level-ups, [U] buys the next level at a fixed geometric price;
-  spawners train paid units on click / [C], units gather one per tile beside the HQ, are commanded RTS-style and fight
-  from distinct posts; enemies shoot while advancing and melee in contact; four levelled targets that want an amount
-  of a number and pay 10-20x; a guaranteed enemy camp 100 tiles out; sparse rarity-weighted deposits; HUD right column
-  + top-left info panel + 2x minimap + hints toggle; X demolish tool; delete worlds from the menu.
+  junctions = merge by pointing in, split only with [T] or an unfed belt starting beside a line, [B] bridge to cross
+  (it drops straight onto a belt of a finished line); machines take operands on all three non-output sides; towers take
+  ammo from any side, range 10, buffer 20+10/level; walls link and show their level; hp only moves on level-ups, [U]
+  buys the next level at a fixed geometric price; spawners train paid units on click / [C] (panels show the price),
+  units gather one per tile beside the HQ, are commanded RTS-style (RMB move, wheel = formation box / line / column /
+  wedge / ring that sticks to the group, middle click = patrol between rally and the click), route around walls and
+  buildings with A* (belts and bridges are walked over; a walled base needs a gate), and fight from distinct posts;
+  `[=]` repair spawner trains red white-cross units that heal the nearest damaged building or unit anywhere from a
+  500-number load (5 hp per number, refilled at the HQ from the balance); enemies shoot while advancing and melee in
+  contact; waves every 10 minutes flat; four levelled targets that want an amount of a number and pay 10-20x; a
+  guaranteed enemy camp 100 tiles out; sparse rarity-weighted deposits; HUD right column + top-left info panels that
+  grow to their text + 2x minimap + hints toggle; X demolish tool drags a box (Del removes the selection); a click that
+  cannot build says why ("occupied by a Tower", "belt kept its direction: it feeds a line"); delete worlds from the menu.
+- **Unresolved from round 15**: John's Test Lab reports at (-22,2)/(-21,2) ("cannot connect") and (-26,1) ("cannot
+  make a bridge after drawing a belt from -28,1 to -24,1") had nothing built there in his save, so they were never
+  reproduced; the likely causes (a bridge on an occupied belt tile, a mid-line belt that refuses to turn, a silent
+  "occupied") were fixed blind. If he hits them again, ask him to leave the pieces in place and quit normally.
 - **Test Lab**: `python main.py --testworld` (or the menu entry "Test lab") opens a hand-built world with every part and
   junction laid out around the HQ (legend in `world/testworld.py`). John will bug-hunt there; when he reports a tile
   coordinate, rebuild the scene from the legend and reproduce headlessly (tests/test_testworld.py shows how).
@@ -225,14 +222,13 @@ tests must keep their tiles clear of the right column (x >= 932 px) and the mini
   (60k-tile cap) can cost ~200 ms when structures change during a wave (throttled to every 2 s).
 
 ## Next actions
-1. Expect bug reports from the Test Lab (John gives tile coordinates / screenshots): rebuild the scene from the legend
-   in `world/testworld.py`, reproduce headlessly, fix, screenshot-verify in a real window, commit (local only). His
-   round-15 reports at (-22,2)/(-21,2) ("cannot connect") and (-26,1) ("cannot make a bridge after drawing a belt from
-   -28,1 to -24,1") had nothing built there in the save; the likely causes (a bridge on an occupied belt tile, a
-   mid-line belt that refuses to turn, a silent "occupied") now either work or explain themselves on screen. If he
-   still hits them, ask him to leave the pieces in place and quit normally so the save shows them. His existing Test
-   Lab save gets the repair spawner via `testworld.top_up` on the next launch.
-2. When his remaining PNGs arrive: same convention (32x32, hub 192x192, facing left, white transparent); check label
-   overlap on miners/machines/spawners and the bridge.
-3. Tick the Phase 4 design checkbox if John confirms; then the remaining Phase 6 items (sounds, stats graphs, blueprints,
+1. Expect the next round of play-test feedback (John gives tile coordinates / screenshots, usually from the Test Lab):
+   rebuild the scene from the legend in `world/testworld.py`, reproduce headlessly, fix, screenshot-verify (dummy
+   driver + Read the PNG is fine; keep scene tiles clear of the HUD rects), commit (local only). His existing Test Lab
+   save gets the repair spawner via `testworld.top_up` on the next launch; everything else in his lab is as he left it.
+2. Likely follow-ups from rounds 15-16 if he asks: formations that face the move direction; a way to cancel a queued
+   unit (refund); repair units that prefer their own area; a fully walled base with no gate (units stuck inside).
+3. When his remaining PNGs arrive (now incl. `spawner_repair.png`): same convention (32x32, hub 192x192, facing left,
+   white transparent); check label overlap on miners/machines/spawners and the bridge.
+4. Tick the Phase 4 design checkbox if John confirms; then the remaining Phase 6 items (sounds, stats graphs, blueprints,
    balance pass) per docs/PHASES.md; keep `/phase-gate` discipline and the gotchas log.
