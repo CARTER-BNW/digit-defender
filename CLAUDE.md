@@ -68,7 +68,10 @@ Add one line per file as files are created, stating what that file owns (layout:
 ## Project rules
 - Discover a trap → log it in @docs/GOTCHAS.md immediately (`/gotcha`).
 - Phase gates: don't start the next phase until the current phase's checkpoints are verified (`/phase-gate`).
-- End of session: new vN entry in @STATUS.md, refresh HANDOFF.md, commit (`/session-wrap`). Local git only — no push.
+- End of session: new vN entry in @STATUS.md, refresh HANDOFF.md, commit and push (`/session-wrap`). Remote:
+  https://github.com/CARTER-BNW/digit-defender (public since 2026-09-12 so testers can grab the APK; John's call).
+- Releases for testers: `python android\sync.py sync build --version X.Y.Z`, add a section to @docs/RELEASE_NOTES.md,
+  commit, then `gh release create vX.Y.Z android/bin/digitdefender-X.Y.Z-arm64-v8a-debug.apk --title ... --notes-file ...`.
 - Android copy: after desktop changes John wants on the phone, run `/android_update_copy` (the desktop code is the master; only `android/mobile/` is phone-specific).
 - Never commit data dumps, logs, saves/, or secrets — .gitignore covers these; keep it that way.
 

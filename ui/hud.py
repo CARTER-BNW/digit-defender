@@ -203,25 +203,28 @@ class Hud:
             color = COLORS.get(kind, (120, 120, 120))
             if balance < cost:
                 color = tuple(int(c * 0.45) for c in color)
-            icon = rect.inflate(-q(8), -q(22)).move(0, -q(6))
+            # a keycap on top (the hotkey centred in the kind's colour), the name and the
+            # cost centred under it, nothing overlapping (John, phone round 2: centred text)
+            icon = pygame.Rect(rect.x + q(4), rect.y + q(4), rect.width - q(8), q(24))
             pygame.draw.rect(screen, color, icon, border_radius=4)
             if kind == "spawner_repair":                # the repair cross, like its units
                 cx, cy = icon.center
-                arm, th = max(3, icon.width // 4), max(2, icon.height // 5)
+                arm, th = max(3, icon.height // 3), max(2, icon.height // 6)
                 pygame.draw.rect(screen, (255, 255, 255), (cx - arm, cy - th // 2, 2 * arm, th))
                 pygame.draw.rect(screen, (255, 255, 255), (cx - th // 2, cy - arm, th, 2 * arm))
+            k = numbers.text(key, max(9, q(13)))
+            screen.blit(k, (icon.centerx - k.get_width() // 2, icon.centery - k.get_height() // 2))
             if game.tool == kind:
                 pygame.draw.rect(screen, (255, 255, 120), rect, 2, border_radius=4)
             else:
                 pygame.draw.rect(screen, COLORS["panel_border"], rect, 1, border_radius=4)
-            screen.blit(numbers.text(key, max(9, q(13))), (rect.x + q(4), rect.y + q(2)))
             name = numbers.text(TOOL_NAMES[kind], name_px)
-            screen.blit(name, (rect.centerx - name.get_width() // 2, rect.bottom - q(26)))
+            screen.blit(name, (rect.centerx - name.get_width() // 2, icon.bottom + q(1)))
             if kind == "demolish":
                 c = numbers.text("50% back", max(8, q(11)), (255, 230, 120))
             else:
                 c = numbers.text(str(cost), max(9, q(12)), (255, 230, 120) if balance >= cost else (255, 110, 110))
-            screen.blit(c, (rect.centerx - c.get_width() // 2, rect.bottom - q(13)))
+            screen.blit(c, (rect.centerx - c.get_width() // 2, rect.bottom - q(16)))
 
     @staticmethod
     def _wrap(text, px, max_w):

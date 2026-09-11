@@ -41,7 +41,8 @@ later builds take a few minutes.
 | Touch | Action |
 |---|---|
 | tap | left click: select, place, train (spawner), toolbar, minimap, HQ button |
-| long press (0.45 s, a ring closes in) | right click: move selected units / gather point / cancel the tool / clear selection |
+| hold (0.45 s: a ring closes in and turns green), then lift | right click: move selected units / gather point / cancel the tool / clear selection |
+| hold, then drag | selection box over units and buildings (with a build tool active it is the tool's own drag instead) |
 | one-finger drag | pan; with a build tool it is the left-button drag (belt path, paint, demolish box); with **Box** armed it is a selection box |
 | two-finger drag | pan (also while a tool is active) |
 | pinch | zoom in / out one step per 22% change, anchored at the pinch |
@@ -59,6 +60,13 @@ selected), **Train** C (a spawner selected), **Form** (units selected: next form
 key), Del (the X tool), Pick, HQ (the HQ button in the right column) and the zoom buttons (pinch).
 Menu > Settings: text size, button size (toolbar + these buttons), info hints (off by default on the
 phone), enemy waves on / paused; the fullscreen row is desktop-only.
+
+Unit orders: select units (tap one, hold-and-drag a box over several, **Shift** + tap adds), then hold
+and lift where they should go (that spot becomes their rally point). Patrol: with the units selected,
+two-finger tap on a second spot; they walk back and forth between the rally point and it in their
+formation (**Form** cycles box / line / column / wedge / ring). A new move order ends the patrol.
+Tap a spawner (or **Train** with it selected) to train a unit; hold and lift with a spawner selected
+sets the gather point for the units it trains next.
 
 Naming a new world: the New World screen opens the soft keyboard; letters arrive when the keyboard
 commits a word (space / enter), or just tap Create for an automatic name.

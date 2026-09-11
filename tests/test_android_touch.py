@@ -70,15 +70,55 @@ def test_tap_places_one_belt(game):
     assert game.touch.mode is None and not game.belt_path
 
 
-def test_long_press_is_a_right_click(game):
+def hold(g, pos, fid=0):
+    """Finger down at pos and rest past the long-press time (mode "held")."""
+    finger(g, pygame.FINGERDOWN, fid, pos)
+    g.touch.clock.t += LONG_PRESS_S + 0.05
+    g.update(1 / 60)                             # the timer fires here
+    assert g.touch.mode == "held"
+
+
+def test_hold_then_lift_is_a_right_click(game):
     game.set_tool("wall")
-    finger(game, pygame.FINGERDOWN, 0, tile_centre(game, 6, 1))
-    game.touch.clock.t += LONG_PRESS_S + 0.05
-    game.update(1 / 60)                          # the timer fires here
-    assert game.tool is None                     # RMB with a tool = cancel it
-    assert game.factory.structure_at(6, 1) is None
+    hold(game, tile_centre(game, 6, 1))
+    assert game.tool == "wall"                   # nothing fires while the finger rests
     finger(game, pygame.FINGERUP, 0, tile_centre(game, 6, 1))
+    assert game.tool is None                     # lifted in place: RMB with a tool = cancel it
+    assert game.factory.structure_at(6, 1) is None
     assert game.touch.mode is None
+
+
+def test_hold_then_lift_moves_selected_units(game):
+    u = game.combat.spawn_unit("melee", 4.5, 8.5)
+    game.selected_units = [u]
+    p = tile_centre(game, 10, 10)
+    hold(game, p)
+    finger(game, pygame.FINGERUP, 0, p)
+    assert abs(u.rally[0] - 10.5) < 2 and abs(u.rally[1] - 10.5) < 2   # the move order landed there
+
+
+def test_hold_then_drag_boxes_a_selection(game):
+    """John (phone round 2): touch and hold, then drag = selection box, no Box button needed."""
+    game.factory.place("wall", 6, 4, 0)
+    game.factory.place("wall", 7, 4, 0)
+    x0 = game.camera.x
+    a, b = tile_centre(game, 5, 3), tile_centre(game, 8, 5)
+    hold(game, a)
+    finger(game, pygame.FINGERMOTION, 0, b)
+    assert game.touch.mode == "lmb" and game.box_start is not None
+    finger(game, pygame.FINGERUP, 0, b)
+    assert len(game.selected_structures) == 2
+    assert game.camera.x == x0                   # a held drag never pans
+    assert game.tool is None and game.touch.mode is None
+
+
+def test_hold_then_drag_with_a_tool_is_the_tools_drag(game):
+    game.set_tool("belt")
+    hold(game, tile_centre(game, 5, 2))
+    finger(game, pygame.FINGERMOTION, 0, tile_centre(game, 8, 2))
+    assert game.tool == "belt" and len(game.belt_path) == 4     # the belt preview, not a box
+    finger(game, pygame.FINGERUP, 0, tile_centre(game, 8, 2))
+    assert all(isinstance(game.factory.structure_at(x, 2), Belt) for x in range(5, 9))
 
 
 def test_one_finger_drag_pans_without_a_tool(game):

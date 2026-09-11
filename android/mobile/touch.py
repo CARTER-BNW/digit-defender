@@ -3,7 +3,10 @@ keyboard events game.Game already understands, so the desktop code stays
 untouched:
 
     tap                = left click (select, place, train, toolbar, minimap)
-    long press         = right click (move units / gather point / cancel tool)
+    hold (0.45 s)      = a ring closes in and turns green: LIFT = right click
+                         (move units / gather point / cancel tool / clear the
+                         selection); DRAG = selection box over units and
+                         buildings (with a build tool: the tool's own drag)
     one-finger drag    = pan; with a build tool active (or the Box button
                          armed) it is a left-button drag: belt path, paint,
                          demolish box, selection box
@@ -158,10 +161,12 @@ class TouchLayer:
             return
         if f is not self.press:
             return
-        if self.mode == "pending":
+        if self.mode in ("pending", "held"):
             if math.hypot(x - f.x0, y - f.y0) <= TAP_MAX_PX:
                 return
-            if self.game.tool is not None or self.box_armed:
+            # a finger that moves after a hold drags a selection box (or the tool's
+            # drag); a quick move pans unless a tool or the Box button says otherwise
+            if self.mode == "held" or self.game.tool is not None or self.box_armed:
                 self.box_armed = False
                 self.mode = "lmb"
                 self.mouse(pygame.MOUSEBUTTONDOWN, 1, (f.x0, f.y0))
@@ -173,7 +178,6 @@ class TouchLayer:
             self.mouse(pygame.MOUSEMOTION, 1, pos, rel=(x - px, y - py))
         elif self.mode == "pan":
             self.pan(x - px, y - py)
-        # "held": the right click already fired; the finger just rests
 
     def finger_up(self, fid, pos):
         f = self.fingers.pop(fid, None)
@@ -201,18 +205,21 @@ class TouchLayer:
         if self.mode == "pending":                     # a tap
             self.mouse(pygame.MOUSEBUTTONDOWN, 1, pos)
             self.mouse(pygame.MOUSEBUTTONUP, 1, pos)
+        elif self.mode == "held":                      # a hold lifted in place: right click
+            self.mouse(pygame.MOUSEBUTTONDOWN, 3, pos)
+            self.mouse(pygame.MOUSEBUTTONUP, 3, pos)
         elif self.mode == "lmb":
             self.mouse(pygame.MOUSEBUTTONUP, 1, pos)
         self.mode = None
         self.press = None
 
     def update(self, dt=0.0):
-        """Once per frame: a finger resting long enough is a right click."""
+        """Once per frame: a finger resting long enough is "held" (the ring
+        turns green): lifted in place it is a right click (finger_up), moved
+        it drags a selection box or the tool's drag (finger_motion)."""
         f = self.press
         if self.mode == "pending" and f is not None and self.clock() - f.t0 >= LONG_PRESS_S:
             self.mode = "held"
-            self.mouse(pygame.MOUSEBUTTONDOWN, 3, (f.x, f.y))
-            self.mouse(pygame.MOUSEBUTTONUP, 3, (f.x, f.y))
 
     # ---- gestures ---------------------------------------------------------
 
@@ -369,11 +376,13 @@ class TouchLayer:
                              2 if active else 1, border_radius=6)
             t = numbers.text(text, max(8, int(round((15 if len(text) <= 5 else 13) * bs))))
             screen.blit(t, (rect.centerx - t.get_width() // 2, rect.centery - t.get_height() // 2))
-        if self.mode == "pending" and self.press is not None:       # long-press progress ring
+        if self.mode in ("pending", "held") and self.press is not None:   # hold progress ring, green once held
             frac = (self.clock() - self.press.t0) / LONG_PRESS_S
             if frac > 0.25:
                 r = int(30 - 22 * min(1.0, frac))
-                pygame.draw.circle(screen, (255, 230, 120), (int(self.press.x), int(self.press.y)), max(5, r), 2)
+                held = self.mode == "held"
+                pygame.draw.circle(screen, (140, 255, 140) if held else (255, 230, 120),
+                                   (int(self.press.x), int(self.press.y)), max(5, r), 3 if held else 2)
         if buttons:                                                  # build tag over the row's right end
             t = numbers.text(BUILD_LABEL, 11, (150, 170, 150))
             top = min(r.top for r, _, _ in buttons)

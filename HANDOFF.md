@@ -17,6 +17,13 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
   appear only when they can act (Rot / Shift / Box / Upg / Fix / Split / Train / Form at the left, Pause / Speed /
   Help / Save / Menu / Load at the right); Esc, Del, Pick, HQ and the zoom buttons are gone (Back key, X tool,
   the HQ button, pinch).
+- **Phone round 2 (2026-09-12, same STATUS v10 entry):** toolbar buttons are keycaps (the hotkey centred in the
+  kind's colour, name and cost centred below, nothing overlapping); on the phone a HOLD (0.45 s, the ring turns
+  green) then LIFT = right click and HOLD then DRAG = selection box (with a tool active: the tool's own drag);
+  the Box button stays as the explicit way. The repo is public on GitHub (CARTER-BNW/digit-defender) with release
+  v0.2.0 (APK attached, notes in docs/RELEASE_NOTES.md, tester-facing README.md) - John: "so people can test".
+  The APK needs Android 7.0+ (minapi 24) on a 64-bit phone (arm64 only; add `armeabi-v7a` to `android.archs`
+  for 32-bit phones at the cost of a long first build and a bigger APK).
 - **Android copy (2026-09-12, STATUS v9):** `android/` = the untouched desktop game + `android/mobile/` (touch
   layer: tap / long press / drags / pinch / two-finger tap + on-screen hotkey buttons; `entry.py` is the APK's
   main), packaged by python-for-android inside the WSL distro `dd-android` (Ubuntu on `D:\WSL`, everything on
@@ -54,7 +61,8 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
   LEFT, pure white/magenta transparent, named by kind in `assets/sprites/` (belt shapes: belt, belt_corner, belt_t,
   belt_cross). wall.png, if it arrives, is drawn over the procedural connector bars.
 - **Code changes need a game restart** (a running `python main.py` keeps the code it started with).
-- Directory: D:\Claude\projects\games\Digit Defender (local git on `main`, no remote). Saves in `saves/` (gitignored;
+- Directory: D:\Claude\projects\games\Digit Defender (git on `main`, remote `origin` = github.com/CARTER-BNW/digit-defender,
+  public; push after each session wrap, releases via `gh release create`). Saves in `saves/` (gitignored;
   "Test Lab" lives there too), machine prefs in `config.json` (gitignored; holds fullscreen, hints, last world).
   The phone keeps its own saves and config on the device (`files/digit_defender/`), separate from the PC's.
 - Run: `python main.py` (menu) or `python main.py --world NAME [--seed N]` (skip menu), `--testworld`, `--frames N`
@@ -121,7 +129,8 @@ Android in one screen (`android/`, STATUS v9, `android/README.md` for the player
   2424x1080 -> 1616x720 at 1.5x); saves + config redirected to `$ANDROID_PRIVATE/digit_defender/` (the unpacked
   app dir is wiped on every update); `DEFAULT_CONFIG["hints"] = False` (the right-hand buttons sit where the hints
   panel would be). `--desktop` runs the same code in a window on the PC with the left mouse button as a finger.
-- `mobile/touch.py` = `TouchLayer`: modes None / pending / held / lmb / pan / two; TAP_MAX_PX 14, LONG_PRESS_S
+- `mobile/touch.py` = `TouchLayer`: modes None / pending / held (a rested finger: lift = right click, move = LMB
+  drag, i.e. a selection box with no tool) / lmb / pan / two; TAP_MAX_PX 14, LONG_PRESS_S
   0.45, TWO_TAP_S 0.35, PINCH_STEP 1.22; `layout()` recomputes the button rects every frame: one row just above
   `hud.toolbar_rect` (it calls `hud.buttons()` first), ACTION_BUTTONS from the left edge, each with a `when(game,
   layer)` predicate (Rot: a tool or selected building with a facing; Shift: belt tool, a selection, Box armed or
@@ -302,7 +311,10 @@ tests must keep their tiles clear of the right column (x >= 932 px) and the mini
    Esc / Del / Pick / HQ / zoom buttons. Expect follow-ups on the same lines (which button shows when, the sizes,
    whether "waves paused" should also stop camp raids). Change the touch layer or the desktop code, then
    `/android_update_copy` (sync -> build -> install -> run -> logs); the desktop code stays the master and
-   `android/app/` is never edited by hand.
+   `android/app/` is never edited by hand. APK 0.2.0 was built while his phone was away: install it with
+   `python android\sync.py install run` when it is plugged in again (or he installs it from the GitHub release).
+   Testers' reports arrive as GitHub issues on CARTER-BNW/digit-defender; new builds = a new release
+   (CLAUDE.md "Releases for testers").
 1. Expect the next round of play-test feedback (John gives tile coordinates / screenshots, usually from the Test Lab):
    rebuild the scene from the legend in `world/testworld.py`, reproduce headlessly, fix, screenshot-verify (dummy
    driver + Read the PNG is fine; keep scene tiles clear of the HUD rects), commit (local only). His existing Test Lab

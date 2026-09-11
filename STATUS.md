@@ -41,9 +41,27 @@ make the button and text adjustable in menu. no zoom buttons, I can pinch. in me
   180% / 200% (two button rows); game over (system + Load only); Settings screen at 100% / 150%; main menu at 150%
   with 6 worlds. APK 0.1.1 built in 1.3 min (`python android\sync.py sync build`, 25.0 MB) and installed on the
   Pixel 9a with `install run logs` (see the commit message for the log result).
-- **Open:** John to re-test on the phone; at the extreme Settings (180% + 200%) the timer / messages sit under
-  the button rows; "waves paused" leaves camp raids alone (ask if he wants both); economy / Phase 4 checkbox /
-  Phase 6 leftovers as before.
+- Round 2 (same day, John on his way out with the phone: "can the hotbar text also be centered. can touch and
+  hold activate the box. how do i set units to patrol. is the game compatible with older androids. make a git
+  and release with notes so i can share so people can test"):
+  - `ui/hud.py` toolbar buttons are keycaps: hotkey centred in the kind's colour (24 px band), name and cost
+    centred below with no overlap (the old layout drew the key top-left and the cost half off the bottom edge
+    with the phone's taller default font).
+  - `android/mobile/touch.py`: a hold no longer fires the right click at the timeout; "held" (green ring) then
+    lift = right click, held then drag = LMB drag (a selection box with no tool, the tool's drag otherwise).
+    Tests: hold-lift cancels a tool / moves units, hold-drag boxes two walls without panning, hold-drag with the
+    belt tool still draws the line. 167 -> 170 green. android/README.md: hold rows + a "Unit orders" paragraph
+    (move = hold and lift, patrol = two-finger tap on the far end, Form cycles the formation).
+  - Older Androids: buildozer.spec has `android.minapi = 24` (Android 7.0, 2016) and `android.archs = arm64-v8a`;
+    32-bit phones would need `armeabi-v7a` added (long first build, bigger APK). Told John.
+  - Published: README.md rewritten for testers (APK install steps, PC run, feedback), docs/RELEASE_NOTES.md
+    (v0.2.0), CLAUDE.md rule "local git only" replaced by the GitHub remote + release recipe; repo
+    github.com/CARTER-BNW/digit-defender created public with `gh`, release v0.2.0 with the APK attached
+    (`python android\sync.py sync build --version 0.2.0`). The phone was gone before the build finished: 0.2.0 is
+    not on it yet.
+- **Open:** John to install 0.2.0 (release page or `sync.py install run`) and re-test; at the extreme Settings
+  (180% + 200%) the timer / messages sit under the button rows; "waves paused" leaves camp raids alone (ask if he
+  wants both); tester issues on GitHub; economy / Phase 4 checkbox / Phase 6 leftovers as before.
 
 ## v9 (2026-09-12): Android copy - the game runs on John's Pixel 9a (tests 144 -> 156)
 John: "i want a copy of this game so i can play on android ... make a new command /android_update_copy".
