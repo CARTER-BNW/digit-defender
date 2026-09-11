@@ -338,6 +338,10 @@ class Game:
         keys = pygame.key.get_pressed()
         if keys[pygame.K_x] and not self.hud.over_ui(pygame.mouse.get_pos()):
             self.demolish(self.hover_tile)
+        # links (belt shapes, miner outputs, machine targets) refresh right away
+        # even while paused, so what you build looks and behaves connected
+        if self.factory.dirty_links:
+            self.factory.rebuild_links()
         # fixed-timestep sim: whole ticks only, capped so a slow frame never
         # snowballs into a frozen game (docs/PLAN.md section 2.4)
         if not self.game_over and not self.paused:

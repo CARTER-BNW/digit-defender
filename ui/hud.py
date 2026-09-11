@@ -132,8 +132,12 @@ class Hud:
     def _draw_hover(self, game):
         lines = []
         if game.tool:
-            d = "NESW"[game.build_dir]
-            lines.append(f"Build {TOOL_NAMES[game.tool]} facing {d}   [R] rotate  [LMB] place  [X] demolish  [Esc] cancel")
+            if game.tool in ("miner", "wall"):
+                lines.append(f"Build {TOOL_NAMES[game.tool]}   [LMB] place  [X] demolish  [Esc] cancel"
+                             + ("   (miners push numbers out of all four sides)" if game.tool == "miner" else ""))
+            else:
+                d = "NESW"[game.build_dir]
+                lines.append(f"Build {TOOL_NAMES[game.tool]} facing {d}   [R] rotate  [LMB] place  [X] demolish  [Esc] cancel")
         else:
             lines.append("[F1] help   [1-9] build tools  [R] rotate  [X] demolish  [Q] pick  [Space] pause  [ ] speed  [F3] debug")
         tx, ty = game.hover_tile
@@ -171,7 +175,8 @@ class Hud:
         self._panel((x0, y0, pw, ph))
         blit = self.screen.blit
         name = TOOL_NAMES.get(s.KIND, s.KIND)
-        blit(numbers.text(f"{name}  ({s.x}, {s.y})  facing {'NESW'[s.direction]}", 15), (x0 + 10, y0 + 8))
+        facing = "" if s.KIND in ("miner", "wall", "hub") else f"  facing {'NESW'[s.direction]}"
+        blit(numbers.text(f"{name}  ({s.x}, {s.y}){facing}", 15), (x0 + 10, y0 + 8))
         blit(numbers.text(f"Level {s.level}", 22, (255, 230, 120)), (x0 + 10, y0 + 28))
         nxt = leveling.next_threshold(s.invested)
         if nxt is None:
@@ -190,7 +195,7 @@ class Hud:
         if isinstance(s, Belt):
             rate = f"speed {s.speed:.4f} tiles/tick  ({s.speed * TICK_RATE:.2f} tiles/s)   items {len(s.items)}"
         elif isinstance(s, Miner):
-            rate = f"mines a {s.value} every {s.period} ticks ({s.period / TICK_RATE:.2f} s)"
+            rate = f"mines a {s.value} every {s.period} ticks ({s.period / TICK_RATE:.2f} s) out of every side"
         elif isinstance(s, MathMachine):
             rate = f"{s.period} ticks/op   A{list(s.in_a)} B{list(s.in_b)} out {s.out if s.out is not None else '-'}"
         elif isinstance(s, Tower):

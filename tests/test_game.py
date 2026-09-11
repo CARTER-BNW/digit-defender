@@ -114,3 +114,21 @@ def test_rally_right_click_on_selected_spawner(game):
     game.set_tool("belt")
     game.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=3, pos=(10, 10)))
     assert game.tool is None                          # plain right-click still cancels
+
+
+def test_building_while_paused_links_immediately(game):
+    from sim.structures import E, W
+    frames(game, 1)
+    game.paused = True
+    game.factory.balance = 10 ** 6
+    m = game.factory.place("miner", 6, 6, E, free=True, value=4)
+    a = game.factory.place("belt", 7, 6, E, free=True)
+    b = game.factory.place("belt", 8, 6, E, free=True)
+    game.update(1 / 60)                               # paused: no tick, but links rebuilt
+    assert game.tick_count == 0
+    assert [nb for nb, _ in m.outputs] == [a] and a.next is b
+    assert a.in_sides == 1 << W and b.in_sides == 1 << W
+    game.paused = False
+    for _ in range(60 * 3):
+        game.update(1 / 60)
+    assert game.factory.stats["mined"] >= 1
