@@ -114,3 +114,47 @@ class FlowField:
 def dist_to_tiles(x, y, tiles):
     """Distance from a point to the nearest tile centre of a footprint."""
     return min(math.hypot(x - (tx + 0.5), y - (ty + 0.5)) for tx, ty in tiles)
+
+
+def route(start, goal, blocked, budget=4000):
+    """A* over the tile grid (4-neighbour) from start to goal, never entering
+    a tile `in blocked`. Returns the tiles to walk, start excluded and goal
+    included; when the goal itself is blocked (a structure to stand next to)
+    the path ends on a free tile beside it. None when no path is found within
+    `budget` expansions. Deterministic: ties break on (f, y, x)."""
+    if start == goal:
+        return []
+    gx, gy = goal
+    goal_blocked = goal in blocked
+    if goal_blocked and abs(start[0] - gx) + abs(start[1] - gy) == 1:
+        return []
+    best_g = {start: 0}
+    came = {}
+    heap = [(abs(start[0] - gx) + abs(start[1] - gy), start[1], start[0])]
+    expanded = 0
+    while heap and expanded < budget:
+        f, y, x = heapq.heappop(heap)
+        t = (x, y)
+        g = best_g[t]
+        h = abs(x - gx) + abs(y - gy)
+        if g + h != f:
+            continue                                   # a better entry already popped this tile
+        expanded += 1
+        if t == goal or (goal_blocked and h == 1):
+            path = [t]
+            while t in came:
+                t = came[t]
+                path.append(t)
+            path.pop()                                 # the start tile
+            path.reverse()
+            return path
+        for dx, dy in NEIGHBOURS:
+            n = (x + dx, y + dy)
+            if n in blocked:
+                continue
+            ng = g + 1
+            if ng < best_g.get(n, 10 ** 9):
+                best_g[n] = ng
+                came[n] = t
+                heapq.heappush(heap, (ng + abs(n[0] - gx) + abs(n[1] - gy), n[1], n[0]))
+    return None

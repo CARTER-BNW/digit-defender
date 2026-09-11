@@ -645,9 +645,11 @@ class Spawner(Structure):
         if combat is None or self.queue <= 0 or self.timer > 0:
             return
         fx, fy = self.front_tile()
-        slot = combat.slot_near(*self.rally_point(factory))
-        combat.spawn_unit(self.UNIT, fx + 0.5, fy + 0.5, level=self.level, owner=self,
-                          rally=slot)
+        gx, gy = self.rally_point(factory)
+        slot = combat.slot_near(gx, gy)
+        u = combat.spawn_unit(self.UNIT, fx + 0.5, fy + 0.5, level=self.level, owner=self,
+                              rally=slot)
+        u.anchor = (math.floor(gx) + 0.5, math.floor(gy) + 0.5)   # formation changes re-form around the gather point
         self.queue -= 1
         self.timer = self.period
 
@@ -680,7 +682,15 @@ class SpawnerHeavy(Spawner):
     KIND, UNIT = "spawner_heavy", "heavy"
 
 
+class SpawnerRepair(Spawner):
+    """Trains repair units (John): red with a white cross, they fix damaged
+    walls/buildings and heal units from a load of REPAIR_UNIT_CAPACITY
+    numbers, and walk to the HQ for more when the load runs out."""
+    __slots__ = ()
+    KIND, UNIT = "spawner_repair", "repair"
+
+
 KINDS = {cls.KIND: cls for cls in
          (Belt, Bridge, Miner, Adder, Subtractor, Multiplier, Divider, Hub, Wall, Tower,
-          SpawnerRanged, SpawnerMelee, SpawnerHeavy)}
+          SpawnerRanged, SpawnerMelee, SpawnerHeavy, SpawnerRepair)}
 MACHINE_KINDS = ("adder", "subtractor", "multiplier", "divider")

@@ -3,7 +3,8 @@ import math
 
 import pygame
 
-from settings import COLORS, COSTS, REPAIR_COST_PER_HP, TICK_RATE, TILE_SIZE, CHUNK_SIZE, WAVE_WARNING_S
+from settings import (COLORS, COSTS, REPAIR_COST_PER_HP, TICK_RATE, TILE_SIZE, CHUNK_SIZE, WAVE_WARNING_S,
+                      REPAIR_UNIT_CAPACITY, REPAIR_UNIT_SEARCH)
 from render import numbers
 from render import combat as rcombat
 from sim import leveling
@@ -12,18 +13,18 @@ from sim.structures import KINDS, Belt, Bridge, Miner, MathMachine, Tower, Spawn
 # toolbar order and hotkeys (Phase 5 appends spawners)
 TOOLS = [("belt", "1"), ("bridge", "B"), ("miner", "2"), ("adder", "3"), ("subtractor", "4"),
          ("multiplier", "5"), ("divider", "6"), ("wall", "7"), ("tower", "8"),
-         ("spawner_ranged", "9"), ("spawner_melee", "0"), ("spawner_heavy", "-"),
+         ("spawner_ranged", "9"), ("spawner_melee", "0"), ("spawner_heavy", "-"), ("spawner_repair", "="),
          ("demolish", "X")]                 # demolish is a tool too: click or drag to remove
 TOOL_NAMES = {"belt": "Belt", "bridge": "Bridge", "miner": "Miner", "adder": "Adder", "subtractor": "Subtract",
               "multiplier": "Multiply", "divider": "Divide", "wall": "Wall", "tower": "Tower",
               "spawner_ranged": "Ranged", "spawner_melee": "Melee", "spawner_heavy": "Heavy",
-              "demolish": "Demolish"}
+              "spawner_repair": "Repair", "demolish": "Demolish"}
 _KEYCODES = {"1": pygame.K_1, "2": pygame.K_2, "3": pygame.K_3, "4": pygame.K_4, "5": pygame.K_5,
              "6": pygame.K_6, "7": pygame.K_7, "8": pygame.K_8, "9": pygame.K_9, "0": pygame.K_0,
-             "-": pygame.K_MINUS, "X": pygame.K_x, "B": pygame.K_b}
+             "-": pygame.K_MINUS, "=": pygame.K_EQUALS, "X": pygame.K_x, "B": pygame.K_b}
 HOTKEYS = {_KEYCODES[k]: kind for kind, k in TOOLS}
 DISPLAY_NAMES = dict(TOOL_NAMES, hub="HQ")     # what the player calls each kind
-BTN = 60                                        # 13 buttons fit left of the 440 px minimap at 1280 wide
+BTN = 60                                        # button size; shrinks so every button fits left of the minimap
 GAP = 3
 
 
@@ -46,6 +47,7 @@ class Hud:
         self._mini_origin = None    # (tx0, ty0, scale) of the cached minimap: click -> world
         self._alert_surf = None     # red screen frame (hub under attack), cached per size
         self.hub_button = pygame.Rect(8, 72, 120, 26)
+        self.btn = BTN              # toolbar button size in use (buttons())
 
     def message(self, text, ttl=2.5):
         self.messages = [m for m in self.messages if m[0] != text]
@@ -60,14 +62,17 @@ class Hud:
 
     def buttons(self):
         w, h = self.screen.get_size()
-        total = len(TOOLS) * BTN + (len(TOOLS) - 1) * GAP
+        n = len(TOOLS)
         avail = w - self.MINI_W - 16                  # centred in the space left of the minimap
+        btn = max(40, min(BTN, (avail - 16 - (n - 1) * GAP) // n))
+        self.btn = btn
+        total = n * btn + (n - 1) * GAP
         x0 = max(8, (avail - total) // 2)
-        y0 = h - BTN - 10
+        y0 = h - btn - 10
         out = []
         for i, (kind, key) in enumerate(TOOLS):
-            out.append((pygame.Rect(x0 + i * (BTN + GAP), y0, BTN, BTN), kind, key))
-        self.toolbar_rect = pygame.Rect(x0 - 8, y0 - 8, total + 16, BTN + 16)
+            out.append((pygame.Rect(x0 + i * (btn + GAP), y0, btn, btn), kind, key))
+        self.toolbar_rect = pygame.Rect(x0 - 8, y0 - 8, total + 16, btn + 16)
         return out
 
     def over_ui(self, pos):
@@ -156,18 +161,25 @@ class Hud:
         buttons = self.buttons()
         self._panel(self.toolbar_rect)
         balance = game.factory.balance
+        name_px = 12 if self.btn >= 58 else 11        # 14 buttons at 1280 wide: a touch smaller
         for rect, kind, key in buttons:
             cost = COSTS.get(kind, 0)
             color = COLORS.get(kind, (120, 120, 120))
             if balance < cost:
                 color = tuple(int(c * 0.45) for c in color)
-            pygame.draw.rect(screen, color, rect.inflate(-8, -22).move(0, -6), border_radius=4)
+            icon = rect.inflate(-8, -22).move(0, -6)
+            pygame.draw.rect(screen, color, icon, border_radius=4)
+            if kind == "spawner_repair":                # the repair cross, like its units
+                cx, cy = icon.center
+                arm, th = max(3, icon.width // 4), max(2, icon.height // 5)
+                pygame.draw.rect(screen, (255, 255, 255), (cx - arm, cy - th // 2, 2 * arm, th))
+                pygame.draw.rect(screen, (255, 255, 255), (cx - th // 2, cy - arm, th, 2 * arm))
             if game.tool == kind:
                 pygame.draw.rect(screen, (255, 255, 120), rect, 2, border_radius=4)
             else:
                 pygame.draw.rect(screen, COLORS["panel_border"], rect, 1, border_radius=4)
             screen.blit(numbers.text(key, 13), (rect.x + 4, rect.y + 2))
-            name = numbers.text(TOOL_NAMES[kind], 12)
+            name = numbers.text(TOOL_NAMES[kind], name_px)
             screen.blit(name, (rect.centerx - name.get_width() // 2, rect.bottom - 26))
             if kind == "demolish":
                 c = numbers.text("50% back", 11, (255, 230, 120))
@@ -217,14 +229,28 @@ class Hud:
             if game.tool in ("miner", "wall", "tower", "bridge"):
                 extra = {"miner": "   (miners push numbers out of all four sides)",
                          "tower": "   (ammo goes in through any side; range 10)",
-                         "bridge": "   (two lines cross without mixing: in a side, out the opposite)"}.get(game.tool, "")
+                         "bridge": "   (two lines cross without mixing: in a side, out the opposite; drops onto a belt)"}.get(game.tool, "")
                 lines.append(f"Build {TOOL_NAMES[game.tool]}   [LMB] place  [X] demolish  [Esc] cancel" + extra)
             else:
                 d = "NESW"[game.build_dir]
-                lines.append(f"Build {TOOL_NAMES[game.tool]} facing {d}   [R] rotate  [LMB] place  [X] demolish  [Esc] cancel")
+                extra = ""
+                if game.tool == "spawner_repair":
+                    extra = (f"   (trains repair units: they fix damaged buildings and heal units next to them, "
+                             f"{REPAIR_UNIT_CAPACITY} numbers per load, refilled at the HQ)")
+                lines.append(f"Build {TOOL_NAMES[game.tool]} facing {d}   [R] rotate  [LMB] place  [X] demolish  [Esc] cancel" + extra)
         elif game.selected_units:
-            n = len(game.selected_units)
-            lines.append(f"{n} unit{'s' if n > 1 else ''} selected   [RMB] move to a grid formation   [Shift+click] add   [Esc] deselect")
+            live = [u for u in game.selected_units if not u.dead]
+            n = len(live)
+            form = game.combat.group_formation(live)
+            patrol = "   patrolling" if any(u.patrol is not None for u in live) else ""
+            lines.append(f"{n} unit{'s' if n > 1 else ''} selected{patrol}   formation: {form.upper()}   "
+                         f"[wheel] next formation (Ctrl+wheel zooms)   [RMB] move   "
+                         f"[middle click] patrol between here and their rally point   [Shift+click] add   [Esc] deselect")
+            repairs = [u for u in live if u.heal is not None]
+            if repairs:
+                loads = ", ".join(f"{u.carry}/{REPAIR_UNIT_CAPACITY}" for u in repairs[:6])
+                lines.append(f"repair units carry {loads}: they fix damaged buildings and heal units within "
+                             f"{REPAIR_UNIT_SEARCH} tiles, and fetch more numbers from the HQ when empty")
         elif game.selected_structures:
             n = len(game.selected_structures)
             up = sum(c for c in (game.factory.upgrade_cost(s) for s in game.selected_structures) if c)
@@ -304,6 +330,8 @@ class Hud:
         elif isinstance(s, Spawner):
             nxt = f"next in {s.timer / TICK_RATE:.1f} s" if s.queue else f"{s.period / TICK_RATE:.0f} s per unit"
             rate = f"[click] or [C] train {s.UNIT} for {s.unit_cost}   queue {s.queue}   {nxt}"
+            if s.UNIT == "repair":
+                rate += f"   (repairs buildings, heals units; {REPAIR_UNIT_CAPACITY} numbers per load from the HQ)"
         elif isinstance(s, Hub):
             rate = "everything delivered here is income"
         else:
@@ -442,13 +470,14 @@ class Hud:
         self.screen.blit(surf, (w // 2 - surf.get_width() // 2, 14))
 
     HELP = [
-        "1-6 belt / miner / adder / subtract / multiply / divide   7 wall   8 tower   9 0 - spawners   B bridge   X demolish",
+        "1-6 belt / miner / adder / subtract / multiply / divide   7 wall   8 tower   9 0 - = spawners   B bridge   X demolish",
         "LMB place; belts: hold and drag = preview, release to build; Shift = straight run + square corner; R while",
         "dragging turns every belt (twice = the line runs backwards); drag back to undo.   R rotate   Q pick tool",
         "JUNCTIONS: a belt pointing into another belt's side or back MERGES into it (T / X shapes with several inputs).",
         "A belt SPLITS only when you press T on it, or when an unfed belt starts beside a straight line: items alternate",
         "between its front and each side belt pointing away; splitting belts show small arrows at every exit.",
-        "B = bridge: two lines cross without mixing (whatever enters a side leaves through the opposite side).",
+        "B = bridge: two lines cross without mixing (whatever enters a side leaves through the opposite side);",
+        "a bridge can be dropped straight onto a belt of a finished line (the belt's numbers carry on across it).",
         "Drag off the MIDDLE of a line to branch it; from its END the last belt turns; dragging backwards reverses it.",
         "X = demolish tool: click or drag over buildings (50% refund), X or Esc to stop.   Del = remove the hovered one",
         "click = select (panel on the right); drag a box = select many (U upgrades / H repairs them all)   RMB = cancel",
@@ -459,7 +488,12 @@ class Hud:
         "Towers (range 10): run a belt or put a miner beside one, any side; it fires those numbers. Red frame = no ammo.",
         "Spawners: click one (or press C with one or a boxed group selected) to train a unit (costs balance); new units",
         "walk to its gather point beside the HQ. RMB with spawners selected = gather point for units trained from then on.",
-        "Units: click or drag a box to select (Shift adds), RMB moves them in a grid. Attackers each take their own tile.",
+        "Units: click or drag a box to select (Shift adds), RMB moves them. Attackers each take their own tile.",
+        "With units selected the WHEEL cycles their formation (box, line, column, wedge, ring; it sticks to the group;",
+        "Ctrl+wheel zooms) and a MIDDLE CLICK sets a patrol: they walk between their rally point and the clicked point.",
+        "Units walk over belts and bridges but never through walls or buildings: leave a gap in a wall line as a gate.",
+        "= Repair spawner (100): its units (red, white cross) fix damaged buildings and heal units within 16 tiles",
+        "from a load of 500 numbers (5 hp per number, the [H] price) and walk to the HQ for a new load when empty.",
         "Targets: deliver the shown amount of that number for the bonus; the slot then levels up (bigger number and amount).",
         "Waves come from the red edge arrow. HQ destroyed = game over.",
         "An enemy camp always sits about 100 tiles from the HQ (dark-red edge arrow, minimap): it is quiet until you",
@@ -473,6 +507,15 @@ class Hud:
         lines = [numbers.text(t, 15) for t in self.HELP]
         pw = max(s.get_width() for s in lines) + 40
         ph = len(lines) * 22 + 40
+        if ph > h - 16:                                   # 30 lines: tighten the spacing on small windows
+            lines = [numbers.text(t, 13) for t in self.HELP]
+            pw = max(s.get_width() for s in lines) + 40
+            ph = len(lines) * 19 + 30
+            x0, y0 = (w - pw) // 2, (h - ph) // 2
+            self._panel((x0, y0, pw, ph))
+            for i, s in enumerate(lines):
+                self.screen.blit(s, (x0 + 20, y0 + 15 + i * 19))
+            return
         x0, y0 = (w - pw) // 2, (h - ph) // 2
         self._panel((x0, y0, pw, ph))
         for i, s in enumerate(lines):

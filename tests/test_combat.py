@@ -163,13 +163,13 @@ def test_ranged_shots_debit_balance_and_hold_when_broke():
 
 def test_melee_is_free_and_units_rally():
     f, c = world(balance=0)
-    u = c.spawn_unit("melee", 2.5, 0.5, rally=(2.5, 0.5))
-    e = c.spawn_enemy("runner", 6.5, 0.5)
+    u = c.spawn_unit("melee", 3.5, 0.5, rally=(3.5, 0.5))   # just outside the 6x6 HQ (x <= 2)
+    e = c.spawn_enemy("runner", 7.5, 0.5)
     e.speed = 0.0
     run(f, 400)
     assert e.dead and f.balance == 0
     run(f, 400)
-    assert u.dist_to(2.5, 0.5) < 0.5                     # walked back to the rally point
+    assert u.dist_to(3.5, 0.5) < 0.5                     # walked back to the rally point
 
 
 def test_spawner_trains_only_queued_units_and_charges_for_them():
@@ -473,3 +473,156 @@ def test_attackers_spread_over_distinct_tiles_instead_of_stacking():
     assert len(tiles) == 4 and all(t[0] >= 7 for t in tiles), tiles
     assert all(en.target in walls for en in c2.enemies)
     assert sum(10 ** 6 - w.hp for w in walls) > 0             # the wall line is being chewed
+
+
+def test_units_route_around_walls_and_hold_when_enclosed():
+    from sim.pathing import route
+    f, c = world()
+    ring = {}                                                  # walled yard east of the HQ, gate at (13, 4)
+    for x in range(3, 14):
+        for y in (1, 9):
+            ring[(x, y)] = f.place("wall", x, y, N, free=True)
+    for y in range(2, 9):
+        for x in (3, 13):
+            if (x, y) != (13, 4):
+                ring[(x, y)] = f.place("wall", x, y, N, free=True)
+    u = c.spawn_unit("melee", 5.5, 4.5, rally=(5.5, 4.5))
+    c.gather([u], 16.5, 4.5)                                   # outside the yard
+    visited = set()
+    for _ in range(300):
+        f.tick()
+        visited.add(u.tile())
+        assert abs(u.x % 1 - 0.5) < 1e-9 or abs(u.y % 1 - 0.5) < 1e-9   # stays on the grid lines
+    assert (u.x, u.y) == u.rally == (16.5, 4.5)
+    assert (13, 4) in visited                                  # went out through the gate...
+    assert not (visited & set(ring))                           # ...never through a wall
+    # belts are walked over, walls are not
+    f.place("belt", 15, 4, S, free=True)
+    c.gather([u], 5.5, 4.5)
+    visited = set()
+    for _ in range(300):
+        f.tick()
+        visited.add(u.tile())
+    assert (u.x, u.y) == (5.5, 4.5) and (15, 4) in visited
+    # close the gate: the unit is shut in and holds inside
+    f.place("wall", 13, 4, N, free=True)
+    c.gather([u], 16.5, 4.5)
+    run(f, 300)
+    assert u.x < 13 and u.tile() not in ring
+    assert route((5, 4), (16, 4), c.solid) is None            # no route at all
+    assert route((5, 4), (3, 4), c.solid) == [(4, 4)]         # a solid goal: the route stops beside it
+    assert route((14, 4), (16, 4), c.solid) == [(15, 4), (16, 4)]   # the belt tile is fine to walk on
+    # an enemy outside: no post across the wall, the unit stays put inside
+    e = c.spawn_enemy("grunt", 15.5, 4.5)
+    e.speed, e.shot_dmg = 0.0, None
+    run(f, 60)
+    assert u.x < 13 and (u.post is None or u.post not in c.solid)
+
+
+def test_patrol_between_rally_and_a_second_point():
+    f, c = world()
+    u = c.spawn_unit("melee", 4.5, 0.5, rally=(4.5, 0.5))
+    c.patrol([u], 12.2, 0.7)
+    assert u.patrol == (12.5, 0.5) and u.leg == 1 and u.rally == (4.5, 0.5)
+    far = home = 0
+    for i in range(600):
+        f.tick()
+        if (u.x, u.y) == u.patrol:
+            far += 1
+        elif (u.x, u.y) == u.rally and i > 5:
+            home += 1
+    assert far > 3 and home > 3                                # bounced between the two points
+    assert min(u.x for _ in (0,)) >= 4.5                       # never past either end
+    d = c.to_dict()["units"][0]
+    assert d["patrol"] == [12.5, 0.5] and "leg" in d and d["panchor"] == [12.5, 0.5]
+    c2 = Combat(f, 1, wave=c.to_dict(), raids={}, units=[d])
+    v = c2.units[0]
+    assert v.patrol == (12.5, 0.5) and v.leg == d["leg"] and v.panchor == (12.5, 0.5)
+    f.combat = c                                               # (a new Combat takes over the factory)
+    c.gather([u], 8.5, 0.5)                                    # a move order ends the patrol
+    assert u.patrol is None and u.leg == 0 and u.panchor is None
+    run(f, 200)
+    assert (u.x, u.y) == (8.5, 0.5)
+
+
+def test_formations_shapes_persist_and_recentre():
+    from settings import FORMATIONS
+    from sim.combat import formation_slots
+    f, c = world()
+    units = [c.spawn_unit("ranged", 20.5 + i, 20.5, rally=(20.5 + i, 20.5)) for i in range(5)]
+    assert c.group_formation(units) == "box"
+    c.set_formation(units, "line")
+    assert sorted(u.rally for u in units) == [(20.5 + i, 20.5) for i in range(5)]
+    assert all(u.anchor == (22.5, 20.5) for u in units)
+    c.set_formation(units, "column")
+    assert sorted(u.rally for u in units) == [(22.5, 18.5 + i) for i in range(5)]
+    c.set_formation(units, "wedge")
+    assert set(u.rally for u in units) == {(22.5, 19.5), (21.5, 20.5), (23.5, 20.5), (20.5, 21.5), (24.5, 21.5)}
+    c.set_formation(units, "ring")
+    ring = set(u.rally for u in units)
+    assert (22.5, 20.5) not in ring and all(max(abs(x - 22.5), abs(y - 20.5)) == 1 for x, y in ring)
+    assert c.next_formation(units, 1) == "box" and c.next_formation(units, -1) == "ring"
+    assert all(u.anchor == (22.5, 20.5) for u in units)        # cycling never drifts
+    eight = list(formation_slots("ring", 0.5, 0.5, 8))[:8]
+    assert len(set(eight)) == 8 and all(max(abs(x - 0.5), abs(y - 0.5)) == 1 for x, y in eight)
+    assert eight[0] == (0.5, -0.5)                             # clockwise from the north
+    # a move order keeps the group's formation, and it survives a save
+    c.set_formation(units, "line")
+    c.gather(units, 40.5, 40.5)
+    assert sorted(u.rally for u in units) == [(38.5 + i, 40.5) for i in range(5)]
+    assert {u.formation for u in units} == {"line"} and c.group_formation(units) == "line"
+    recs = c.to_dict()["units"]
+    assert all(r["formation"] == "line" for r in recs)
+    c2 = Combat(f, 1, wave=c.to_dict(), raids={}, units=recs)
+    assert c2.group_formation(c2.units) == "line" and len(FORMATIONS) == 5
+    f.combat = c
+    # formations flow around structures (a wall on a slot) and other units' slots
+    f.place("wall", 39, 40, N, free=True)
+    c.set_formation(units, "line")
+    slots = [u.rally for u in units]
+    assert (39.5, 40.5) not in slots and len(set(slots)) == 5
+
+
+def test_repair_unit_heals_buildings_and_units_and_refills_at_the_hq():
+    from settings import REPAIR_UNIT_CAPACITY, REPAIR_HP_PER_NUMBER, UNIT_COSTS, COSTS
+    f, c = world(balance=2000)
+    sp = f.place("spawner_repair", 8, 6, S, free=True)
+    assert sp.KIND == "spawner_repair" and sp.UNIT == "repair" and COSTS["spawner_repair"] == 100
+    wall = f.place("wall", 9, 3, N, free=True)
+    f.damage(wall, 150)
+    hurt = c.spawn_unit("melee", 10.5, 8.5, rally=(10.5, 8.5))
+    hurt.hp = 10
+    assert sp.enqueue(f) is None and f.balance == 2000 - UNIT_COSTS["repair"]
+    run(f, 1)
+    r = c.units[-1]
+    assert r.kind == "repair" and r.heal == 25 and r.carry == 0 and r.shot is None
+    run(f, 100)
+    assert c.stats["refilled"] == REPAIR_UNIT_CAPACITY and f.balance == 1900 - REPAIR_UNIT_CAPACITY   # loaded at the HQ
+    assert any(ev[0] == "refill" for ev in f.events)
+    assert r.anchor == (5.5, 0.5)                              # the spawner's gather point
+    run(f, 400)
+    assert wall.hp == wall.max_hp and hurt.hp == hurt.max_hp
+    spent = (150 + 50) // REPAIR_HP_PER_NUMBER
+    assert r.carry == REPAIR_UNIT_CAPACITY - spent and c.stats["healed"] == 200
+    assert wall not in f.damaged and (r.x, r.y) == r.rally      # back on its slot when nothing is damaged
+    # repair units never fight: an enemy next to it is ignored (it keeps healing / idling)
+    e = c.spawn_enemy("grunt", 4.5, 2.5)
+    e.speed, e.shot_dmg, e.dmg = 0.0, None, 0
+    run(f, 40)
+    assert e.hp == e.max_hp
+    # empty and broke: it waits at the HQ until numbers come in, then takes what there is
+    c.enemies.clear()
+    r.carry = 0
+    f.balance = 0
+    run(f, 200)
+    assert r.carry == 0 and f.balance == 0
+    from sim.pathing import dist_to_tiles
+    assert dist_to_tiles(r.x, r.y, f.hub.tiles()) <= 1.5
+    f.balance = 300
+    run(f, 2)
+    assert r.carry == 300 and f.balance == 0
+    d = c.to_dict()
+    rec = [u for u in d["units"] if u["kind"] == "repair"][0]
+    assert rec["carry"] == 300 and rec["owner"] == [8, 6]
+    c2 = Combat(f, 1, wave=d, raids={}, units=d["units"])
+    assert [u.carry for u in c2.units if u.kind == "repair"] == [300]

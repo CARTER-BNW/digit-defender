@@ -1,5 +1,43 @@
 # STATUS
-_Last updated: 2026-09-12 (v6) by Claude_
+_Last updated: 2026-09-12 (v7) by Claude_
+
+## v7 (2026-09-12): John's round 15 - formations, patrols, walls block units, repair units (tests 134 -> 143)
+- Middle CLICK with units selected = patrol: `Combat.patrol` hands the group a second formation at the click (`patrol`
+  slot + `panchor`), `leg` picks the end each unit walks to and flips on arrival; RMB move ends it; patrol lines and a
+  diamond marker draw for selected units; saved per unit. A middle DRAG still pans (click = under 4 px of movement).
+- Units no longer phase through walls: `sim.pathing.route` (bounded A*, 4-neighbour, deterministic ties, a solid goal
+  ends beside it) drives `_walk_grid` for player units through `Combat._next_tile`; routes are cached on the unit and
+  re-planned when the goal changes, the unit leaves the route, or `Factory.layout_version` says a structure landed on
+  it; enclosed units hold (greedy fallback never steps into a solid tile). `Combat.solid` (SolidMap) = every structure
+  except belts and bridges (`UNIT_PASSABLE_KINDS`); attack posts for player units avoid solid tiles too. A rally slot
+  buried under a new structure is swapped for a free one. Enemies unchanged (greedy/flow field, chew what blocks).
+- Wheel with units selected cycles the formation (Ctrl+wheel zooms): `FORMATIONS` box / line / column / wedge / ring,
+  `formation_slots` yields best-first with fallbacks, `set_formation` re-forms around the remembered `anchor` so cycling
+  never drifts (the wedge is centred on its point), `gather` keeps the group's formation for every later move; line and
+  column assign by the units' current x / y so they do not cross; saved per unit (`formation`, `anchor`).
+- Repair spawner `[=]` (COSTS 100, hp 120) and repair unit (UNIT_COSTS 100; UNIT_STATS hp 40, speed 0.18, heal 25 per
+  10 ticks, never fights): heals the nearest damaged player unit (self included) or damaged structure within
+  REPAIR_UNIT_SEARCH 16 tiles from a load of REPAIR_UNIT_CAPACITY 500 numbers at REPAIR_HP_PER_NUMBER 5 hp each (the [H]
+  price; `Factory.heal`, `damaged_structures()` sorted for determinism); empty -> walks to the nearest free tile touching
+  the HQ and takes min(500, balance) (event "refill" -> HUD message; waits while broke). Drawn red with a white cross and
+  its load underneath; green heal beams (`HEAL`); toolbar button and procedural spawner sprite carry the cross; toolbar
+  buttons shrink to fit 14 left of the minimap (11 px names at 1280 wide). K_EQUALS moved from zoom-in to the tool.
+- Test Lab: repair spawner at (12,6) with two queued, wall (-8,8) starts damaged; `testworld.top_up` adds the spawner
+  to a lab saved before it existed (main.py calls it when the lab is not empty).
+- Bridge tool drops onto a belt (`Factory.replaces_belt`/`can_place`/`place`: the belt is removed with its refund and
+  its items move into the lane of its back side) - John's "cannot make a bridge after drawing the belt" at (-26,1).
+- Build refusals explain themselves on a click: "(x, y) is occupied by a Tower: [X] demolish it first"; a belt drag that
+  built nothing says "Belt at (x, y) kept its direction: it feeds a line (drag from a line's end, or [R] on it)" -
+  John's "cannot connect (-22,2) and (-21,2)" (not reproducible from his save: nothing was built there).
+- Help overlay: six new lines (formations, patrol, walls block units, repair); it drops to a 13 px font when 30 lines
+  would not fit the window height.
+- Verification: scratch verify_units.py screenshots (line of 5 leaving a walled yard through its gate without touching
+  a wall, wedge + patrol lines, two repair units refilling 500 each at the HQ then fixing the lab wall, 14-button
+  toolbar, help overlay, bridge dropped onto a running line with both lines flowing); 100 ticks with 43 routing units
+  plus a structure placed every tick = 2.2 ms/tick; `python main.py --world smokeunits --frames 120` exits 0.
+- **Open:** John's (-22,2)/(-26,1) reports need his layout left in place to confirm; formations do not turn toward the
+  move direction; a walled-in base needs a gate for melee units; economy still not re-balanced; Phase 4 design
+  checkbox; Phase 6 leftovers (sounds, stats graphs, blueprints, balance pass).
 
 ## v6 (2026-09-11 evening to 2026-09-12): John's rounds 4-14, all implemented (tests 110 -> 134)
 Round 4 opened this entry; every later round the same day was appended below as a "Round N" bullet.

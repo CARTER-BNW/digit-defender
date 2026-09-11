@@ -19,9 +19,10 @@ def test_lab_builds_every_part_and_runs():
     assert not testworld.is_empty(f)
     kinds = {s.KIND for s in f.all_structures()}
     assert {"belt", "bridge", "miner", "adder", "subtractor", "multiplier", "divider", "wall", "tower",
-            "spawner_ranged", "spawner_melee", "spawner_heavy", "hub"} <= kinds
+            "spawner_ranged", "spawner_melee", "spawner_heavy", "spawner_repair", "hub"} <= kinds
     assert all(s is not None for s in lab["row"] + lab["under"] + lab["walls"])
-    assert all(sp.queue == 2 for sp in lab["spawners"])
+    assert len(lab["spawners"]) == 4 and all(sp.queue == 2 for sp in lab["spawners"])
+    assert lab["walls"][4].hp < lab["walls"][4].max_hp and lab["walls"][4] in f.damaged
     for _ in range(900):
         f.tick()
     assert f.stats["delivered"] > 0 and f.stats["voided"] == 0
@@ -45,6 +46,16 @@ def test_lab_builds_every_part_and_runs():
     assert lab["walls"][4].level == 2 and lab["walls"][-1].level == 3
     assert lab["walls"][0].links and lab["walls"][-1].links
     assert lab["row"][0].level == 3
+
+
+def test_lab_top_up_adds_the_repair_spawner_to_an_older_lab():
+    f, lab = build()
+    f.remove(12, 6, refund=False)                                   # a lab saved before the repair spawner existed
+    assert not any(s.KIND == "spawner_repair" for s in f.spawners)
+    bal = f.balance
+    added = testworld.top_up(f)
+    assert [s.KIND for s in added] == ["spawner_repair"] and added[0].queue == 2 and f.balance < bal
+    assert testworld.top_up(f) == []                                # idempotent
 
 
 def test_lab_is_deterministic_through_a_save():

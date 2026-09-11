@@ -55,8 +55,11 @@ def main(argv=None):
             lab = choice.get("lab", False)
         game = Game.load(pygame.display.get_surface(), meta)
         game.show_hints = config.get("hints", True)
-        if lab and testworld.is_empty(game.factory):
-            testworld.build(game.factory)
+        if lab:
+            if testworld.is_empty(game.factory):
+                testworld.build(game.factory)
+            else:
+                testworld.top_up(game.factory)        # parts added to the legend since this lab was built
         if args.autosave is not None:
             game.autosave_s = args.autosave
         result = game.run(max_frames=args.frames)

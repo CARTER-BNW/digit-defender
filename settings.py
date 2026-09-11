@@ -39,7 +39,7 @@ START_BALANCE = 1000
 COSTS = {
     "belt": 2, "bridge": 10, "wall": 5, "miner": 10, "tower": 20,
     "adder": 500, "subtractor": 500, "multiplier": 1000, "divider": 1000,
-    "spawner_ranged": 50, "spawner_melee": 50, "spawner_heavy": 150,
+    "spawner_ranged": 50, "spawner_melee": 50, "spawner_heavy": 150, "spawner_repair": 100,
 }
 DEMOLISH_REFUND = 0.5               # fraction of COST returned on demolish
 REPAIR_COST_PER_HP = 0.2
@@ -68,7 +68,7 @@ RATE_STEP = 0.25                    # period = BASE_PERIOD / (1 + level * RATE_S
 BASE_HP = {
     "belt": 20, "bridge": 40, "wall": 200, "miner": 60, "tower": 100, "hub": 1000,
     "adder": 150, "subtractor": 150, "multiplier": 200, "divider": 200,
-    "spawner_ranged": 120, "spawner_melee": 120, "spawner_heavy": 200,
+    "spawner_ranged": 120, "spawner_melee": 120, "spawner_heavy": 200, "spawner_repair": 120,
 }
 
 # --- world gen ----------------------------------------------------------------
@@ -102,12 +102,18 @@ TOWER_BASE_PERIOD = 20              # ticks between shots (level shortens it)
 TOWER_DMG_LEVEL_MULT = 0.5          # dmg = ammo value * (1 + mult * (level - 1))
 SPAWNER_BASE_PERIOD = 200           # ticks to train one queued unit (10 s)
 SPAWNER_QUEUE_MAX = 9               # units a spawner can hold in its queue
-UNIT_COSTS = {"ranged": 50, "melee": 50, "heavy": 150}   # balance per queued unit (idea.txt)
+UNIT_COSTS = {"ranged": 50, "melee": 50, "heavy": 150, "repair": 100}   # balance per queued unit (idea.txt)
 UNIT_LEVEL_MULT = 0.25              # unit hp/dmg * (1 + mult * (spawner level - 1))
 UNIT_AGGRO_TILES = 12               # units chase enemies this close
 GATHER_HUB_GAP = 2                  # default gather point: this many tiles clear of the HQ edge
 GATHER_MAX_RING = 24                # formation slots spiral out at most this far
+FORMATIONS = ("box", "line", "column", "wedge", "ring")   # [wheel] with units selected cycles these
 POST_MAX_SHIFT = 3.0                # attackers spread to a free tile at most this far from where they stand
+UNIT_PASSABLE_KINDS = ("belt", "bridge")   # player units walk over these; every other structure blocks them (John)
+UNIT_PATH_BUDGET = 4000             # A* expansions per route before a unit gives up and holds
+REPAIR_UNIT_CAPACITY = 500          # numbers a repair unit carries (John); refills at the HQ from the balance
+REPAIR_UNIT_SEARCH = 16             # tiles around a repair unit it looks for damage in
+REPAIR_HP_PER_NUMBER = 5            # = 1 / REPAIR_COST_PER_HP: a repair unit fixes hp at the same price as [H]
 ENEMY_ATTACK_RANGE = 1.5            # tiles (melee contact, diagonals included so 8 attackers fit around a tile)
 FLOW_COST_WALL = 40
 FLOW_COST_STRUCT = 15
@@ -123,6 +129,9 @@ UNIT_STATS = {
     "ranged": {"hp": 30, "speed": 0.15, "range": 6, "period": 20, "shot": 1},
     "melee":  {"hp": 60, "speed": 0.2,  "range": 1.5, "period": 15, "dmg": 3},
     "heavy":  {"hp": 120, "speed": 0.1, "range": 8, "period": 40, "shot": 100},
+    # repair (John): never fights; heals `heal` hp per action on damaged buildings and units next to
+    # it, spending carried numbers (REPAIR_HP_PER_NUMBER hp each); empty -> walks to the HQ to refill
+    "repair": {"hp": 40, "speed": 0.18, "range": 1.5, "period": 10, "heal": 25},
 }
 # Enemies both shoot and melee (John): dmg = melee in contact; shot_dmg at up to
 # shot_range tiles, fired while advancing (nearest unit first, else nearest structure).
@@ -161,6 +170,7 @@ COLORS = {
     "multiplier": (60, 90, 190), "divider": (160, 60, 160),
     "spawner_ranged": (150, 120, 40), "spawner_melee": (150, 70, 40),
     "spawner_heavy": (90, 90, 40),
+    "spawner_repair": (170, 40, 40),
     "demolish": (150, 55, 55),
     "enemy": (220, 40, 40),
     "unit": (60, 200, 220),

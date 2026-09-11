@@ -64,6 +64,7 @@ class Game:
         self.frame = 0
         self.acc = 0.0
         self.dragging = False
+        self.mid_down = None                 # screen pos of a pending middle click (patrol order)
         self.fullscreen = bool(screen.get_flags() & pygame.FULLSCREEN)
         # build mode
         self.tool = None
@@ -167,10 +168,14 @@ class Game:
         elif event.type == pygame.KEYDOWN:
             self._key_down(event)
         elif event.type == pygame.MOUSEWHEEL:
-            cam.zoom_by(1 if event.y > 0 else -1, pygame.mouse.get_pos())
+            if self._live_units() and not (pygame.key.get_mods() & pygame.KMOD_CTRL):
+                self.cycle_formation(1 if event.y > 0 else -1)   # John: wheel = formation while units are selected
+            else:
+                cam.zoom_by(1 if event.y > 0 else -1, pygame.mouse.get_pos())   # (Ctrl+wheel always zooms)
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 2:
                 self.dragging = True
+                self.mid_down = event.pos
             elif event.button == 1:
                 self._left_click(event.pos)
             elif event.button == 3:
@@ -178,6 +183,9 @@ class Game:
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 2:
                 self.dragging = False
+                start, self.mid_down = self.mid_down, None
+                if start is not None and abs(event.pos[0] - start[0]) < 4 and abs(event.pos[1] - start[1]) < 4:
+                    self._middle_click(event.pos)      # a click (no pan): patrol order
             elif event.button == 1:
                 if self.belt_path:
                     self._commit_belt_path()
@@ -220,7 +228,7 @@ class Game:
             self.renderer.debug = not self.renderer.debug
         elif key == pygame.K_F11:
             self.toggle_fullscreen()
-        elif key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
+        elif key in (pygame.K_PLUS, pygame.K_KP_PLUS):     # [=] is the repair spawner now
             self.camera.zoom_by(1)
         elif key == pygame.K_KP_MINUS:
             self.camera.zoom_by(-1)
@@ -393,6 +401,31 @@ class Game:
         if parts:
             self.hud.message("selected: " + "     ".join(parts), 1.8)
 
+    def _live_units(self):
+        return [u for u in self.selected_units if not u.dead]
+
+    def _middle_click(self, pos):
+        """Middle click with units selected: patrol between their rally
+        point and the clicked point (John). Anything else is left to the pan."""
+        live = self._live_units()
+        if not live or self.hud.over_ui(pos):
+            return False
+        wx, wy = self.camera.screen_to_world(*pos)
+        self.combat.patrol(live, wx / TILE_SIZE, wy / TILE_SIZE)
+        n = len(live)
+        self.hud.message(f"{n} unit{'s' if n > 1 else ''} patrolling between here and their rally point   "
+                         f"(a right-click move ends it)", 2)
+        return True
+
+    def cycle_formation(self, step=1):
+        """[wheel] with units selected: next / previous formation, re-formed in place."""
+        live = self._live_units()
+        if not live:
+            return None
+        name = self.combat.next_formation(live, step)
+        self.hud.message(f"Formation: {name}", 1.2)
+        return name
+
     def _right_click(self, pos):
         """Cancel the tool; else move the selected units / set the selected
         spawner's gather point at the cursor; else clear the selection."""
@@ -401,13 +434,13 @@ class Game:
             return
         wx, wy = self.camera.screen_to_world(*pos)
         gx, gy = wx / TILE_SIZE, wy / TILE_SIZE
-        live = [u for u in self.selected_units if not u.dead]
+        live = self._live_units()
         spawners = [s for s in self._group() if isinstance(s, Spawner)]
         if not spawners and isinstance(self.selected, Spawner):
             spawners = [self.selected]
         if live:
             self.combat.gather(live, gx, gy)
-            self.hud.message(f"Moving {len(live)} unit{'s' if len(live) > 1 else ''}", 1.0)
+            self.hud.message(f"Moving {len(live)} unit{'s' if len(live) > 1 else ''} ({live[0].formation})", 1.0)
         elif spawners:
             # one gather point for every selected spawner; only units trained from
             # now on use it (John: units already out stay where they are)
@@ -452,15 +485,25 @@ class Game:
         return True
 
     def try_place(self, tile, verbose=False):
+        """Build the tool's kind at tile. `verbose` (a deliberate click, not a
+        drag) explains a refusal, including what occupies the tile."""
         tx, ty = tile
         ok, reason = self.factory.can_place(self.tool, tx, ty, self.build_dir)
         if not ok:
-            if verbose and reason != "occupied":
+            if verbose:
+                if reason == "occupied":
+                    s = self.factory.structure_at(tx, ty)
+                    what = DISPLAY_NAMES.get(s.KIND, s.KIND) if s is not None else "something"
+                    reason = f"({tx}, {ty}) is occupied by a {what}: [X] demolish it first"
                 self.hud.message(reason)
             return None
+        swapped = self.factory.replaces_belt(self.tool, tx, ty)
         s = self.factory.place(self.tool, tx, ty, self.build_dir)
-        if s is not None and verbose and self.tool == "tower":
-            self.hud.message("Tower placed: run a belt or a miner into any side for ammo", 3.5)
+        if s is not None and verbose:
+            if self.tool == "tower":
+                self.hud.message("Tower placed: run a belt or a miner into any side for ammo", 3.5)
+            elif swapped:
+                self.hud.message("Bridge replaced the belt: the line runs across it, the other line goes over", 3)
         return s
 
     @staticmethod
@@ -545,24 +588,41 @@ class Game:
         turn, self.belt_turn = self.belt_turn, 0
         built = 0
         reason = None
+        kept = []                                # belts left alone because they sit mid-line
+        blocked = None                           # first non-belt structure on the path
         for x, y, d in path:
             d = (d + turn) % 4
             s = self.factory.structure_at(x, y)
             if isinstance(s, Belt):
-                if s.direction != d and (self.factory.structure_at(*s.front_tile()) is None
-                                         or s.direction == (d + 2) % 4):
-                    s.direction = d
-                    self.factory.dirty_links = True
+                if s.direction != d:
+                    if (self.factory.structure_at(*s.front_tile()) is None
+                            or s.direction == (d + 2) % 4):
+                        s.direction = d
+                        self.factory.dirty_links = True
+                    else:
+                        kept.append(s)
                 continue
             ok, why = self.factory.can_place("belt", x, y, d)
             if not ok:
-                if why != "occupied" and reason is None:
+                if why == "occupied":
+                    if blocked is None:
+                        blocked = s
+                elif reason is None:
                     reason = why
                 continue
             if self.factory.place("belt", x, y, d) is not None:
                 built += 1
         if reason is not None:
             self.hud.message(reason)
+        elif not built:
+            # nothing was built: say why the line did not join up (John: "cannot connect")
+            if kept:
+                k = kept[0]
+                self.hud.message(f"Belt at ({k.x}, {k.y}) kept its direction: it feeds a line "
+                                 f"(drag from a line's end, or [R] on it to turn it)", 3.5)
+            elif blocked is not None and len(path) == 1:
+                what = DISPLAY_NAMES.get(blocked.KIND, blocked.KIND)
+                self.hud.message(f"({blocked.x}, {blocked.y}) is occupied by a {what}: [X] demolish it first", 3)
         return built
 
     def go_home(self):
@@ -724,6 +784,8 @@ class Game:
                 chunk.invalidate()
         elif kind == "destroyed":
             self.hud.message(f"{ev[1]} at ({ev[2]}, {ev[3]}) destroyed", 2)
+        elif kind == "refill":
+            self.hud.message(f"Repair unit took {ev[2]} numbers from the HQ", 2)
 
     def _pan_keys(self, dt):
         keys = pygame.key.get_pressed()
@@ -767,7 +829,7 @@ class Game:
                 f"machines {len(f.machines)}  delivered {f.stats['delivered']}  voided {f.stats['voided']}",
                 f"enemies {len(c.enemies)}  units {len(c.units)}  kills {c.stats['kills']}  wave {c.wave.number} "
                 f"in {c.seconds_to_wave():.0f}s  nests known {len(c.known_nests)} active {len(c.active_nests)}  "
-                f"[F6] spawn enemy  [F7] wave now"]
+                f"healed {c.stats['healed']}  refilled {c.stats['refilled']}  [F6] spawn enemy  [F7] wave now"]
 
     def toggle_fullscreen(self):
         self.fullscreen = not self.fullscreen

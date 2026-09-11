@@ -6,12 +6,14 @@ import pygame
 
 from settings import COLORS, TILE_SIZE, WAVE_WARNING_S
 from render import numbers
-from sim.combat import ENEMY, PLAYER
+from sim.combat import ENEMY, PLAYER, HEAL
 from sim import nests as nestmod
 
 ENEMY_COLORS = {"grunt": (220, 50, 50), "brute": (170, 30, 60), "runner": (255, 110, 90)}
-UNIT_COLORS = {"ranged": (80, 210, 230), "melee": (90, 230, 150), "heavy": (230, 200, 80)}
+UNIT_COLORS = {"ranged": (80, 210, 230), "melee": (90, 230, 150), "heavy": (230, 200, 80),
+               "repair": (205, 40, 40)}          # red with a white cross (John)
 ENEMY_RADIUS = {"grunt": 0.32, "brute": 0.44, "runner": 0.24}
+BEAM_COLORS = {ENEMY: (255, 140, 70), PLAYER: (120, 220, 255), HEAL: (120, 255, 150)}
 
 
 def _bar(screen, x, y, w, frac, color):
@@ -30,13 +32,23 @@ def draw_combat(screen, camera, combat, selected=None, selected_units=(), box=No
         flag_spawners = [selected] if hasattr(selected, "rally_point") else []
     # beams first (under the units)
     for x0, y0, x1, y1, value, ttl, side in combat.beams:
-        color = (255, 140, 70) if side == ENEMY else (120, 220, 255)
+        color = BEAM_COLORS.get(side, (120, 220, 255))
         a = (x0 * tp + ox, y0 * tp + oy)
         b = (x1 * tp + ox, y1 * tp + oy)
         pygame.draw.line(screen, color, a, b, max(1, tp // 10))
         if tp >= 16:
-            screen.blit(numbers.text(numbers.abbrev(value), max(9, tp // 2), color),
-                        (b[0] + 3, b[1] - tp // 2))
+            label = ("+" if side == HEAL else "") + numbers.abbrev(value)
+            screen.blit(numbers.text(label, max(9, tp // 2), color), (b[0] + 3, b[1] - tp // 2))
+    # patrol routes of the selected units (rally slot <-> patrol slot)
+    if tp >= 8:
+        for u in selected_units:
+            if u.dead or u.patrol is None or u.rally is None:
+                continue
+            a = (int(u.rally[0] * tp + ox), int(u.rally[1] * tp + oy))
+            b = (int(u.patrol[0] * tp + ox), int(u.patrol[1] * tp + oy))
+            pygame.draw.line(screen, (255, 255, 120), a, b, 1)
+            q = max(2, tp // 6)
+            pygame.draw.polygon(screen, (255, 255, 120), [(b[0], b[1] - q), (b[0] + q, b[1]), (b[0], b[1] + q), (b[0] - q, b[1])], 1)
     # enemies
     for e in combat.enemies:
         sx, sy = int(e.x * tp + ox), int(e.y * tp + oy)
@@ -62,7 +74,15 @@ def draw_combat(screen, camera, combat, selected=None, selected_units=(), box=No
                 pygame.draw.rect(screen, (255, 255, 120), (gx - q, gy - q, 2 * q, 2 * q), 1)
         pygame.draw.rect(screen, color, (sx - r, sy - r, 2 * r, 2 * r), border_radius=max(1, r // 3))
         pygame.draw.rect(screen, (10, 40, 50), (sx - r, sy - r, 2 * r, 2 * r), 1, border_radius=max(1, r // 3))
-        if tp >= 12:                                   # white centre dot on every unit (melee too, John)
+        if u.kind == "repair":
+            if tp >= 8:                                # white cross
+                arm, th = max(2, int(r * 0.7)), max(1, r // 3)
+                pygame.draw.rect(screen, (255, 255, 255), (sx - arm, sy - th // 2 - (th % 2 == 0), 2 * arm, th))
+                pygame.draw.rect(screen, (255, 255, 255), (sx - th // 2 - (th % 2 == 0), sy - arm, th, 2 * arm))
+            if tp >= 16:                               # numbers on board
+                load = numbers.text(str(u.carry), max(8, tp // 3), (255, 240, 200))
+                screen.blit(load, (sx - load.get_width() // 2, sy + r + 1))
+        elif tp >= 12:                                 # white centre dot on every unit (melee too, John)
             pygame.draw.circle(screen, (255, 255, 255), (sx, sy), max(1, r // 3))
         if u.hp < u.max_hp and tp >= 8:
             _bar(screen, sx - r, sy - r - 5, 2 * r, u.hp / u.max_hp, COLORS["hp_bar"])

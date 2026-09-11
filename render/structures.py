@@ -290,6 +290,11 @@ def _sprite(kind, direction, tp, label=None, variant=0):
             dx, dy = DIR_VEC[direction]
             ex, ey = size / 2 + dx * (size / 2 - tp * 0.18), size / 2 + dy * (size / 2 - tp * 0.18)
             _arrow(surf, ex, ey, direction, tp * 0.16, (240, 240, 240))
+        if kind == "spawner_repair" and tp >= 8:       # white cross, like the units it trains
+            arm, th = max(2, int(tp * 0.28)), max(2, int(tp * 0.12))
+            c = size // 2
+            pygame.draw.rect(surf, (255, 255, 255), (c - arm, c - th // 2, 2 * arm, th))
+            pygame.draw.rect(surf, (255, 255, 255), (c - th // 2, c - arm, th, 2 * arm))
     if label and tp >= 10:
         px = max(8, int(tp * (0.6 if len(label) == 1 else 0.38)))
         numbers.blit_centered(surf, numbers.glyph(label, px), size // 2, size // 2)

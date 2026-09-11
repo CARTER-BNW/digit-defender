@@ -96,6 +96,31 @@ def test_bridge_stalls_and_keeps_spacing_when_blocked():
     assert f.rotate(2, 0) is None and br.direction == 0             # bridges never turn
 
 
+def test_bridge_replaces_a_belt_and_keeps_its_items_flowing():
+    f = factory()
+    m = f.place("miner", 0, 0, E, free=True, value=3)
+    m.invested = 10 ** 5
+    east = line(f, 1, 0, 6, 0, E)
+    run(f, 120)
+    mid = east[3]                                                     # (4, 0), carrying items by now
+    assert mid.items
+    carried = [[it[0], it[1]] for it in mid.items]
+    assert f.can_place("bridge", 4, 0)[0] and f.replaces_belt("bridge", 4, 0)
+    assert not f.can_place("bridge", 0, 0)[0]                         # only belts are swapped out
+    bal = f.balance
+    br = f.place("bridge", 4, 0, N)
+    assert br is not None and f.structure_at(4, 0) is br and mid not in f.belts
+    assert br.lanes[W] == carried and f.balance == bal - 10 + 1       # bridge paid, half a belt back
+    run(f, 1)
+    assert br.exits[W][0] is east[4]
+    run(f, 200)
+    assert east[-1].items and values(east[4:]) == {3}                 # the line runs on across the bridge
+    f2 = factory()
+    f2.place("belt", 2, 2, S, free=True)
+    assert f2.place("belt", 2, 2, E) is None                           # a belt does not replace a belt
+    assert f2.place("bridge", 2, 2, N, free=True).KIND == "bridge"    # free placement swaps too
+
+
 def test_bridge_records_and_kinds():
     br = Bridge(3, 4)
     br.accept(5, W, 0.2, None)

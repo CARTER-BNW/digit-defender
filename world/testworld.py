@@ -19,8 +19,9 @@ Legend (x grows east, y grows south; the HQ covers -3..2):
     subtractor (-6,-9): 9 (north) - 4 (south) = 5, routed to (-3,-4); divider (5,-9): 8 // 2 = 4,
     routed round to the HQ's east edge at (3,0)
   EAST: tower C (9,-4) stocked by miner 1 (10,-4) beside it; tower D (9,4) empty (red frame)
-  SOUTH-EAST: spawners ranged (6,6), melee (8,6), heavy (10,6), two units queued each
-  SOUTH-WEST: wall line y=8 from -12..-4 with a corner up at x=-12; levels 1 / 2 / 3
+  SOUTH-EAST: spawners ranged (6,6), melee (8,6), heavy (10,6), repair (12,6); two units queued each
+  SOUTH-WEST: wall line y=8 from -12..-4 with a corner up at x=-12; levels 1 / 2 / 3;
+    (-8,8) starts damaged (repair units head for it once trained)
 """
 from sim.structures import N, E, S, W
 
@@ -43,6 +44,19 @@ def _line(f, x0, y0, x1, y1, d):
 def is_empty(factory):
     """True when only the HQ stands (a fresh world)."""
     return factory.count() <= 1
+
+
+def top_up(f):
+    """Add parts the legend gained after a lab was first built (the lab is
+    saved like any world, so an older save keeps its layout). Returns what
+    was added."""
+    added = []
+    if not any(s.KIND == "spawner_repair" for s in f.spawners) and f.structure_at(12, 6) is None:
+        sp = f.place("spawner_repair", 12, 6, S, free=True)
+        for _ in range(2):
+            sp.enqueue(f)
+        added.append(sp)
+    return added
 
 
 def build(f):
@@ -117,7 +131,8 @@ def build(f):
     lab["towerD"] = f.place("tower", 9, 4, N, free=True)
     # ---- south-east: spawners -------------------------------------------------------
     lab["spawners"] = [f.place(kind, x, 6, S, free=True)
-                       for kind, x in (("spawner_ranged", 6), ("spawner_melee", 8), ("spawner_heavy", 10))]
+                       for kind, x in (("spawner_ranged", 6), ("spawner_melee", 8), ("spawner_heavy", 10),
+                                       ("spawner_repair", 12))]
     for sp in lab["spawners"]:
         for _ in range(2):
             sp.enqueue(f)
@@ -126,6 +141,7 @@ def build(f):
     walls += [f.place("wall", -12, y, N, free=True) for y in (7, 6)]
     walls[4].invested = 100                                 # (-8,8): level 2
     walls[-1].invested = 225                                # (-12,6): level 3
+    f.damage(walls[4], 150)                                 # something for the repair units to fix
     lab["walls"] = walls
     f.rebuild_links()
     return lab

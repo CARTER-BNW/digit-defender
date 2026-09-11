@@ -27,6 +27,11 @@ Format: Symptom / Cause / Fix. Add an entry the moment a trap is found (`/gotcha
 - **Cause:** since STATUS v5 every item is `[value, progress, entry_rel]`; the third field is render-only (corner animation) and the sim never reads it, but pair-unpacking anywhere breaks.
 - **Fix:** index (`it[0]`, `it[1]`) or unpack with `v, p, *_`. `Belt.to_dict/from_dict` accept both shapes (old two-field saves load with entry BACK); tests that hand-append items may still append pairs.
 
+## A second Combat on the same Factory silently takes over its ticks
+- **Symptom:** in a test, a unit stops moving right after a save round-trip check that built `Combat(f, ..., units=records)` on the same factory.
+- **Cause:** `Combat.__init__` sets `factory.combat = self`; `Factory.tick()` ticks whatever `combat` points at, so the original Combat (and its units) is no longer simulated.
+- **Fix:** restore `f.combat = c` after building a throwaway Combat, or build the twin on its own Factory (tests/test_combat.py does the former).
+
 ## Long Bash heredocs silently fail in this tool
 - **Symptom:** "unexpected EOF while looking for matching quote" from a multi-file heredoc command; nothing written.
 - **Cause:** suspected tool-side length limit (~8 KB) on a single Bash command; large heredocs get cut mid-line.

@@ -48,6 +48,7 @@ class Factory:
         self.tick_count = 0
         self.dirty_links = True
         self.dirty_flowfield = True
+        self.layout_version = 0         # bumps on every add/remove: unit routes re-check themselves
         self.stats = {"delivered": 0, "mined": 0, "voided": 0, "bonus": 0}
         self.events = []                # transient notifications for the UI (cleared by reader)
         self.damaged = set()            # structures with hp < max_hp (health bars)
@@ -78,14 +79,21 @@ class Factory:
         self.add_structure(hub)
         return hub
 
+    def replaces_belt(self, kind, x, y):
+        """A bridge may go straight onto a belt: the belt is swapped out and
+        its items carry on across the bridge (John: draw the line, then drop
+        the bridge where the other line has to cross)."""
+        return kind == "bridge" and isinstance(self.structures.get((x, y)), Belt)
+
     def can_place(self, kind, x, y, direction=0):
         """(ok, reason). Does not deduct."""
         cls = KINDS.get(kind)
         if cls is None or kind == "hub":
             return False, "cannot build that"
         probe = cls(x, y, direction)
+        swap = self.replaces_belt(kind, x, y)
         for t in probe.tiles():
-            if t in self.structures:
+            if t in self.structures and not swap:
                 return False, "occupied"
             if self.terrain is not None and not self.terrain.buildable(*t):
                 return False, "cannot build here"
@@ -114,11 +122,17 @@ class Factory:
             s = cls(x, y, direction, value)
         else:
             s = cls(x, y, direction)
+        old = None
+        if self.replaces_belt(kind, x, y):
+            old = self.remove(x, y, refund=not free)
         if any(t in self.structures for t in s.tiles()):
             return None
         if not free:
             self.balance -= COSTS.get(kind, 0)
         self.add_structure(s)
+        if old is not None and old.items:
+            # the belt's items enter the bridge from the belt's back side and keep their progress
+            s.lanes[(old.direction + 2) % 4] = [[it[0], it[1]] for it in old.items]
         return s
 
     def add_structure(self, s):
@@ -143,6 +157,7 @@ class Factory:
         elif isinstance(s, Hub):
             self.hub = s
         self.dirty_links = True
+        self.layout_version += 1
 
     def remove(self, tx, ty, refund=True):
         """Demolish the structure covering (tx, ty). Returns it or None.
@@ -170,6 +185,7 @@ class Factory:
                 lst.remove(s)
                 break
         self.dirty_links = True
+        self.layout_version += 1
 
     def rotate(self, tx, ty):
         s = self.structures.get((tx, ty))
@@ -248,6 +264,23 @@ class Factory:
         s.hp = s.max_hp
         self.damaged.discard(s)
         return cost
+
+    def heal(self, s, amount):
+        """Restore up to `amount` hp (repair units). Returns the hp restored."""
+        missing = s.max_hp - s.hp
+        if missing <= 0 or amount <= 0:
+            return 0
+        healed = min(missing, amount)
+        s.hp += healed
+        if s.hp >= s.max_hp:
+            self.damaged.discard(s)
+        return healed
+
+    def damaged_structures(self):
+        """Damaged structures still standing, in (y, x) order (deterministic;
+        `damaged` is a set of objects, so never iterate it directly in the sim)."""
+        return sorted((s for s in self.damaged if self.structures.get((s.x, s.y)) is s),
+                      key=_key)
 
     @staticmethod
     def upgrade_cost(s):

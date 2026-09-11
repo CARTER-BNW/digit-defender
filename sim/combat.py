@@ -8,9 +8,17 @@ Lists iterate in spawn order; nearest searches tie-break on uid.
 Positions are float tile coordinates (tile (tx, ty) has centre (tx+.5, ty+.5)).
 Enemies are blocked by structures and melee whatever blocks them, and they
 also shoot (free) at the nearest unit or structure within shot_range while
-advancing; player units walk over the base. Ranged/heavy unit shots debit
-balance by the fired value (hold fire when broke); melee and towers are free
-(towers eat ammo).
+advancing. Player units walk over belts and bridges but are blocked by every
+other structure (walls, towers, machines, the HQ...; John: no phasing through
+walls): they route around them with A* (sim.pathing.route) and hold when
+enclosed. Ranged/heavy unit shots debit balance by the fired value (hold fire
+when broke); melee and towers are free (towers eat ammo).
+
+Formations (John): a commanded group keeps a formation (box / line / column /
+wedge / ring, [wheel] with units selected) that every move and patrol order
+re-forms; a patrol ([MMB] click) walks the group between its rally slots
+and a second set of slots. Repair units heal damaged buildings and units
+next to them from a load of numbers and refill at the HQ.
 """
 import math
 import random
@@ -20,23 +28,42 @@ from settings import (TICK_RATE, UNIT_STATS, ENEMY_STATS, WAVE_FIRST_S, WAVE_INT
                       WAVE_BUDGET_GROWTH, WAVE_SPAWN_MARGIN, WAVE_MIN_RADIUS, WAVE_MIX,
                       UNIT_AGGRO_TILES, UNIT_LEVEL_MULT, ENEMY_ATTACK_RANGE, FLOW_REFRESH_TICKS,
                       NEST_AGGRO_TILES, NEST_RAID_PERIOD_S, NEST_RAID_SIZE, NEST_BOUNTY,
-                      NEST_REGION, CHUNK_SIZE, GATHER_MAX_RING, POST_MAX_SHIFT)
-from sim.pathing import FlowField, greedy_step, dist_to_tiles
+                      NEST_REGION, CHUNK_SIZE, GATHER_MAX_RING, POST_MAX_SHIFT, FORMATIONS,
+                      UNIT_PASSABLE_KINDS, UNIT_PATH_BUDGET, REPAIR_UNIT_CAPACITY,
+                      REPAIR_UNIT_SEARCH, REPAIR_HP_PER_NUMBER)
+from sim.pathing import FlowField, greedy_step, dist_to_tiles, route
 from sim import nests as nestmod
 from sim.structures import Structure, Spawner
 
 ENEMY, PLAYER = 0, 1
+HEAL = 2                                       # beam "side" of a repair unit's heal
 BEAM_TTL = 6
 NEIGHBOURS4 = ((0, -1), (1, 0), (0, 1), (-1, 0))
 NEST_SCAN_TICKS = 100
 NEST_FIRST_RAID_S = 10
 RETARGET_RADIUS = 40
+REPAIR_RANGE = 1.5                             # a repair unit works on the 8 tiles around it
+
+
+class SolidMap:
+    """`(tx, ty) in solid` is True where a structure blocks player units:
+    everything but the walk-over kinds (belts, bridges). A live view of the
+    factory's structure dict, so it never goes stale."""
+    __slots__ = ("structures",)
+
+    def __init__(self, structures):
+        self.structures = structures
+
+    def __contains__(self, tile):
+        s = self.structures.get(tile)
+        return s is not None and s.KIND not in UNIT_PASSABLE_KINDS
 
 
 class Unit:
     __slots__ = ("uid", "side", "kind", "x", "y", "hp", "max_hp", "speed", "range", "dmg",
                  "period", "timer", "shot", "shot_dmg", "shot_range", "target", "goal", "rally",
-                 "level", "owner", "dead", "post")
+                 "level", "owner", "dead", "post", "patrol", "leg", "formation", "anchor", "panchor",
+                 "heal", "carry", "path", "path_goal", "path_ver")
 
     def __init__(self, uid, side, kind, x, y, stats, mult=1.0, level=1, owner=None):
         self.uid = uid
@@ -62,6 +89,17 @@ class Unit:
         self.owner = owner                     # spawner (player units)
         self.dead = False
         self.post = None                       # (tx, ty) tile claimed while attacking (no stacking)
+        self.patrol = None                     # (x, y) second patrol point (player units), or None
+        self.leg = 0                           # 1 while heading for the patrol point, 0 for the rally
+        self.formation = FORMATIONS[0]         # the group's formation, kept for every later order
+        self.anchor = None                     # centre the rally formation was laid out around
+        self.panchor = None                    # centre of the patrol formation
+        heal = stats.get("heal")               # repair units: hp restored per action
+        self.heal = None if heal is None else max(1, int(round(heal * mult)))
+        self.carry = 0                         # repair units: numbers on board (spent on healing)
+        self.path = None                       # cached A* route (player units), tiles ahead
+        self.path_goal = None
+        self.path_ver = -1                     # factory.layout_version the route was checked against
 
     def tile(self):
         return math.floor(self.x), math.floor(self.y)
@@ -118,6 +156,54 @@ def spiral_slots(gx, gy, max_ring=GATHER_MAX_RING):
             yield (tx + dx + 0.5, ty + dy + 0.5)
 
 
+def formation_slots(name, gx, gy, n, max_ring=GATHER_MAX_RING):
+    """Tile centres for n units in formation `name` around the tile holding
+    (gx, gy), best slots first; the generator carries on with fallback slots
+    so blocked tiles (structures, other units) can be skipped.
+      box:    compact grid spiralling out (spiral_slots)
+      line:   one row of n, left to right (extra rows below/above if needed)
+      column: one column of n, top to bottom (extra columns right/left)
+      wedge:  a V with its tip to the north, then its inside
+      ring:   a hollow ring around the point, clockwise from the north"""
+    tx, ty = math.floor(gx), math.floor(gy)
+    if name == "line":
+        lo, hi = -((n - 1) // 2), n // 2
+        for r in range(max_ring + 1):
+            for row in ((0,) if r == 0 else (r, -r)):
+                for dx in range(lo, hi + 1):
+                    yield (tx + dx + 0.5, ty + row + 0.5)
+    elif name == "column":
+        lo, hi = -((n - 1) // 2), n // 2
+        for r in range(max_ring + 1):
+            for col in ((0,) if r == 0 else (r, -r)):
+                for dy in range(lo, hi + 1):
+                    yield (tx + col + 0.5, ty + dy + 0.5)
+    elif name == "wedge":
+        depth = -(-(n - 1) // 2)                       # arms needed for n units...
+        ty -= depth // 2                               # ...so the V is centred on the point
+        yield (tx + 0.5, ty + 0.5)
+        for k in range(1, max_ring + 1):
+            yield (tx - k + 0.5, ty + k + 0.5)
+            yield (tx + k + 0.5, ty + k + 0.5)
+        for k in range(1, max_ring + 1):
+            for dx in range(-k + 1, k):
+                yield (tx + dx + 0.5, ty + k + 0.5)
+    elif name == "ring":
+        r0 = max(1, -(-n // 8))                        # the ring at distance r holds 8r units
+        for r in range(r0, max_ring + 1):
+            ring = []
+            for dy in range(-r, r + 1):
+                for dx in range(-r, r + 1):
+                    if max(abs(dx), abs(dy)) == r:
+                        ring.append((math.atan2(dx, -dy) % (2 * math.pi), dy, dx))
+            ring.sort()
+            for _, dy, dx in ring:
+                yield (tx + dx + 0.5, ty + dy + 0.5)
+        yield (tx + 0.5, ty + 0.5)
+    else:
+        yield from spiral_slots(gx, gy, max_ring)
+
+
 class Combat:
     def __init__(self, factory, seed, nests=None, wave=None, raids=None, units=None):
         self.factory = factory
@@ -137,9 +223,11 @@ class Combat:
         self.raid_next = {}                    # (rx, ry) -> tick of the next raid
         self.active_nests = {}                 # (rx, ry) -> NestSpec (aggro'd, alive)
         self.known_nests = {}                  # (rx, ry) -> NestSpec near the base (alive)
-        self.stats = {"kills": 0, "losses": 0, "waves": 0, "shot_cost": 0, "raids": 0}
+        self.stats = {"kills": 0, "losses": 0, "waves": 0, "shot_cost": 0, "raids": 0,
+                      "healed": 0, "refilled": 0}
         self._last_scan = -NEST_SCAN_TICKS
         self._posts = {}                       # (tx, ty) -> uid of the attacker standing there
+        self.solid = SolidMap(factory.structures)   # what blocks player units
         if units:
             self._load_units(units)
         if wave and "next_uid" in wave:
@@ -158,9 +246,21 @@ class Combat:
 
     @staticmethod
     def _unit_record(u):
-        return {"uid": u.uid, "kind": u.kind, "x": u.x, "y": u.y, "hp": u.hp, "level": u.level,
-                "owner": [u.owner.x, u.owner.y] if u.owner is not None else None,
-                "rally": list(u.rally) if u.rally is not None else None}
+        d = {"uid": u.uid, "kind": u.kind, "x": u.x, "y": u.y, "hp": u.hp, "level": u.level,
+             "owner": [u.owner.x, u.owner.y] if u.owner is not None else None,
+             "rally": list(u.rally) if u.rally is not None else None}
+        if u.formation != FORMATIONS[0]:
+            d["formation"] = u.formation
+        if u.anchor is not None:
+            d["anchor"] = list(u.anchor)
+        if u.patrol is not None:
+            d["patrol"] = list(u.patrol)
+            d["leg"] = u.leg
+            if u.panchor is not None:
+                d["panchor"] = list(u.panchor)
+        if u.carry:
+            d["carry"] = u.carry
+        return d
 
     def _load_units(self, records):
         structures = self.factory.structures
@@ -177,6 +277,16 @@ class Combat:
             u = self.spawn_unit(kind, float(r["x"]), float(r["y"]), level=int(r.get("level", 1)),
                                 owner=owner, rally=rally)
             u.hp = max(1, min(u.max_hp, int(r.get("hp", u.max_hp))))
+            if r.get("formation") in FORMATIONS:
+                u.formation = r["formation"]
+            if r.get("anchor"):
+                u.anchor = (float(r["anchor"][0]), float(r["anchor"][1]))
+            if r.get("patrol"):
+                u.patrol = (float(r["patrol"][0]), float(r["patrol"][1]))
+                u.leg = 1 if r.get("leg") else 0
+                if r.get("panchor"):
+                    u.panchor = (float(r["panchor"][0]), float(r["panchor"][1]))
+            u.carry = max(0, min(REPAIR_UNIT_CAPACITY, int(r.get("carry", 0))))
             if "uid" in r:
                 u.uid = int(r["uid"])
                 self.next_uid = max(self.next_uid, u.uid + 1)
@@ -222,19 +332,113 @@ class Combat:
         taken = [u.rally for u in self.units if not u.dead and u.rally is not None]
         return self._free_slot(spiral_slots(gx, gy), taken)
 
-    def gather(self, units, gx, gy):
-        """Send `units` to a grid formation around (gx, gy): one tile each,
-        spiralling out from the centre, flowing around structures and around
-        units that are not part of the group. Deterministic (uid order)."""
-        group = sorted((u for u in units if not u.dead), key=lambda u: u.uid)
+    @staticmethod
+    def _formation_order(group, formation):
+        """Units in the order they take the formation's slots: a line fills
+        left to right by where the units stand, a column top to bottom, the
+        rest by uid. Deterministic (positions are exact sim state)."""
+        if formation == "line":
+            return sorted(group, key=lambda u: (u.x, u.uid))
+        if formation == "column":
+            return sorted(group, key=lambda u: (u.y, u.uid))
+        return sorted(group, key=lambda u: u.uid)
+
+    def _assign(self, group, formation, gx, gy, attr):
+        """Hand every unit of the group its own slot (attr = "rally" or
+        "patrol") in `formation` around (gx, gy), skipping structure tiles
+        and the slots of units outside the group; the group remembers the
+        centre (anchor / panchor) so a formation change re-forms in place."""
         ids = {id(u) for u in group}
         taken = [u.rally for u in self.units
                  if not u.dead and u.rally is not None and id(u) not in ids]
-        slots = spiral_slots(gx, gy)
+        taken += [u.patrol for u in self.units
+                  if not u.dead and u.patrol is not None and id(u) not in ids]
+        centre = (math.floor(gx) + 0.5, math.floor(gy) + 0.5)
+        slots = formation_slots(formation, gx, gy, len(group))
+        for u in self._formation_order(group, formation):
+            pos = self._free_slot(slots, taken)
+            setattr(u, attr, pos)
+            setattr(u, "anchor" if attr == "rally" else "panchor", centre)
+            taken.append(pos)
+
+    @staticmethod
+    def _centre(group, attr):
+        """Where a group's formation is centred: the remembered anchor when
+        the group shares one, else the middle of its slots."""
+        anchors = {getattr(u, "anchor" if attr == "rally" else "panchor") for u in group}
+        anchors.discard(None)
+        if len(anchors) == 1:
+            return next(iter(anchors))
+        points = [getattr(u, attr) for u in group]
+        return (math.floor(sum(p[0] for p in points) / len(points)) + 0.5,
+                math.floor(sum(p[1] for p in points) / len(points)) + 0.5)
+
+    @staticmethod
+    def group_formation(units):
+        """The formation a group of units shares (the first unit's, by uid)."""
+        live = [u for u in units if not u.dead]
+        if not live:
+            return FORMATIONS[0]
+        return min(live, key=lambda u: u.uid).formation
+
+    def gather(self, units, gx, gy, formation=None):
+        """Move order: send `units` to their formation around (gx, gy), one
+        tile each, flowing around structures and around units that are not
+        part of the group. The group's formation (or `formation`) is kept on
+        every unit for later orders; a patrol is cancelled. Deterministic."""
+        group = sorted((u for u in units if not u.dead), key=lambda u: u.uid)
+        if not group:
+            return group
+        if formation is None:
+            formation = group[0].formation
         for u in group:
-            u.rally = self._free_slot(slots, taken)
-            taken.append(u.rally)
+            u.formation = formation
+            u.patrol = None
+            u.panchor = None
+            u.leg = 0
+        self._assign(group, formation, gx, gy, "rally")
         return group
+
+    def patrol(self, units, px, py):
+        """Patrol order ([MMB] click): the group walks between its rally slots
+        and a second formation around (px, py), starting toward the new point."""
+        group = sorted((u for u in units if not u.dead), key=lambda u: u.uid)
+        if not group:
+            return group
+        formation = group[0].formation
+        for u in group:
+            u.formation = formation
+            if u.rally is None:
+                u.rally = (u.x, u.y)
+        self._assign(group, formation, px, py, "patrol")
+        for u in group:
+            u.leg = 1
+        return group
+
+    def set_formation(self, units, formation):
+        """[wheel]: give the group a new formation and re-form it in place
+        (around the centre of its rally slots; the patrol end too)."""
+        group = sorted((u for u in units if not u.dead), key=lambda u: u.uid)
+        if not group or formation not in FORMATIONS:
+            return group
+        for u in group:
+            u.formation = formation
+            if u.rally is None:
+                u.rally = (u.x, u.y)
+        gx, gy = self._centre(group, "rally")
+        self._assign(group, formation, gx, gy, "rally")
+        patrolling = [u for u in group if u.patrol is not None]
+        if patrolling:
+            px, py = self._centre(patrolling, "patrol")
+            self._assign(patrolling, formation, px, py, "patrol")
+        return group
+
+    def next_formation(self, units, step=1):
+        """Cycle the group's formation ([wheel] up / down). Returns the new name."""
+        cur = self.group_formation(units)
+        name = FORMATIONS[(FORMATIONS.index(cur) + step) % len(FORMATIONS)]
+        self.set_formation(units, name)
+        return name
 
     def unit_at(self, x, y, radius=0.6):
         """Nearest live player unit within radius tiles of a point, or None."""
@@ -579,19 +783,72 @@ class Combat:
             u.x += dx / d * u.speed
             u.y += dy / d * u.speed
 
+    def _next_tile(self, u, tx, ty, gtx, gty):
+        """The neighbour tile a player unit steps to on its way from (tx, ty)
+        to (gtx, gty): the next tile of its cached A* route, re-planned when
+        the goal changed, the unit left the route, or a new structure landed
+        on it. With no route (enclosed) the unit walks greedily but never
+        into a solid tile, and holds when both axes are blocked. Enemies keep
+        their greedy step (whatever blocks them gets attacked)."""
+        if u.side == ENEMY:
+            return greedy_step(tx, ty, gtx, gty)
+        solid = self.solid
+        goal = (gtx, gty)
+        ver = self.factory.layout_version
+        path = u.path
+        replan = u.path_goal != goal
+        if not replan:
+            if path is None:
+                replan = u.path_ver != ver              # known unreachable until the layout changes
+            else:
+                while path and path[0] == (tx, ty):
+                    path.pop(0)
+                if u.path_ver != ver:
+                    replan = any(t in solid for t in path)   # something was built across the route
+                    if not replan:
+                        u.path_ver = ver
+                if not replan:
+                    if not path:
+                        return None                     # as close as the route gets (goal is solid)
+                    nxt = path[0]
+                    if abs(nxt[0] - tx) + abs(nxt[1] - ty) == 1:
+                        return nxt
+                    replan = True                       # knocked off the route
+        if replan:
+            path = route((tx, ty), goal, solid, UNIT_PATH_BUDGET)
+            u.path, u.path_goal, u.path_ver = path, goal, ver
+            if path is not None:
+                return path[0] if path else None
+        # unreachable within the budget: greedy, but never through a wall
+        step = greedy_step(tx, ty, gtx, gty)
+        if step is None or step not in solid:
+            return step
+        dx, dy = gtx - tx, gty - ty
+        if step[0] != tx:                               # blocked along x: try y, and vice versa
+            alt = (tx, ty + (1 if dy > 0 else -1)) if dy else None
+        else:
+            alt = (tx + (1 if dx > 0 else -1), ty) if dx else None
+        if alt is not None and alt not in solid:
+            return alt
+        return None
+
     def _walk_grid(self, u, x, y):
         """Walk to (x, y) along the grid lines through the tile centres:
         larger axis first (L-shaped paths, like the enemies), finishing
         exactly on the target once inside its tile. The unit runs straight
         along the row/column it is on; it only heads for the tile centre when
-        the next step turns, or when a fight knocked it off the grid."""
+        the next step turns, or when a fight knocked it off the grid. Player
+        units follow their A* route around walls and buildings (_next_tile)."""
         tx, ty = u.tile()
         gtx, gty = math.floor(x), math.floor(y)
         if tx == gtx and ty == gty:
             self._move_toward(u, x, y)
             return
+        step = self._next_tile(u, tx, ty, gtx, gty)
+        if step is None:
+            return                                      # blocked in: hold
         cx, cy = tx + 0.5, ty + 0.5
-        sx, sy = greedy_step(tx, ty, gtx, gty)
+        sx, sy = step
         on_row = abs(u.y - cy) < 1e-9
         on_col = abs(u.x - cx) < 1e-9
         if (sy == ty and on_row) or (sx == tx and on_col):
@@ -602,32 +859,152 @@ class Combat:
     def _unit_ai(self, u):
         if u.timer > 0:
             u.timer -= 1
-        e = self.nearest_enemy(u.x, u.y, UNIT_AGGRO_TILES)
-        if e is not None:
-            self._engage(u, [(e.x, e.y)], u.range, e)
-            return
-        spec = self.nearest_nest(u.x, u.y, UNIT_AGGRO_TILES)
-        if spec is not None:
-            self._engage(u, [(spec.tx + 0.5, spec.ty + 0.5)], max(u.range, 1.5), spec)
-            return
+        if u.heal is not None:                          # repair units never fight
+            if self._repair_ai(u):
+                return
+        else:
+            e = self.nearest_enemy(u.x, u.y, UNIT_AGGRO_TILES)
+            if e is not None:
+                self._engage(u, [(e.x, e.y)], u.range, e)
+                return
+            spec = self.nearest_nest(u.x, u.y, UNIT_AGGRO_TILES)
+            if spec is not None:
+                self._engage(u, [(spec.tx + 0.5, spec.ty + 0.5)], max(u.range, 1.5), spec)
+                return
         self.release_post(u)
-        if u.rally is not None and (u.x != u.rally[0] or u.y != u.rally[1]):
-            self._walk_grid(u, *u.rally)
+        self._idle_walk(u)
+
+    def _idle_walk(self, u):
+        """Nothing to fight: walk to the rally slot; on a patrol, bounce
+        between the rally slot and the patrol slot. A slot buried under a
+        new structure is swapped for a free one nearby."""
+        dest = u.patrol if (u.patrol is not None and u.leg) else u.rally
+        if dest is None:
+            return
+        if (math.floor(dest[0]), math.floor(dest[1])) in self.factory.structures:
+            dest = self.slot_near(*dest)
+            if u.patrol is not None and u.leg:
+                u.patrol = dest
+            else:
+                u.rally = dest
+        if u.x == dest[0] and u.y == dest[1]:
+            if u.patrol is not None:
+                u.leg ^= 1
+            return
+        self._walk_grid(u, *dest)
 
     def _engage(self, u, points, radius, victim):
         """Fight from a post: strike whenever the victim is in range, and walk
-        (along the grid) to a free post around it so attackers never stack.
-        With no post available, close in on the victim directly."""
+        (along the grid, around walls) to a free post around it so attackers
+        never stack. With no post available, close in on the victim directly."""
         in_range = any(u.dist_to(px, py) <= radius for px, py in points)
         if in_range:
             self._attack(u, victim)
-        post = self.claim_post(u, points, radius)
+        post = self.claim_post(u, points, radius, self.solid)
         if post is not None:
             if not self._at_post(u):
                 self._walk_grid(u, post[0] + 0.5, post[1] + 0.5)
         elif not in_range:
             px, py = points[0]
             self._walk_grid(u, px, py)
+
+    # ---- repair units -------------------------------------------------------------
+
+    def _repair_ai(self, u):
+        """Repair unit (John): heal the nearest damaged building or unit
+        within REPAIR_UNIT_SEARCH tiles, spending carried numbers; with the
+        load gone, walk to the HQ and take a new load from the balance (wait
+        there while broke). True when the unit is busy with that."""
+        f = self.factory
+        if u.carry <= 0:
+            hub = f.hub
+            if hub is None:
+                return False
+            self.release_post(u)
+            if dist_to_tiles(u.x, u.y, hub.tiles()) <= REPAIR_RANGE:
+                take = min(REPAIR_UNIT_CAPACITY - u.carry, f.balance)
+                if take > 0:
+                    f.balance -= take
+                    u.carry += take
+                    self.stats["refilled"] += take
+                    f.events.append(("refill", u.uid, take))
+                return True
+            spot = self._hub_side_tile(u, hub)
+            if spot is not None:
+                self._walk_grid(u, spot[0] + 0.5, spot[1] + 0.5)
+            return True
+        target = self._repair_target(u)
+        if target is None:
+            return False
+        if isinstance(target, Unit):
+            points = [(target.x, target.y)]
+        else:
+            points = self._structure_points(target)
+        in_range = any(u.dist_to(px, py) <= REPAIR_RANGE for px, py in points)
+        if in_range and u.timer <= 0:
+            self._heal(u, target)
+        post = self.claim_post(u, points, REPAIR_RANGE, self.solid)
+        if post is not None:
+            if not self._at_post(u):
+                self._walk_grid(u, post[0] + 0.5, post[1] + 0.5)
+        elif not in_range:
+            px, py = points[0]
+            self._walk_grid(u, px, py)
+        return True
+
+    def _hub_side_tile(self, u, hub):
+        """Nearest walkable tile touching the HQ's footprint (ties by (y, x))."""
+        ox, oy = hub.origin()
+        n = hub.SIZE
+        best, best_key = None, None
+        for dy in range(-1, n + 1):
+            for dx in range(-1, n + 1):
+                if 0 <= dx < n and 0 <= dy < n:
+                    continue
+                t = (ox + dx, oy + dy)
+                if t in self.solid:
+                    continue
+                key = (math.hypot(t[0] + 0.5 - u.x, t[1] + 0.5 - u.y), t[1], t[0])
+                if best_key is None or key < best_key:
+                    best, best_key = t, key
+        return best
+
+    def _repair_target(self, u):
+        """Nearest damaged player unit (itself included) or damaged structure
+        within reach; ties go to units, then (y, x) / uid."""
+        best, best_d = None, REPAIR_UNIT_SEARCH
+        for v in self.units:
+            if v.dead or v.hp >= v.max_hp:
+                continue
+            d = math.hypot(v.x - u.x, v.y - u.y)
+            if d < best_d or (d == best_d and best is not None and isinstance(best, Unit) and v.uid < best.uid):
+                best, best_d = v, d
+        for s in self.factory.damaged_structures():
+            d = dist_to_tiles(u.x, u.y, s.tiles())
+            if d < best_d:
+                best, best_d = s, d
+        return best
+
+    def _heal(self, u, target):
+        """One repair action: up to `heal` hp, paid from the load at
+        REPAIR_HP_PER_NUMBER hp per number (the [H] price). Draws a beam."""
+        missing = target.max_hp - target.hp
+        amount = min(u.heal, missing, u.carry * REPAIR_HP_PER_NUMBER)
+        if amount <= 0:
+            return 0
+        if isinstance(target, Unit):
+            target.hp += amount
+            tx, ty = target.x, target.y
+        else:
+            amount = self.factory.heal(target, amount)
+            cx, cy = target.centre()
+            tx, ty = cx, cy
+        spent = -(-amount // REPAIR_HP_PER_NUMBER)      # ceil
+        u.carry = max(0, u.carry - spent)
+        u.timer = u.period
+        self.stats["healed"] += amount
+        self.beams.append([u.x, u.y, tx, ty, amount, BEAM_TTL, HEAL])
+        return amount
 
     def _enemy_ai(self, e):
         f = self.factory

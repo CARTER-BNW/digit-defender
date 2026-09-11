@@ -1,11 +1,24 @@
 # HANDOFF — Digit Defender
-_Last updated: 2026-09-12 (v6, after fourteen rounds of John's play-test feedback) by Claude_
+_Last updated: 2026-09-12 (v7, after John's round 15: formations, patrols, walls block units, repair units) by Claude_
 
 New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHASES.md (checkpoints), docs/GOTCHAS.md.
 
 ## Live state
 - **Phases 0-5 are built and verified** (tests + real-window runs + screenshots). Phase 6 (polish) is in progress.
-  134 pytest tests green (`python -m pytest -q`, ~7 s). Last commit: bridges + junction rules + Test Lab (2026-09-12).
+  143 pytest tests green (`python -m pytest -q`, ~8 s). Last commit: round 15 (formations, patrol, A* routing around
+  walls, repair spawner/unit, bridge drops onto a belt, clearer build refusals; 2026-09-12).
+- **Round 15 (2026-09-12)**: with units selected the WHEEL cycles the group's formation (box / line / column / wedge /
+  ring; it sticks to the group for every later move; Ctrl+wheel still zooms) and a MIDDLE CLICK sets a patrol between
+  the units' rally slots and a second formation at the click (RMB move ends it). Player units no longer walk through
+  walls or buildings: they route around them with A* (`sim.pathing.route`, cached per unit, re-checked when the layout
+  changes) and hold when shut in; belts and bridges are still walked over. New `[=]` Repair spawner (100) trains repair
+  units (100; red with a white cross): they heal the nearest damaged building or unit within 16 tiles, 25 hp per action
+  from a load of 500 numbers at 5 hp per number (the [H] price), and walk to the HQ for a new load (debited from the
+  balance; they wait there while broke). A bridge can be dropped straight onto a belt (the belt's numbers carry on
+  across it). A click that cannot build now says why ("occupied by a Tower", "belt kept its direction: it feeds a line").
+  John's Test Lab reports at (-22,2)/(-21,2) and (-26,1) were NOT reproducible from his save (nothing was built there
+  when it was saved); the bridge-on-belt and the messages are the best guess at what he hit — ask him to leave the
+  failing pieces in place next time.
 - **John play-tested fourteen rounds on 2026-09-11/12; every item is implemented** (STATUS v4-v6 list them round by
   round, HANDOFF decisions 1-11 below hold the resulting rules). The game he now has, in one breath: a 6x6 HQ; belts
   drawn by drag with a transparent preview (Shift = straight L, R turns the drag), items that curve through corners;
@@ -43,16 +56,19 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
    left; decided on release), drag a box — even one that starts on a belt — = select every structure inside (U/H/T/C
    apply to all; group panel; Shift+click adds one) and/or units, click a spawner or press C = train one unit,
    click / Shift+click / drag a box = select units, RMB = move selected units (grid formation) or set the gather
-   point of the selected spawner(s) for units trained from then on, or cancel,
-   wheel zoom, MMB drag pan, WASD pan (Shift fast), F3 debug, Space pause, [ ] sim speed x1/x2/x4, F1 help overlay,
+   point of the selected spawner(s) for units trained from then on, or cancel, wheel with units selected = next /
+   previous formation (box, line, column, wedge, ring), middle CLICK with units selected = patrol between their rally
+   point and the clicked point, = repair spawner,
+   wheel zoom (Ctrl+wheel while units are selected), MMB drag pan, WASD pan (Shift fast), F3 debug, Space pause,
+   [ ] sim speed x1/x2/x4, F1 help overlay,
    Home or the HQ button = camera back to the HQ, minimap click = recentre there, F6 spawn an enemy at the cursor,
    F7 trigger the next wave, F11 fullscreen, Esc = cancel tool / clear selection / menu (Esc in the menu = back into
    the game; Del in the menu deletes the highlighted world after a confirm screen). Minimap bottom-right (2x).
 4. Belt rules a player sees (final, round 14): a belt pointing into another belt's side or back MERGES (T / X shapes
    with several inputs). A belt SPLITS only when [T] is pressed on it, or when an unfed belt starts beside a straight
    belt (auto branch); splitting belts show small arrows at every exit and alternate items between them. [B] bridge =
-   two lines cross without mixing (in a side, out the opposite). Numbers cannot be built on except by miners; a miner
-   pushes into every adjacent cargo input.
+   two lines cross without mixing (in a side, out the opposite); the bridge tool drops straight onto a belt of a
+   finished line (round 15). Numbers cannot be built on except by miners; a miner pushes into every adjacent cargo input.
 5. `python main.py --testworld` (or the menu entry "Test lab") opens the Test Lab world: every part and junction type
    laid out around the HQ (legend in `world/testworld.py`; tests/test_testworld.py checks it runs as documented).
 
@@ -131,7 +147,21 @@ tests must keep their tiles clear of the right column (x >= 932 px) and the mini
    the 8 tiles around a target all count. `_posts` is rebuilt every tick from live units (uid order: deterministic).
    Hub alert: `Factory.hub_hit_tick` / `hub_under_attack()` (HUB_ALERT_S = 3 s after a hub hit) drives a pulsing red
    double frame around the hub (render/structures.draw_hub_alert) and a red screen frame + "HUB UNDER ATTACK" (hud). Player units are saved in meta
-   `wave.units` (uid, kind, pos, hp, level, owner spawner, slot); enemies still disperse on reload.
+   `wave.units` (uid, kind, pos, hp, level, owner spawner, slot, formation, anchor, patrol/leg/panchor, carry); enemies
+   still disperse on reload.
+   Round 15 rules: (a) player units are blocked by every structure except belts and bridges (`UNIT_PASSABLE_KINDS`;
+   `Combat.solid` is a live SolidMap over the structure dict); `_walk_grid` follows a cached A* route (`Unit.path`,
+   re-planned when the goal changes, the unit leaves the route, or `Factory.layout_version` shows a structure landed on
+   it; `UNIT_PATH_BUDGET` 4000 expansions, then greedy-but-never-into-a-wall, then hold); attack posts use the solid
+   map too. Enemies keep greedy + flow field (they chew what blocks them). (b) Formations: `formation_slots(name, gx,
+   gy, n)` yields slots best-first with fallbacks (structures / other units' slots are skipped); `gather` (RMB) keeps
+   the group's formation, `set_formation` re-forms around the remembered `anchor` (no drift when cycling), `patrol`
+   (middle click) hands out a second set of slots (`patrol`, `panchor`) and `leg` says which end the unit walks to;
+   arrival flips the leg. (c) Repair units (`UNIT_STATS["repair"]`: heal 25 per 10 ticks, never fight): `_repair_ai`
+   heals the nearest damaged unit (self included) or `Factory.damaged_structures()` entry within REPAIR_UNIT_SEARCH,
+   spending ceil(hp / REPAIR_HP_PER_NUMBER) numbers from `carry` (capacity REPAIR_UNIT_CAPACITY 500); at 0 it walks
+   to the nearest free tile touching the HQ (`_hub_side_tile`) and takes min(500, balance) from the balance (event
+   "refill"); a new unit spawns empty and fetches its first load. Heal beams are green (`HEAL` side).
 7. Waves: first at 5 min, interval max(90 s, 240*0.97^n), budget 20*1.25^n, spawn ring = base bbox + 12 tiles (min radius
    30), direction pre-rolled (edge arrow in the last 60 s). Enemies use the hub flow field (walls 40, other structures 15)
    when inside it, greedy otherwise; whatever blocks gets meleed. Every enemy also shoots while advancing (John, round
@@ -169,8 +199,15 @@ tests must keep their tiles clear of the right column (x >= 932 px) and the mini
 - Sprite label sizes/positions were tuned for the procedural art; check them once John's miner/machine PNGs land.
 - Item spacing is half a tile (2 per tile) so numbers do not overlap; belt throughput is 2 items/s at base speed.
 - Custom PNG sprites: assets/sprites/<kind>.png, 32x32 per tile (hub 192x192), facing left (see README).
-- Player units are not blocked by structures (by design for now). Enemies shoot over walls (3-5 tiles); towers (10)
-  and ranged units (6) outrange them.
+- Player units walk over belts and bridges but are blocked by everything else (round 15); a fully walled base needs a
+  gate (a gap) or the units stay inside and only the ranged ones fire over the wall. Enemies shoot over walls (3-5
+  tiles); towers (10) and ranged units (6) outrange them.
+- Formations are axis-aligned (a line is always east-west, a column north-south, a wedge points north); they do not
+  turn toward the move direction. While attacking, units still spread over attack posts (nearest free tile), so a
+  formation bends into an arc around the target rather than holding its exact shape.
+- Repair units look 16 tiles around wherever they stand; station one (RMB) near the walls it should look after. A
+  repair unit's first load is fetched from the HQ right after training (the unit itself costs 100, the load 500).
+- With units selected the wheel no longer zooms (Ctrl+wheel does); Esc clears the selection.
 - Deposits: at most one blob per chunk (chance 0.45), digit weights decay**(digit-1) with decay 0.45 near the origin
   -> 0.8 far out (`world/generator.py`); re-probe the economy since 4-9 are now much rarer near the hub.
 - Combat stats (kills) are transient; the game-over line shows kills since load.
@@ -179,7 +216,12 @@ tests must keep their tiles clear of the right column (x >= 932 px) and the mini
 
 ## Next actions
 1. Expect bug reports from the Test Lab (John gives tile coordinates / screenshots): rebuild the scene from the legend
-   in `world/testworld.py`, reproduce headlessly, fix, screenshot-verify in a real window, commit (local only).
+   in `world/testworld.py`, reproduce headlessly, fix, screenshot-verify in a real window, commit (local only). His
+   round-15 reports at (-22,2)/(-21,2) ("cannot connect") and (-26,1) ("cannot make a bridge after drawing a belt from
+   -28,1 to -24,1") had nothing built there in the save; the likely causes (a bridge on an occupied belt tile, a
+   mid-line belt that refuses to turn, a silent "occupied") now either work or explain themselves on screen. If he
+   still hits them, ask him to leave the pieces in place and quit normally so the save shows them. His existing Test
+   Lab save gets the repair spawner via `testworld.top_up` on the next launch.
 2. When his remaining PNGs arrive: same convention (32x32, hub 192x192, facing left, white transparent); check label
    overlap on miners/machines/spawners and the bridge.
 3. Tick the Phase 4 design checkbox if John confirms; then the remaining Phase 6 items (sounds, stats graphs, blueprints,

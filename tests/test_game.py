@@ -377,3 +377,93 @@ def test_right_click_sets_gather_point_for_a_boxed_group_of_spawners(game):
     game.selected = a
     game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_c, mod=0, unicode="c"))
     assert a.queue == 2 and b.queue == 1
+
+
+def test_wheel_cycles_formation_and_middle_click_patrols(game):
+    frames(game, 1)
+    units = [game.combat.spawn_unit("melee", 4.5 + i, 6.5, rally=(4.5 + i, 6.5)) for i in range(3)]
+    zoom = game.camera.zoom
+    game.selected_units = list(units)
+    game.handle_event(pygame.event.Event(pygame.MOUSEWHEEL, x=0, y=1))
+    assert game.combat.group_formation(units) == "line" and game.camera.zoom == zoom   # no zoom with units selected
+    game.handle_event(pygame.event.Event(pygame.MOUSEWHEEL, x=0, y=-1))
+    assert game.combat.group_formation(units) == "box"
+    game.handle_event(pygame.event.Event(pygame.MOUSEWHEEL, x=0, y=-1))
+    assert game.combat.group_formation(units) == "ring"
+    # a middle CLICK sets a patrol; a middle DRAG still pans (tiles clear of the HUD panels)
+    pos = _mouse(game, pygame.MOUSEBUTTONDOWN, 2, (6, -2))
+    game.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, button=2, pos=pos))
+    assert all(u.patrol is not None and u.leg == 1 for u in units)
+    assert len({u.patrol for u in units}) == 3 and all(u.panchor == (6.5, -1.5) for u in units)
+    x0 = game.camera.x
+    game.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=2, pos=(200, 300)))
+    game.handle_event(pygame.event.Event(pygame.MOUSEMOTION, pos=(160, 300), rel=(-40, 0), buttons=(0, 1, 0)))
+    game.handle_event(pygame.event.Event(pygame.MOUSEBUTTONUP, button=2, pos=(160, 300)))
+    assert game.camera.x == x0 + 40 / game.camera.zoom and all(u.panchor == (6.5, -1.5) for u in units)
+    frames(game, 2)                                            # patrol lines draw
+    game.camera.x = x0
+    # RMB move ends the patrol and keeps the formation
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 3, (7, -4))
+    assert all(u.patrol is None for u in units) and game.combat.group_formation(units) == "ring"
+    game.selected_units = []
+    game.handle_event(pygame.event.Event(pygame.MOUSEWHEEL, x=0, y=-1))
+    assert game.camera.zoom < zoom                             # nothing selected: the wheel zooms again
+
+
+def test_repair_spawner_tool_key_and_toolbar_fit(game):
+    from ui.hud import TOOLS
+    frames(game, 1)
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_EQUALS, mod=0, unicode="="))
+    assert game.tool == "spawner_repair"
+    buttons = game.hud.buttons()
+    assert len(buttons) == len(TOOLS) == 14
+    assert game.hud.toolbar_rect.right <= game.hud.minimap_rect.left     # 14 buttons fit left of the minimap
+    game.factory.terrain = None
+    game.factory.balance = 1000
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (8, -6))
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (8, -6))
+    sp = game.factory.structure_at(8, -6)
+    assert sp is not None and sp.KIND == "spawner_repair" and game.factory.balance == 900
+    game.set_tool(None)
+    game.selected = sp
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_c, mod=0, unicode="c"))
+    assert sp.queue == 1 and game.factory.balance == 800
+    game.update(0.05)
+    u = game.combat.units[-1]
+    assert u.kind == "repair"
+    game.selected_units = [u]
+    frames(game, 2)                                            # red unit with a cross, load label, hints line
+
+
+def test_bridge_drops_onto_a_belt_and_occupied_clicks_explain(game):
+    from settings import COSTS
+    from sim.structures import W, BACK
+    frames(game, 1)
+    f = game.factory
+    f.terrain = None
+    f.balance = 1000
+    belts = [f.place("belt", x, -6, 1, free=True) for x in range(4, 9)]
+    belts[2].items.append([7, 0.4, BACK])
+    game.set_tool("bridge")
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (6, -6))
+    br = f.structure_at(6, -6)
+    assert br is not None and br.KIND == "bridge"
+    assert br.lanes[W] == [[7, 0.4]] and f.balance == 1000 - COSTS["bridge"] + COSTS["belt"] // 2
+    game.update(1 / 60)
+    assert br.exits[W] is not None and br.exits[W][0] is belts[3]   # the line still runs across it
+    assert any("replaced the belt" in m[0] for m in game.hud.messages)
+    # the bridge tool on a tower says what is in the way; so does a belt click on a tower
+    f.place("tower", 4, -8, 0, free=True)
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (4, -8))
+    assert any("occupied by a Tower" in m[0] for m in game.hud.messages)
+    game.hud.messages = []
+    game.set_tool("belt")
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (4, -8))
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (4, -8))
+    assert any("occupied by a Tower" in m[0] for m in game.hud.messages)
+    # a belt in the middle of a line keeps its direction; the message says so
+    game.hud.messages = []
+    game.build_dir = 0
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (7, -6))
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (7, -6))
+    assert belts[3].direction == 1 and any("kept its direction" in m[0] for m in game.hud.messages)
