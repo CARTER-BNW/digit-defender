@@ -60,6 +60,9 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
 - `game.py`: Game.load/save, event loop, fixed timestep (20 Hz, cap 4 ticks/frame), build mode (belt preview path,
   demolish tool, drag-box selection of structures and units), unit commands, autosave, game over -> [L] reload.
 
+Naming: the player sees "HQ" everywhere (sprite label, HQ button, alerts, help, panel via `hud.DISPLAY_NAMES`); the
+code, saves and docs keep the kind name `hub` (John, round 10).
+
 ## Load-bearing decisions (do not re-litigate casually; rationale in PLAN.md)
 1. Structures live in `Factory.structures[(tx,ty)]` (+ `by_chunk` index for rendering), never in terrain chunks. Terrain
    unloads freely; the factory always simulates (verified: a line 40 chunks away ran while its chunk was unloaded).
@@ -102,6 +105,9 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
    5): `shot_dmg` at the nearest unit, else the nearest structure (`Combat.nearest_structure_in`, a bounded tile scan),
    within `shot_range` 3-5 tiles, same cooldown as melee, free; raid tiers scale shot_dmg like dmg.
 8. Nests: region grid 12 chunks, none within 1 region of origin, chance 0.3 per region ring beyond (cap 0.6), tier = ring;
+   PLUS one guaranteed "home camp" (`nests.home_nest(seed)`: tier 1, NEST_HOME_DISTANCE = 100 tiles from the origin in a
+   seeded direction, footprint nudged inside one chunk; `nest_at` returns it for its region despite the safe zone —
+   John, round 10: he had never seen a camp). It is always in `known_nests` (minimap + dark-red edge arrow) but only
    aggro when a structure is within 48 tiles -> raids every 45 s; core hp 500*tier, bounty 500*tier; destruction lives in
    NestRegistry (enemies.json), never in terrain; renderer draws rubble from the registry.
 9. Saves: meta.json (identity + balance/tick/targets/camera/wave incl. player units), structures.json, enemies.json; write

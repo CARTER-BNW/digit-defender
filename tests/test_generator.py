@@ -117,8 +117,11 @@ def test_high_digits_rarer_near_origin():
 
 
 def test_nest_safe_zone_and_stamping():
+    home = nests.home_nest(SEED)
     for rx in range(-SAFE_REGIONS, SAFE_REGIONS + 1):
         for ry in range(-SAFE_REGIONS, SAFE_REGIONS + 1):
+            if (rx, ry) == (home.rx, home.ry):
+                continue                                   # the home camp is the one exception
             assert nests.nest_at(SEED, rx, ry) is None
     # find a nest somewhere and verify the generator stamps it exactly once
     found = None
@@ -186,3 +189,23 @@ def test_deposits_are_spread_out():
     density = dep / total
     expected = DEPOSIT_BLOB_CHANCE * sum(DEPOSIT_BLOB_SIZE) / 2 / (CHUNK_SIZE * CHUNK_SIZE)
     assert expected * 0.5 < density < expected * 1.6, (density, expected)
+
+
+def test_home_camp_sits_100_tiles_out_in_every_world():
+    from settings import NEST_HOME_DISTANCE
+    from world.generator import generate_chunk as gen
+    for seed in (SEED, 0, 1, 42, 99999):
+        home = nests.home_nest(seed)
+        assert home.tier == 1
+        d = (home.tx ** 2 + home.ty ** 2) ** 0.5
+        assert NEST_HOME_DISTANCE - 12 <= d <= NEST_HOME_DISTANCE + 12, (seed, d)
+        assert nests.nest_at(seed, home.rx, home.ry) == home
+        assert nests.region_of_tile(home.tx, home.ty) == (home.rx, home.ry)
+        cx, cy = home.tx // CHUNK_SIZE, home.ty // CHUNK_SIZE
+        assert nests.nest_in_chunk(seed, cx, cy) == home
+        t = Terrain(seed)
+        assert t.get_tile(home.tx, home.ty) == tiles.NEST_CORE
+        assert t.get_tile(home.tx + nests.NEST_RADIUS, home.ty + nests.NEST_RADIUS) == tiles.NEST_GROUND
+        assert home.tx // CHUNK_SIZE == (home.tx + nests.NEST_RADIUS) // CHUNK_SIZE   # footprint in one chunk
+        assert home.tx // CHUNK_SIZE == (home.tx - nests.NEST_RADIUS) // CHUNK_SIZE
+    assert nests.home_nest(1).tx != nests.home_nest(2).tx or nests.home_nest(1).ty != nests.home_nest(2).ty

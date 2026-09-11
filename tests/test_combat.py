@@ -426,3 +426,17 @@ def test_hub_hits_raise_the_alert_for_a_while():
     wall = f.place("wall", 5, 5, N, free=True)
     f.damage(wall, 5)
     assert not f.hub_under_attack()                        # only the hub counts
+
+
+def test_home_camp_is_known_from_the_start_and_wakes_when_built_near():
+    f, c = world(seed=1337)
+    home = nestmod.home_nest(1337)
+    run(f, 1)
+    assert (home.rx, home.ry) in c.known_nests and (home.rx, home.ry) not in c.active_nests
+    run(f, 300)
+    assert c.stats["raids"] == 0                                   # nothing built near it: dormant
+    f.place("wall", home.tx + 20, home.ty, N, free=True)           # within 48 tiles: it notices
+    run(f, 101)
+    assert (home.rx, home.ry) in c.active_nests
+    run(f, 10 * TICK_RATE + 5)
+    assert c.stats["raids"] >= 1 and all(e.shot_dmg for e in c.enemies)

@@ -11,8 +11,10 @@ import random
 from collections import namedtuple
 from functools import lru_cache
 
+import math
+
 from settings import (CHUNK_SIZE, NEST_REGION, SAFE_REGIONS,
-                      NEST_CHANCE_PER_REGION, NEST_CHANCE_MAX)
+                      NEST_CHANCE_PER_REGION, NEST_CHANCE_MAX, NEST_HOME_DISTANCE)
 
 NEST_RADIUS = 2   # footprint = (2r+1)^2 NEST_GROUND tiles with NEST_CORE centred
 NEST_BASE_HP = 500
@@ -29,10 +31,31 @@ def region_of_tile(tx, ty):
     return tx // (NEST_REGION * CHUNK_SIZE), ty // (NEST_REGION * CHUNK_SIZE)
 
 
+@lru_cache(maxsize=64)
+def home_nest(seed):
+    """The camp every world has: tier 1, NEST_HOME_DISTANCE tiles from the
+    origin in a seeded direction (John: a camp you can always find). Its
+    footprint is nudged to sit inside one chunk, like every nest."""
+    rng = random.Random(f"{seed}:homenest")
+    a = rng.uniform(0, 2 * math.pi)
+    tx = int(round(NEST_HOME_DISTANCE * math.cos(a)))
+    ty = int(round(NEST_HOME_DISTANCE * math.sin(a)))
+    lx = min(max(tx % CHUNK_SIZE, NEST_RADIUS), CHUNK_SIZE - NEST_RADIUS - 1)
+    ly = min(max(ty % CHUNK_SIZE, NEST_RADIUS), CHUNK_SIZE - NEST_RADIUS - 1)
+    tx = (tx // CHUNK_SIZE) * CHUNK_SIZE + lx
+    ty = (ty // CHUNK_SIZE) * CHUNK_SIZE + ly
+    rx, ry = region_of_tile(tx, ty)
+    return NestSpec(rx, ry, tx, ty, 1)
+
+
 @lru_cache(maxsize=4096)
 def nest_at(seed, rx, ry):
     """NestSpec for region (rx, ry) or None. Regions within SAFE_REGIONS
-    (Chebyshev) of the origin never hold a nest."""
+    (Chebyshev) of the origin never hold a nest, except the one holding the
+    home camp."""
+    home = home_nest(seed)
+    if (rx, ry) == (home.rx, home.ry):
+        return home
     dist = max(abs(rx), abs(ry))
     if dist <= SAFE_REGIONS:
         return None

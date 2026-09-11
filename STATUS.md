@@ -45,6 +45,12 @@ _Last updated: 2026-09-11 (v6) by Claude_
   ({value,reward}, 3 slots) still load. Tests 122 -> 123.
 - Round 9 (same evening): RMB with a boxed group of spawners sets one gather point for all of them (their units regroup
   there); a gather flag is drawn for every selected spawner; group panel / hover line say so. Tests 123 -> 124.
+- Round 10 (same evening): (1) a guaranteed enemy camp: `nests.home_nest(seed)` puts a tier-1 nest NEST_HOME_DISTANCE
+  (100) tiles from the origin in a seeded direction (footprint kept inside one chunk); `nest_at` returns it for its
+  region even inside the safe zone; combat always lists it in known_nests (minimap, new dark-red off-screen edge
+  arrows toward known camps), aggro/raids unchanged (needs a structure within 48 tiles). (2) "hub" -> "HQ" in every
+  player-facing string (sprite label, button, alerts, game over, help, menu tagline, panel names via DISPLAY_NAMES);
+  code/saves keep `hub`. Tests 124 -> 126.
 
 
 ## v5 (2026-09-11, afternoon): John's third round of play-test feedback, all implemented

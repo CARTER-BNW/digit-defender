@@ -21,6 +21,7 @@ _KEYCODES = {"1": pygame.K_1, "2": pygame.K_2, "3": pygame.K_3, "4": pygame.K_4,
              "6": pygame.K_6, "7": pygame.K_7, "8": pygame.K_8, "9": pygame.K_9, "0": pygame.K_0,
              "-": pygame.K_MINUS, "X": pygame.K_x}
 HOTKEYS = {_KEYCODES[k]: kind for kind, k in TOOLS}
+DISPLAY_NAMES = dict(TOOL_NAMES, hub="HQ")     # what the player calls each kind
 BTN = 64
 GAP = 6
 
@@ -85,13 +86,13 @@ class Hud:
         hb = self.hub_button
         pygame.draw.rect(screen, COLORS["hub"], hb, border_radius=4)
         pygame.draw.rect(screen, COLORS["panel_border"], hb, 1, border_radius=4)
-        label = numbers.text("HUB  [Home]", 14)
+        label = numbers.text("HQ  [Home]", 14)
         screen.blit(label, (hb.centerx - label.get_width() // 2, hb.centery - label.get_height() // 2))
         # targets: one slot per row, "amount x number", progress, level, bonus
         pw = 300
         x = w - pw
         self._panel((x - 8, 8, pw, 24 + 22 * len(f.targets)))
-        screen.blit(numbers.text("Targets   amount x number   done   level   bonus", 14, (170, 190, 170)), (x, 12))
+        screen.blit(numbers.text("Targets   (deliver amount x number)", 14, (170, 190, 170)), (x, 12))
         for i, t in enumerate(f.targets):
             y = 32 + i * 22
             screen.blit(numbers.text(f"{t.amount} x", 15, (200, 220, 200)), (x, y + 2))
@@ -184,7 +185,7 @@ class Hud:
         if dep:
             info += f"   deposit {dep}"
         if s is not None:
-            info += f"   {TOOL_NAMES.get(s.KIND, s.KIND)}  Lv {s.level}  fed {numbers.fmt(s.invested)}  hp {numbers.fmt(s.hp)}/{numbers.fmt(s.max_hp)}"
+            info += f"   {DISPLAY_NAMES.get(s.KIND, s.KIND)}  Lv {s.level}  fed {numbers.fmt(s.invested)}  hp {numbers.fmt(s.hp)}/{numbers.fmt(s.max_hp)}"
             if isinstance(s, Belt):
                 info += f"  speed {s.speed * 20:.2f} t/s  items {len(s.items)}"
             elif isinstance(s, Miner):
@@ -199,7 +200,7 @@ class Hud:
         lines.append(info)
         sel = game.selected
         if sel is not None and sel is not s:
-            lines.append(f"selected {TOOL_NAMES.get(sel.KIND, sel.KIND)} at ({sel.x}, {sel.y})  Lv {sel.level}"
+            lines.append(f"selected {DISPLAY_NAMES.get(sel.KIND, sel.KIND)} at ({sel.x}, {sel.y})  Lv {sel.level}"
                          f"  fed {numbers.fmt(sel.invested)}  hp {numbers.fmt(sel.hp)}/{numbers.fmt(sel.max_hp)}")
         y = self.toolbar_rect.top - 8 - 18 * len(lines)
         for line in lines:
@@ -214,7 +215,7 @@ class Hud:
         x0, y0 = w - pw - 8, 8 + 24 + 22 * len(game.factory.targets) + 10
         self._panel((x0, y0, pw, ph))
         blit = self.screen.blit
-        name = TOOL_NAMES.get(s.KIND, s.KIND)
+        name = DISPLAY_NAMES.get(s.KIND, s.KIND)
         facing = "" if s.KIND in ("miner", "wall", "hub", "tower") else f"  facing {'NESW'[s.direction]}"
         blit(numbers.text(f"{name}  ({s.x}, {s.y}){facing}", 15), (x0 + 10, y0 + 8))
         blit(numbers.text(f"Level {s.level}", 22, (255, 230, 120)), (x0 + 10, y0 + 28))
@@ -258,7 +259,7 @@ class Hud:
         upgrade = f"[U] upgrade to Lv {s.level + 1} for {numbers.fmt(up_cost)}" if up_cost else "[U] max level"
         refund = int(COSTS.get(s.KIND, 0) * 0.5)
         rot = "" if s.KIND in ("miner", "wall", "tower") else "[R] rotate   "
-        actions = f"{rot}[X] demolish +{refund}   {repair}" if not isinstance(s, Hub) else "the hub cannot be moved"
+        actions = f"{rot}[X] demolish +{refund}   {repair}" if not isinstance(s, Hub) else "the HQ cannot be moved"
         blit(numbers.text(f"{upgrade}   {actions}", 13, (255, 230, 120)), (x0 + 10, y0 + 124))
         if isinstance(s, Spawner):
             roles = f"alive {game.combat.count_units_of(s)}   [RMB] on the map = gather point (new and idle units)"
@@ -287,7 +288,7 @@ class Hud:
             self._alert_surf = surf
         self._alert_surf.set_alpha(int(60 + 170 * pulse))
         self.screen.blit(self._alert_surf, (0, 0))
-        txt = numbers.text("HUB UNDER ATTACK", 22, (255, 90, 90))
+        txt = numbers.text("HQ UNDER ATTACK", 22, (255, 90, 90))
         self.screen.blit(txt, (w // 2 - txt.get_width() // 2, 46))
 
     def _draw_group_panel(self, game):
@@ -301,7 +302,7 @@ class Hud:
         counts = {}
         for s in group:
             counts[s.KIND] = counts.get(s.KIND, 0) + 1
-        kinds = ", ".join(f"{TOOL_NAMES.get(k, k.capitalize())} x{n}"
+        kinds = ", ".join(f"{DISPLAY_NAMES.get(k, k.capitalize())} x{n}"
                           for k, n in sorted(counts.items(), key=lambda kv: -kv[1]))
         blit(numbers.text(f"{len(group)} structures selected", 15), (x0 + 10, y0 + 8))
         blit(numbers.text(kinds, 13, (200, 220, 200)), (x0 + 10, y0 + 30))
@@ -392,13 +393,15 @@ class Hud:
         "wheel zoom   MMB drag / WASD pan (Shift fast)   Space pause   [ ] sim speed x1 x2 x4   F3 debug   F11 fullscreen",
         "Belts: items enter from behind or the sides; a belt pointing INTO another belt's front FEEDS it (levels it up).",
         "Machines: every side but the front is an input (left = A, right = B, back = the emptier one); output in front.",
-        "Hub: deliver from any side = income.  Feed sides (yellow) level belts/walls/spawners; U levels anything.",
+        "HQ: deliver from any side = income.  Feed sides (yellow) level belts/walls/spawners; U levels anything.",
         "Towers (range 10): run a belt or put a miner beside one, any side; it fires those numbers. Red frame = no ammo.",
-        "Spawners: click one to train a unit (costs balance); units walk to its gather point beside the hub.",
+        "Spawners: click one to train a unit (costs balance); units walk to its gather point beside the HQ.",
         "Units: click or drag a box to select (Shift adds), RMB moves them in a grid; RMB with spawners selected (one or a",
         "boxed group) = their gather point; their idle units regroup there.",
         "Targets: deliver the shown amount of that number for the bonus; the slot then levels up (bigger number and amount).",
-        "Waves come from the red edge arrow. Hub dead = game over.",
+        "Waves come from the red edge arrow. HQ destroyed = game over.",
+        "An enemy camp always sits about 100 tiles from the HQ (dark-red edge arrow, minimap): it is quiet until you",
+        "build within 48 tiles of it, then it raids; kill its core for a 500 bounty. More camps lie further out.",
         "Enemies shoot from 3-5 tiles and melee up close; each level costs 25% more than the last, no cap.",
         "F1 closes this help.",
     ]
@@ -418,7 +421,7 @@ class Hud:
         dim = pygame.Surface((w, h), pygame.SRCALPHA)
         dim.fill((40, 0, 0, 170))
         self.screen.blit(dim, (0, 0))
-        title = numbers.text("HUB DESTROYED", 56, (255, 80, 80))
+        title = numbers.text("HQ DESTROYED", 56, (255, 80, 80))
         self.screen.blit(title, (w // 2 - title.get_width() // 2, h // 2 - 80))
         c = game.combat
         line = numbers.text(f"survived {c.wave.number} waves, {c.stats['kills']} kills, tick {game.factory.tick_count}", 20)

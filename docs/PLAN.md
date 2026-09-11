@@ -272,6 +272,9 @@ towers level through the balance upgrade `[U]` instead).
   at chunk-render time, so terrain files stay unmodified.
 - Behavior: dormant until any player structure is within `NEST_AGGRO_TILES`; then spawns raid
   parties on a timer. Destroying the core pays a bounty and adds to `destroyed`.
+- Home camp (John, 2026-09-11): every world also has one tier-1 nest `NEST_HOME_DISTANCE` (100)
+  tiles from the origin in a seeded direction (`nests.home_nest`), inside the safe zone, always
+  known (minimap + edge arrow) so a player can find a camp early; same aggro rule.
 
 ### 3.7 Enemy pathing (pragmatic tiering)
 - v1 (Phase 5 start): greedy movement toward target (hub for waves, nearest structure for

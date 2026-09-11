@@ -95,8 +95,9 @@ def draw_combat(screen, camera, combat, selected=None, selected_units=(), box=No
 
 
 def draw_offscreen_indicators(screen, camera, combat, wave_warning_s=WAVE_WARNING_S):
-    """Red edge arrows toward living enemies off-screen; a pulsing arrow
-    toward the coming wave's direction in its last seconds."""
+    """Red edge arrows toward living enemies off-screen, dark-red ones toward
+    known enemy camps, and a pulsing arrow toward the coming wave's direction
+    in its last seconds."""
     w, h = screen.get_size()
     cx, cy = w / 2, h / 2
     targets = []
@@ -104,6 +105,10 @@ def draw_offscreen_indicators(screen, camera, combat, wave_warning_s=WAVE_WARNIN
         sx, sy = camera.world_to_screen(e.x * TILE_SIZE, e.y * TILE_SIZE)
         if not (0 <= sx < w and 0 <= sy < h):
             targets.append((sx - cx, sy - cy, (240, 70, 70)))
+    for spec in list(combat.known_nests.values())[:4]:
+        sx, sy = camera.world_to_screen((spec.tx + 0.5) * TILE_SIZE, (spec.ty + 0.5) * TILE_SIZE)
+        if not (0 <= sx < w and 0 <= sy < h):
+            targets.append((sx - cx, sy - cy, (150, 40, 40)))
     secs = combat.seconds_to_wave()
     if secs <= wave_warning_s:
         rx, ry, radius = combat.spawn_ring()
@@ -117,9 +122,10 @@ def draw_offscreen_indicators(screen, camera, combat, wave_warning_s=WAVE_WARNIN
         if d < 1:
             continue
         ux, uy = dx / d, dy / d
-        # clamp to the screen edge (with margin)
+        # clamp to the screen edge, staying clear of the toolbar / minimap band
         m = 30
-        scale = min((w / 2 - m) / abs(ux) if ux else 1e9, (h / 2 - m) / abs(uy) if uy else 1e9)
+        m_v = 100 if uy > 0 else m
+        scale = min((w / 2 - m) / abs(ux) if ux else 1e9, (h / 2 - m_v) / abs(uy) if uy else 1e9)
         px, py = cx + ux * scale, cy + uy * scale
         tip = (px + ux * 12, py + uy * 12)
         left = (px - uy * 7, py + ux * 7)

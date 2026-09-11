@@ -82,6 +82,7 @@ NEST_REGION = 12                    # chunks per nest-region side (192 tiles)
 SAFE_REGIONS = 1                    # no nests within this Chebyshev region distance of origin
 NEST_CHANCE_PER_REGION = 0.3        # nest chance grows by this per region beyond SAFE_REGIONS
 NEST_CHANCE_MAX = 0.6
+NEST_HOME_DISTANCE = 100            # one camp always sits this many tiles from the HQ (seeded direction; John)
 NEST_AGGRO_TILES = 48
 
 # --- combat -------------------------------------------------------------------

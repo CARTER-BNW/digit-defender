@@ -406,7 +406,7 @@ class Hub(Structure):
         return True
 
     def label(self):
-        return "HUB"
+        return "HQ"
 
 
 class Wall(Structure):

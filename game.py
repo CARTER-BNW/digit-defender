@@ -20,7 +20,7 @@ from sim import nests as nestmod
 from sim.structures import E, DIR_VEC, Belt
 from render.camera import Camera
 from render.renderer import Renderer
-from ui.hud import Hud, HOTKEYS, TOOL_NAMES
+from ui.hud import Hud, HOTKEYS, TOOL_NAMES, DISPLAY_NAMES
 
 
 class Game:
@@ -579,7 +579,7 @@ class Game:
             return 0
         paid = self.factory.upgrade(target)
         if paid:
-            self.hud.message(f"{TOOL_NAMES.get(target.KIND, target.KIND)} upgraded to Lv {target.level} for {paid}", 1.5)
+            self.hud.message(f"{DISPLAY_NAMES.get(target.KIND, target.KIND)} upgraded to Lv {target.level} for {paid}", 1.5)
         else:
             self.hud.message(f"Upgrade needs {cost}", 1.5)
         return paid

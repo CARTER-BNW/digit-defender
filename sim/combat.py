@@ -447,6 +447,9 @@ class Combat:
         """Find live nests near the base; aggro those with a structure within
         NEST_AGGRO_TILES of the core."""
         self._last_scan = t
+        home = nestmod.home_nest(self.seed)            # the camp is always on the map
+        if not self.nests.is_destroyed(home.rx, home.ry):
+            self.known_nests[(home.rx, home.ry)] = home
         if not self.factory.structures:
             return
         x0, y0, x1, y1 = self.structure_bbox()

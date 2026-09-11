@@ -193,7 +193,7 @@ class Menu:
         w, h = screen.get_size()
         title = numbers.text("DIGIT DEFENDER", 64, HI)
         screen.blit(title, ((w - title.get_width()) // 2, h // 8))
-        tag = numbers.text("mine digits, build math, defend the hub", 18, DIM)
+        tag = numbers.text("mine digits, build math, defend the HQ", 18, DIM)
         screen.blit(tag, ((w - tag.get_width()) // 2, h // 8 + 74))
         y = h // 8 + 130
         if subtitle:
