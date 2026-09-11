@@ -175,8 +175,8 @@ class Factory:
    - next is Hub → consume: `balance += value`, target check
    - next is Tower front → consume into ammo buffer
    - next is any structure on a non-input side (incl. a belt entered head-on against its
-     direction) → **consume as feed**: `invested += value`, `hp += value` (capped at new
-     max_hp) — this one rule implements the entire improvement system (§3.5)
+     direction) → **consume as feed**: `invested += value`; hp moves only when the level steps
+     (max_hp is stepwise, §3.5) — this one rule implements the entire improvement system
    - next is None/terrain → stall at end of belt
 5. **Spawners** tick spawn timers (Phase 5)
 6. **Combat**: enemy AI (flow field or greedy+bump), unit AI (ranged shots debit balance,
@@ -252,9 +252,11 @@ towers level through the balance upgrade `[U]` instead).
   costs `100·1.25^(n-1)` (100, 125, 156, ...), thresholds are the running sum, no level cap
   (John, 2026-09-11; replaced the `100·2^k` table);
   `belt speed = BASE + invested/10000` (user's +0.01 per 100); miner/machine/tower/spawner
-  period `= BASE_PERIOD / (1 + level * RATE_STEP)`; `max_hp = BASE_HP + invested` (fed total
-  is the health bar; track `hp` separately so damage/repair work; repair costs balance at
-  `REPAIR_COST_PER_HP`).
+  period `= BASE_PERIOD / (1 + level * RATE_STEP)`; `max_hp = BASE_HP + threshold(level-1)`
+  (stepwise: hp only rises when a level-up raises max_hp, by exactly that gain; feeding never
+  heals — repair costs balance at `REPAIR_COST_PER_HP`; John, 2026-09-11). `[U]` buys the
+  next level at its fixed price `level_cost(level)`; the payment is fed in full, so numbers
+  already fed toward the level are not discounted and any excess carries over.
 - Spawner level additionally scales spawned-unit stats.
 - Confirm before Phase 4: sub/div voiding of ≤0 results; head-on-feed rule.
 
@@ -427,8 +429,9 @@ pause/speed controls, balance pass.
 9. **Multi-tile hub**: all 9 tiles map to the Hub, removed together; belt `next` resolution
    accepts any hub tile.
 10. **Huge numbers**: abbreviation from day one; consider scientific display > 1e12.
-11. **`hp == invested` coupling**: feeding a damaged structure heals AND levels it —
-    accepted as a feature; test cap math so hp never exceeds max_hp.
+11. **hp vs invested**: hp and max_hp move only on level-ups (John dropped the original
+    "feeding heals" coupling on 2026-09-11); repair is the only heal. Test that a level-up
+    adds exactly the max_hp gain and that a trickle of feed never touches hp.
 
 ## Reference files (read before starting each phase)
 

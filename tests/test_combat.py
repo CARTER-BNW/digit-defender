@@ -394,3 +394,35 @@ def test_enemies_shoot_while_advancing_and_melee_in_contact():
     # raid tiers scale the shot too
     strong = c.spawn_enemy("grunt", 40.5, 40.5, mult=3)
     assert strong.shot_dmg == 3 and strong.shot_range == 4
+
+
+def test_units_chase_along_the_grid():
+    f, c = world()
+    u = c.spawn_unit("melee", 2.5, 0.5, rally=(2.5, 0.5))
+    e = c.spawn_enemy("grunt", 6.5, 3.5)
+    e.speed = 0.0
+    e.shot_dmg = None                                      # keep the unit alive and simple
+    on_grid = True
+    for _ in range(80):
+        f.tick()
+        on_grid &= abs(u.x % 1 - 0.5) < 1e-9 or abs(u.y % 1 - 0.5) < 1e-9
+        if u.dist_to(e.x, e.y) <= u.range:
+            break
+    assert on_grid and u.dist_to(e.x, e.y) <= u.range     # walked rows/columns, arrived in reach
+    run(f, 200)
+    assert e.dead
+
+
+def test_hub_hits_raise_the_alert_for_a_while():
+    from settings import HUB_ALERT_S, TICK_RATE
+    f, c = world()
+    assert not f.hub_under_attack()
+    f.damage(f.hub, 5)
+    assert f.hub_under_attack()
+    run(f, HUB_ALERT_S * TICK_RATE - 1)
+    assert f.hub_under_attack()
+    run(f, 2)
+    assert not f.hub_under_attack()
+    wall = f.place("wall", 5, 5, N, free=True)
+    f.damage(wall, 5)
+    assert not f.hub_under_attack()                        # only the hub counts

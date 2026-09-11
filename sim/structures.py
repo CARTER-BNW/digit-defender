@@ -9,8 +9,8 @@ side), RIGHT=1, BACK=2, LEFT=3. An item pushed along direction d into a
 structure facing nd enters through side entry_side(d, nd).
 
 THE FEED RULE (docs/PLAN.md section 3.5): an item entering through a side that
-is not a cargo input is consumed as feed: invested += value, hp += value
-(capped). invested drives level, speed/rate and max_hp.
+is not a cargo input is consumed as feed: invested += value. invested drives
+level, speed/rate and max_hp; hp only moves when a level-up raises max_hp.
   Belt:     BACK/LEFT/RIGHT = cargo (tail / side merge), FRONT (head-on) = feed.
             Outputs: the structure in front plus, for a straight (back-fed)
             belt, any belt beside it that points straight away and has no
@@ -101,8 +101,13 @@ class Structure:
     # ---- item intake -------------------------------------------------------
 
     def feed(self, value):
+        """invested grows (level, speed, rate); hp rises only when a level-up
+        raises max_hp. Feeding never heals: repair does that."""
+        before = self.max_hp
         self.invested += value
-        self.hp = min(self.max_hp, self.hp + value)
+        gain = self.max_hp - before
+        if gain:
+            self.hp += gain
 
     def accept(self, value, rel, overshoot, factory):
         """An item pushed in through relative side rel. Return True to consume.

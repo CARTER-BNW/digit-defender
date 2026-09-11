@@ -537,7 +537,7 @@ class Combat:
             if u.dist_to(e.x, e.y) <= u.range:
                 self._attack(u, e)
             else:
-                self._move_toward(u, e.x, e.y)
+                self._walk_grid(u, e.x, e.y)           # chase along the grid too
             return
         spec = self.nearest_nest(u.x, u.y, UNIT_AGGRO_TILES)
         if spec is not None:
@@ -545,7 +545,7 @@ class Combat:
             if u.dist_to(cx, cy) <= max(u.range, 1.5):
                 self._attack(u, spec)
             else:
-                self._move_toward(u, cx, cy)
+                self._walk_grid(u, cx, cy)
             return
         if u.rally is not None and (u.x != u.rally[0] or u.y != u.rally[1]):
             self._walk_grid(u, *u.rally)

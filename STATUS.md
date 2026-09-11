@@ -22,6 +22,14 @@ _Last updated: 2026-09-11 (v6) by Claude_
   (3) every enemy shoots AND melees: ENEMY_STATS shot_dmg/shot_range (grunt 1/4, brute 3/3, runner 1/5), fired while
   advancing at the nearest unit else the nearest structure (`Combat.nearest_structure_in`, bounded scan), free, same
   cooldown as melee; beams drawn in enemy orange with the number. Tests 110 -> 113.
+- Round 6 (same evening): (1) hp only moves on a level-up: max_hp = BASE_HP + threshold(level-1) (stepwise), `feed()`
+  adds exactly the max_hp gain when a level steps and never heals otherwise (repair does); the [U] price is the FIXED
+  level price `leveling.level_cost(level)` (100, 125, 156...) so it no longer drifts while numbers trickle in; the
+  payment is fed in full and any excess carries over. (2) Units chase enemies/nests along the grid (`_walk_grid`) like
+  they walk to rally. (3) Hub under attack: `Factory.hub_hit_tick` + `hub_under_attack()` (3 s) -> pulsing red double
+  frame around the hub, red screen frame + "HUB UNDER ATTACK". (4) John: dragging from a belt only opened its panel ->
+  clicks are decided on release: a tiny box selects the structure under it (spawner trains; Shift adds it to the group),
+  a real drag boxes an area even when it starts on a building. Tests 113 -> 117.
 
 
 ## v5 (2026-09-11, afternoon): John's third round of play-test feedback, all implemented

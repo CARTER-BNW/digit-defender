@@ -129,7 +129,7 @@ def test_head_on_is_feed_side_is_merge_tail_is_cargo():
     a.items.append([9, 0.9])
     run(f, 3)
     assert not a.items and not b.items
-    assert b.invested == 9 and b.hp == 14 and b.max_hp == 20 + 9
+    assert b.invested == 9 and b.hp == 5 and b.max_hp == 20       # feed levels, never heals
 
 
 def test_line_across_chunk_borders():

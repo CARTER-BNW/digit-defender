@@ -51,6 +51,7 @@ class Factory:
         self.stats = {"delivered": 0, "mined": 0, "voided": 0, "bonus": 0}
         self.events = []                # transient notifications for the UI (cleared by reader)
         self.damaged = set()            # structures with hp < max_hp (health bars)
+        self.hub_hit_tick = -10 ** 9    # last tick the hub took damage (alert border)
         self.hub_destroyed = False
         self.combat = None              # sim.combat.Combat when attached (Phase 5)
         while len(self.targets) < TARGET_COUNT:
@@ -216,9 +217,16 @@ class Factory:
                 return t
         return t
 
+    def hub_under_attack(self):
+        """True for HUB_ALERT_S after the hub last took damage."""
+        from settings import HUB_ALERT_S, TICK_RATE
+        return self.tick_count - self.hub_hit_tick < HUB_ALERT_S * TICK_RATE
+
     def damage(self, s, amount):
         """Apply combat damage. Returns True if the structure was destroyed."""
         s.hp -= amount
+        if s is self.hub:
+            self.hub_hit_tick = self.tick_count
         if s.hp > 0:
             self.damaged.add(s)
             return False
@@ -246,11 +254,12 @@ class Factory:
 
     @staticmethod
     def upgrade_cost(s):
-        """Balance needed to feed s up to its next level (1 balance = 1 fed,
-        the same rate the hub pays for a delivered number); None at max."""
+        """Fixed price of s's next level: 100 * 1.25^(level-1) balance, the
+        same as the fed total that level needs (1 balance = 1 fed). Numbers
+        already fed toward the level are not discounted; the paid amount is
+        fed in full, so any excess carries into the following level."""
         from sim import leveling
-        nxt = leveling.next_threshold(s.invested)
-        return None if nxt is None else nxt - s.invested
+        return leveling.level_cost(s.level)
 
     def upgrade(self, s):
         """Pay balance to lift s to its next level (idea.txt: balance is spent

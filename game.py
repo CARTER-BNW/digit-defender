@@ -72,6 +72,7 @@ class Game:
         self.selected_structures = []        # drag-box multi-select: [U] / [H] apply to all
         self.box_start = None                # screen pos where a LMB drag-select began
         self.box_end = None
+        self.click_target = None             # structure under a pending click (selected on release)
         self.painting = False
         self.last_paint = None
         self.belt_path = []                  # [[tx, ty, dir], ...] belt drag preview, built on release
@@ -302,31 +303,49 @@ class Game:
             else:
                 self.selected_units.append(u)
             return
-        s = self.factory.structure_at(*tile)
-        self.selected = s
-        if s is not None:
-            self.selected_units = []
-            self.selected_structures = []
-            if isinstance(s, Spawner):
-                self.train(s)
-            return
-        if not shift:
-            self.selected_units = []
-            self.selected_structures = []
+        # anything else is decided on release: a click selects the structure
+        # under the cursor, a drag (even one starting on a belt) boxes an area
+        self.click_target = self.factory.structure_at(*tile)
         self.box_start = self.box_end = pos
 
     def _end_box(self, pos):
-        """Finish a drag-select: player units inside the box join the unit
-        selection, structures inside join the structure selection (a lone
-        structure becomes the panel selection). A tiny box is just a click
-        on empty ground."""
+        """Mouse-up without a tool. A tiny box is a click: select the
+        structure under it (a spawner also trains one unit; Shift adds it to
+        the group). A real box: player units inside join the unit selection,
+        structures inside join the structure selection, a lone structure
+        becomes the panel selection."""
         if self.box_start is None:
             return
         x0, y0 = self.box_start
         x1, y1 = pos
         self.box_start = self.box_end = None
+        target, self.click_target = self.click_target, None
+        shift = bool(pygame.key.get_mods() & pygame.KMOD_SHIFT)
         if abs(x1 - x0) < 4 and abs(y1 - y0) < 4:
+            if target is None:
+                if not shift:
+                    self.selected = None
+                    self.selected_units = []
+                    self.selected_structures = []
+                return
+            if shift:
+                group = self.selected_structures or ([self.selected] if self.selected else [])
+                if target not in group:
+                    group.append(target)
+                self.selected_structures = sorted(group, key=lambda s: (s.y, s.x))
+                self.selected = None
+                self.selected_units = []
+                return
+            self.selected = target
+            self.selected_units = []
+            self.selected_structures = []
+            if isinstance(target, Spawner):
+                self.train(target)
             return
+        if not shift:
+            self.selected_units = []
+            self.selected_structures = []
+        self.selected = None
         ax, ay = self.camera.screen_to_world(min(x0, x1), min(y0, y1))
         bx, by = self.camera.screen_to_world(max(x0, x1), max(y0, y1))
         for u in self.combat.units:

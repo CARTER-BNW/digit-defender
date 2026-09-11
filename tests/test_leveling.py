@@ -44,19 +44,24 @@ def test_period_formula():
     assert leveling.period(40, 10 ** 12) >= 1
 
 
-def test_max_hp_and_feed_caps():
+def test_max_hp_steps_with_level_and_feed_never_heals():
+    """John: hp only moves on a level-up; numbers trickling in leave it alone."""
     assert leveling.max_hp("belt", 0) == BASE_HP["belt"]
-    assert leveling.max_hp("wall", 250) == BASE_HP["wall"] + 250
+    assert leveling.max_hp("wall", 99) == BASE_HP["wall"]
+    assert leveling.max_hp("wall", 100) == BASE_HP["wall"] + 100
+    assert leveling.max_hp("wall", 250) == BASE_HP["wall"] + 225     # level 3 needed 225
     w = Wall(0, 0)
     assert w.hp == BASE_HP["wall"]
     w.hp = 10
     w.feed(30)
-    assert w.invested == 30 and w.hp == 40 and w.max_hp == BASE_HP["wall"] + 30
-    w.feed(10 ** 6)                  # heals by the fed value, never past max
-    assert w.hp == 40 + 10 ** 6 and w.hp <= w.max_hp
+    assert w.invested == 30 and w.hp == 10 and w.max_hp == BASE_HP["wall"]   # no heal, no step
+    w.feed(70)                                                          # crosses 100: level 2
+    assert w.level == 2 and w.max_hp == BASE_HP["wall"] + 100 and w.hp == 110
     w.hp = w.max_hp
-    w.feed(5)
-    assert w.hp == w.max_hp          # cap moves with invested
+    for _ in range(25):
+        w.feed(5)                                                       # 100 -> 225: level 3 at the end
+    assert w.invested == 225 and w.level == 3
+    assert w.max_hp == BASE_HP["wall"] + 225 and w.hp == w.max_hp       # the step added its hp in full
 
 
 def test_miner_period_scales_with_investment():
@@ -130,7 +135,7 @@ def test_panel_numbers_match_formulas():
     b.hp = 100
     assert b.level == leveling.level(250) == 3
     assert leveling.next_threshold(250) == 381
-    assert b.max_hp == leveling.max_hp("belt", 250) == 270
+    assert b.max_hp == leveling.max_hp("belt", 250) == 245     # 20 + the 225 that level 3 took
     assert abs(b.speed - leveling.belt_speed(250)) < 1e-12
 
 
@@ -143,9 +148,15 @@ def test_upgrade_pays_balance_up_to_the_next_level():
     assert f.upgrade_cost(w) == 100
     assert f.upgrade(w) == 100 and f.balance == 150
     assert w.invested == 100 and w.level == 2 and w.max_hp == BASE_HP["wall"] + 100
-    assert w.hp == 250                                  # feeding heals too (capped at max)
-    assert f.upgrade_cost(w) == 125                     # 225 - 100: 25% more than the last level
-    assert f.upgrade(w) == 125 and w.level == 3 and f.balance == 25
+    assert w.hp == 250                                  # the level-up added its 100 hp (damage stays)
+    assert f.upgrade_cost(w) == 125                     # 25% more than the last level, fixed price
+    assert f.upgrade(w) == 125 and w.level == 3 and f.balance == 25 and w.hp == 375
     assert f.upgrade_cost(w) == 156 and f.upgrade(w) == 0 and f.balance == 25   # cannot afford
     w.invested = 10 ** 9                                # no cap: always a next level
     assert w.level > 60 and f.upgrade_cost(w) > 0
+    # the price is exact whatever has been fed already; the excess carries over
+    f.balance = 1000
+    b = f.place("belt", 4, 4, N, free=True)
+    b.feed(90)
+    assert f.upgrade_cost(b) == 100 and f.upgrade(b) == 100
+    assert b.level == 2 and b.invested == 190 and leveling.next_threshold(190) == 225

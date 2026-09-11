@@ -499,6 +499,23 @@ def draw_demolish_cursor(screen, camera, factory, tile):
         pygame.draw.rect(screen, (200, 70, 70), (sx, sy, tp, tp), 1)
 
 
+def draw_hub_alert(screen, camera, factory, pulse):
+    """Pulsing red double frame around the hub while it is taking damage
+    (pulse in 0..1 from the caller's clock)."""
+    hub = factory.hub
+    if hub is None or not factory.hub_under_attack():
+        return
+    tp = camera.tile_px
+    r = hub.SIZE // 2
+    sx, sy = camera.tile_to_screen(hub.x - r, hub.y - r)
+    size = tp * hub.SIZE
+    th = max(2, int(tp * 0.12))
+    bright = int(150 + 105 * pulse)
+    pygame.draw.rect(screen, (bright // 2, 15, 15),
+                     (sx - 2 * th - 2, sy - 2 * th - 2, size + 4 * th + 4, size + 4 * th + 4), th)
+    pygame.draw.rect(screen, (bright, 30, 30), (sx - th - 1, sy - th - 1, size + 2 * th + 2, size + 2 * th + 2), th)
+
+
 def draw_group_selection(screen, camera, structures):
     """Thin frames around every structure of a drag-box selection."""
     tp = camera.tile_px

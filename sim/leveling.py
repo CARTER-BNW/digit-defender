@@ -60,4 +60,6 @@ def period(base_period, invested):
 
 
 def max_hp(kind, invested):
-    return BASE_HP.get(kind, 100) + invested
+    """Base hp plus the fed total the current level required: stepwise, so
+    hp only moves on a level-up (John: not while numbers trickle in)."""
+    return BASE_HP.get(kind, 100) + threshold(thresholds_passed(invested))

@@ -30,8 +30,9 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
 3. In game: 1 = belt, 2 = miner (needs a deposit), 3-6 = machines, 7 = wall, 8 = tower, 9/0/- = spawners, X = demolish
    tool (click or drag over buildings, 50% refund; X/Esc leaves it; Del = one-shot); R rotate, LMB place (belts: hold
    and drag = transparent preview path that auto-turns, release builds it, drag back undoes; other kinds place on every
-   tile crossed), Q pick, H repair, U upgrade (balance up to the next level), click = select (panel on the right), drag
-   a box = select every structure inside (U/H apply to all; group panel) and/or units, click a spawner = train one unit,
+   tile crossed), Q pick, H repair, U upgrade (fixed level price), click = select (panel on the right; decided on
+   release), drag a box — even one that starts on a belt — = select every structure inside (U/H apply to all; group
+   panel; Shift+click adds one) and/or units, click a spawner = train one unit,
    click / Shift+click / drag a box = select units, RMB = move selected units (grid formation) or set a selected
    spawner's gather point or cancel,
    wheel zoom, MMB drag pan, WASD pan (Shift fast), F3 debug, Space pause, [ ] sim speed x1/x2/x4, F1 help overlay,
@@ -62,8 +63,9 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
 3. Deterministic sim: belts update downstream-first (`belts_ordered`, rebuilt only when `dirty_links`), typed lists sorted
    by (y, x), no free-running RNG anywhere (targets/waves/raids are string-seeded by ordinal). Acid test in
    tests/test_persistence.py: save@100 + load + 100 == twin@200.
-4. Side rules (`sim/structures.py` docstring): item entering through a non-cargo side is FEED (invested += value, hp += value
-   capped). Belt: back/sides cargo, head-on feed. Machine: left = A, right = B, back = feed, front refuses. Hub: all income.
+4. Side rules (`sim/structures.py` docstring): item entering through a non-cargo side is FEED (invested += value; hp
+   moves only when a level-up raises max_hp — feeding never heals, repair does; John, round 6). Belt: back/sides cargo,
+   head-on feed. Machine: left = A, right = B, back = feed, front refuses. Hub: all income.
    Tower: every side = ammo, no facing, no feed sides (John, round 3) — towers level only via `[U]`. Wall/Spawner: all
    feed. sub/div <= 0 voided.
    Miners (John, 2026-09-11) push into every adjacent cargo input, never into feed sides, no facing. Belt outputs = the front
@@ -75,16 +77,19 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
    reads it; old two-field saves load as BACK.
 5. Leveling: level n -> n+1 costs 100 * 1.25^(n-1) fed (100, 125, 156, 196, 244...), thresholds are the running sum
    (`leveling.threshold`), NO level cap (John, round 5); belt speed = 0.05 + invested*0.0001 tiles/tick (cap 0.5);
-   periods /(1 + 0.25*levels); max_hp = BASE_HP + invested. Repair costs 0.2/hp. `[U]` upgrade = pay (next threshold -
-   invested) balance and feed it (1 balance = 1 fed, the hub's own exchange rate) — idea.txt: balance is spent to
-   create / improve / repair.
+   periods /(1 + 0.25*levels); max_hp = BASE_HP + threshold(level-1), stepwise (hp rises by exactly the gain on a
+   level-up, never otherwise). Repair costs 0.2/hp. `[U]` upgrade = pay the FIXED level price `level_cost(level)`
+   (100, 125, 156...) and feed it in full (excess carries over; fed progress is not discounted — the price never drifts
+   while numbers trickle in) — idea.txt: balance is spent to create / improve / repair.
 6. Ranged/heavy unit shots debit balance by the fired value; hold fire when broke; melee free; towers eat belt ammo
    (dmg = value * (1 + 0.5*(level-1)), range TOWER_RANGE = 10). Spawners never spawn on their own: a click queues one unit
    (UNIT_COSTS 50/50/150, SPAWNER_QUEUE_MAX 9), one unit walks out per period (timer keeps counting while idle, so the
    first click after a pause trains at once). Units take grid slots: `Combat.slot_near` / `gather` spiral tile centres out
    from the gather point, skipping structure tiles and other units' slots (one unit per tile, compact grid); default gather
    point = GATHER_HUB_OFFSET (3) tiles from the hub centre on the spawner's side; units walk along grid lines (row/column,
-   larger axis first, re-centre only to turn) and chase enemies in a straight line. Player units are saved in meta
+   larger axis first, re-centre only to turn), when chasing enemies and nests too (John, round 6).
+   Hub alert: `Factory.hub_hit_tick` / `hub_under_attack()` (HUB_ALERT_S = 3 s after a hub hit) drives a pulsing red
+   double frame around the hub (render/structures.draw_hub_alert) and a red screen frame + "HUB UNDER ATTACK" (hud). Player units are saved in meta
    `wave.units` (uid, kind, pos, hp, level, owner spawner, slot); enemies still disperse on reload.
 7. Waves: first at 5 min, interval max(90 s, 240*0.97^n), budget 20*1.25^n, spawn ring = base bbox + 12 tiles (min radius
    30), direction pre-rolled (edge arrow in the last 60 s). Enemies use the hub flow field (walls 40, other structures 15)

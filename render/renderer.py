@@ -6,6 +6,8 @@ scaled from a 1.0 master: crisp at every zoom and small at low zoom. Only
 chunks near the screen keep a surface (evict_offscreen), so memory stays
 bounded even at 2.0 zoom (4 MB per chunk there).
 """
+import math
+
 import pygame
 
 from settings import (CHUNK_SIZE, CHUNK_PX, TILE_SIZE, COLORS, GROUND_SHADES,
@@ -53,6 +55,7 @@ class Renderer:
             rstruct.draw_structures(screen, camera, factory, rect, getattr(game, "render_frac", 0.0))
             rstruct.draw_miner_pulses(screen, camera, factory, rect)
             rstruct.draw_health_bars(screen, camera, factory)
+            rstruct.draw_hub_alert(screen, camera, factory, 0.5 + 0.5 * math.sin(pygame.time.get_ticks() / 120.0))
             selected = getattr(game, "selected", None)
             rstruct.draw_tower_ranges(screen, camera, factory, selected, getattr(game, "hover_tile", None))
             if selected is not None:

@@ -1,4 +1,6 @@
 """HUD: balance, targets, build toolbar with hotkeys, hover info, messages."""
+import math
+
 import pygame
 
 from settings import COLORS, COSTS, REPAIR_COST_PER_HP, TICK_RATE, TILE_SIZE, CHUNK_SIZE, WAVE_WARNING_S
@@ -30,6 +32,7 @@ class Hud:
         self.toolbar_rect = pygame.Rect(0, 0, 0, 0)
         self._minimap = None        # cached surface, rebuilt every few frames
         self._minimap_frame = -100
+        self._alert_surf = None     # red screen frame (hub under attack), cached per size
         self.hub_button = pygame.Rect(8, 72, 110, 26)
 
     def message(self, text, ttl=2.5):
@@ -99,6 +102,7 @@ class Hud:
             self._draw_panel(game, game.selected)
         elif game.selected_structures:
             self._draw_group_panel(game)
+        self._draw_hub_alert(game)
         self._draw_messages()
         if game.show_help:
             self._draw_help()
@@ -257,6 +261,25 @@ class Hud:
         else:
             hint = "no feed sides here: level it up with [U]"
         blit(numbers.text(hint, 12, (170, 190, 170)), (x0 + 10, y0 + 164))
+
+    def _draw_hub_alert(self, game):
+        """Pulsing red frame along the screen edges while the hub takes damage."""
+        if not game.factory.hub_under_attack():
+            return
+        w, h = self.screen.get_size()
+        pulse = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() / 120.0)
+        th = 12
+        if self._alert_surf is None or self._alert_surf.get_size() != (w, h):
+            surf = pygame.Surface((w, h))
+            surf.fill((0, 0, 0))
+            surf.set_colorkey((0, 0, 0))
+            for rect in ((0, 0, w, th), (0, h - th, w, th), (0, 0, th, h), (w - th, 0, th, h)):
+                pygame.draw.rect(surf, (255, 40, 40), rect)
+            self._alert_surf = surf
+        self._alert_surf.set_alpha(int(60 + 170 * pulse))
+        self.screen.blit(self._alert_surf, (0, 0))
+        txt = numbers.text("HUB UNDER ATTACK", 22, (255, 90, 90))
+        self.screen.blit(txt, (w // 2 - txt.get_width() // 2, 46))
 
     def _draw_group_panel(self, game):
         """Drag-box selection: counts per kind, total upgrade / repair cost."""

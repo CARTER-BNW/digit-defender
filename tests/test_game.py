@@ -166,7 +166,7 @@ def test_click_spawner_trains_and_units_are_commanded(game):
     # drag a box on empty ground around two units
     v = game.combat.spawn_unit("melee", 8.5, 8.5)
     _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (5, 5), dx=2, dy=2)
-    assert game.box_start is not None and game.selected_units == []
+    assert game.box_start is not None                          # selection is decided on release
     end = _mouse(game, pygame.MOUSEMOTION, 1, (9, 9), dx=30, dy=30)
     _mouse(game, pygame.MOUSEBUTTONUP, 1, (9, 9), dx=30, dy=30)
     assert game.box_start is None and set(game.selected_units) == {u, v}
@@ -272,3 +272,30 @@ def test_box_select_structures_upgrade_and_repair_all(game):
     _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (2, 1), dx=4, dy=4)
     _mouse(game, pygame.MOUSEBUTTONUP, 1, (3, 3), dx=20, dy=20)
     assert game.selected is walls[0] and game.selected_structures == []
+
+
+def test_drag_from_a_belt_boxes_the_line_and_a_click_still_selects_one(game):
+    frames(game, 1)
+    f = game.factory
+    f.terrain = None
+    belts = [f.place("belt", x, 3, 1, free=True) for x in range(3, 8)]
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (4, 3))            # plain click: panel selection
+    assert game.selected is None and game.box_start is not None  # decided on release
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (4, 3))
+    assert game.selected is belts[1] and game.selected_structures == []
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (3, 3), dx=4, dy=4)  # drag starting ON a belt
+    _mouse(game, pygame.MOUSEMOTION, 1, (7, 3), dx=28, dy=28)
+    frames(game, 1)                                            # box draws
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (7, 3), dx=28, dy=28)
+    assert game.selected is None and game.selected_structures == belts
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE, mod=0, unicode=""))
+    assert game.selected_structures == [] and game.running
+
+
+def test_hub_alert_draws_while_the_hub_is_hit(game):
+    frames(game, 1)
+    game.factory.damage(game.factory.hub, 10)
+    assert game.factory.hub_under_attack()
+    frames(game, 2)                                            # hub border + screen frame draw
+    game.camera.zoom_index = 0
+    frames(game, 1)
