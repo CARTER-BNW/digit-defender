@@ -1,27 +1,52 @@
 """Leveling formulas (docs/PLAN.md section 3.5). Pure functions of the
 invested total, so the info panel, the sim and the tests all agree.
 
-invested = total number-value fed into a structure through a feed side.
+invested = total number-value fed into a structure (through a feed side or
+the balance upgrade). Level n -> n+1 costs LEVEL_BASE_COST * GROWTH**(n-1)
+(100, 125, 156, 195, 244, ...): every level 25% more than the last, and
+there is no level cap (John, 2026-09-11).
 """
-from bisect import bisect_right
+import math
 
-from settings import (LEVEL_THRESHOLDS, RATE_STEP, BASE_HP, BELT_BASE_SPEED,
+from settings import (LEVEL_BASE_COST, LEVEL_COST_GROWTH, RATE_STEP, BASE_HP, BELT_BASE_SPEED,
                       BELT_SPEED_PER_FED, MAX_BELT_SPEED)
 
 
+def threshold(n):
+    """Total invested needed to have passed n levels (threshold(1) = 100,
+    threshold(2) = 225, ...); the geometric sum of the level costs."""
+    if n <= 0:
+        return 0
+    r = LEVEL_COST_GROWTH
+    return int(round(LEVEL_BASE_COST * (r ** n - 1) / (r - 1)))
+
+
+def level_cost(level):
+    """What the step from `level` to `level + 1` costs."""
+    return threshold(level) - threshold(level - 1)
+
+
 def thresholds_passed(invested):
-    """How many thresholds invested has reached (>=)."""
-    return bisect_right(LEVEL_THRESHOLDS, invested)
+    """How many level steps `invested` has paid for."""
+    if invested < LEVEL_BASE_COST:
+        return 0
+    r = LEVEL_COST_GROWTH
+    n = int(math.log(1 + invested * (r - 1) / LEVEL_BASE_COST) / math.log(r))
+    while threshold(n + 1) <= invested:          # float drift either way
+        n += 1
+    while n > 0 and threshold(n) > invested:
+        n -= 1
+    return n
 
 
 def level(invested):
-    """Displayed level: 1 at zero invested, 2 at 100, 3 at 200, 4 at 400..."""
+    """Displayed level: 1 at zero invested, 2 at 100, 3 at 225, 4 at 381..."""
     return 1 + thresholds_passed(invested)
 
 
 def next_threshold(invested):
-    n = thresholds_passed(invested)
-    return LEVEL_THRESHOLDS[n] if n < len(LEVEL_THRESHOLDS) else None
+    """Invested total that reaches the next level (never None: no cap)."""
+    return threshold(thresholds_passed(invested) + 1)
 
 
 def belt_speed(invested):

@@ -1,21 +1,31 @@
-from settings import (LEVEL_THRESHOLDS, BELT_BASE_SPEED, BELT_SPEED_PER_FED,
+from settings import (LEVEL_BASE_COST, LEVEL_COST_GROWTH, BELT_BASE_SPEED, BELT_SPEED_PER_FED,
                       MAX_BELT_SPEED, BASE_HP, RATE_STEP)
 from sim import leveling
 from sim.structures import Belt, Miner, Wall
 
 
 def test_level_thresholds():
-    assert LEVEL_THRESHOLDS[:4] == [100, 200, 400, 800]
+    """Each level costs 25% more than the last, no cap (John)."""
+    assert (LEVEL_BASE_COST, LEVEL_COST_GROWTH) == (100, 1.25)
+    assert [leveling.threshold(n) for n in range(5)] == [0, 100, 225, 381, 577]
+    assert [leveling.level_cost(n) for n in range(1, 6)] == [100, 125, 156, 196, 244]
+    for n in range(2, 40):
+        ratio = leveling.level_cost(n) / leveling.level_cost(n - 1)
+        assert abs(ratio - 1.25) < 0.02
     assert leveling.level(0) == 1
     assert leveling.level(99) == 1
     assert leveling.level(100) == 2
-    assert leveling.level(200) == 3
-    assert leveling.level(399) == 3
-    assert leveling.level(400) == 4
+    assert leveling.level(224) == 2
+    assert leveling.level(225) == 3
+    assert leveling.level(380) == 3
+    assert leveling.level(381) == 4
     assert leveling.next_threshold(0) == 100
-    assert leveling.next_threshold(100) == 200
-    assert leveling.next_threshold(150) == 200
-    assert leveling.next_threshold(10 ** 12) is None
+    assert leveling.next_threshold(100) == 225
+    assert leveling.next_threshold(150) == 225
+    assert leveling.level(10 ** 12) > 40 and leveling.next_threshold(10 ** 12) > 10 ** 12   # unlimited
+    for n in range(0, 60):                                   # inverse is exact at every threshold
+        t = leveling.threshold(n)
+        assert leveling.thresholds_passed(t) == n and leveling.thresholds_passed(t - 1) == max(0, n - 1)
 
 
 def test_belt_speed_formula():
@@ -119,7 +129,7 @@ def test_panel_numbers_match_formulas():
     b.invested = 250
     b.hp = 100
     assert b.level == leveling.level(250) == 3
-    assert leveling.next_threshold(250) == 400
+    assert leveling.next_threshold(250) == 381
     assert b.max_hp == leveling.max_hp("belt", 250) == 270
     assert abs(b.speed - leveling.belt_speed(250)) < 1e-12
 
@@ -134,8 +144,8 @@ def test_upgrade_pays_balance_up_to_the_next_level():
     assert f.upgrade(w) == 100 and f.balance == 150
     assert w.invested == 100 and w.level == 2 and w.max_hp == BASE_HP["wall"] + 100
     assert w.hp == 250                                  # feeding heals too (capped at max)
-    assert f.upgrade_cost(w) == 100                     # 200 - 100
-    assert f.upgrade(w) == 100 and w.level == 3 and f.balance == 50
-    assert f.upgrade(w) == 0 and f.balance == 50        # cannot afford 200
-    w.invested = LEVEL_THRESHOLDS[-1]
-    assert f.upgrade_cost(w) is None and f.upgrade(w) == 0
+    assert f.upgrade_cost(w) == 125                     # 225 - 100: 25% more than the last level
+    assert f.upgrade(w) == 125 and w.level == 3 and f.balance == 25
+    assert f.upgrade_cost(w) == 156 and f.upgrade(w) == 0 and f.balance == 25   # cannot afford
+    w.invested = 10 ** 9                                # no cap: always a next level
+    assert w.level > 60 and f.upgrade_cost(w) > 0

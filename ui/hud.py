@@ -9,13 +9,15 @@ from sim.structures import KINDS, Belt, Miner, MathMachine, Tower, Spawner, Hub,
 # toolbar order and hotkeys (Phase 5 appends spawners)
 TOOLS = [("belt", "1"), ("miner", "2"), ("adder", "3"), ("subtractor", "4"),
          ("multiplier", "5"), ("divider", "6"), ("wall", "7"), ("tower", "8"),
-         ("spawner_ranged", "9"), ("spawner_melee", "0"), ("spawner_heavy", "-")]
+         ("spawner_ranged", "9"), ("spawner_melee", "0"), ("spawner_heavy", "-"),
+         ("demolish", "X")]                 # demolish is a tool too: click or drag to remove
 TOOL_NAMES = {"belt": "Belt", "miner": "Miner", "adder": "Adder", "subtractor": "Subtract",
               "multiplier": "Multiply", "divider": "Divide", "wall": "Wall", "tower": "Tower",
-              "spawner_ranged": "Ranged", "spawner_melee": "Melee", "spawner_heavy": "Heavy"}
+              "spawner_ranged": "Ranged", "spawner_melee": "Melee", "spawner_heavy": "Heavy",
+              "demolish": "Demolish"}
 _KEYCODES = {"1": pygame.K_1, "2": pygame.K_2, "3": pygame.K_3, "4": pygame.K_4, "5": pygame.K_5,
              "6": pygame.K_6, "7": pygame.K_7, "8": pygame.K_8, "9": pygame.K_9, "0": pygame.K_0,
-             "-": pygame.K_MINUS}
+             "-": pygame.K_MINUS, "X": pygame.K_x}
 HOTKEYS = {_KEYCODES[k]: kind for kind, k in TOOLS}
 BTN = 64
 GAP = 6
@@ -95,6 +97,8 @@ class Hud:
         self._draw_hover(game)
         if game.selected is not None:
             self._draw_panel(game, game.selected)
+        elif game.selected_structures:
+            self._draw_group_panel(game)
         self._draw_messages()
         if game.show_help:
             self._draw_help()
@@ -126,12 +130,24 @@ class Hud:
             screen.blit(numbers.text(key, 13), (rect.x + 4, rect.y + 2))
             name = numbers.text(TOOL_NAMES[kind], 12)
             screen.blit(name, (rect.centerx - name.get_width() // 2, rect.bottom - 26))
-            c = numbers.text(str(cost), 12, (255, 230, 120) if balance >= cost else (255, 110, 110))
+            if kind == "demolish":
+                c = numbers.text("50% back", 11, (255, 230, 120))
+            else:
+                c = numbers.text(str(cost), 12, (255, 230, 120) if balance >= cost else (255, 110, 110))
             screen.blit(c, (rect.centerx - c.get_width() // 2, rect.bottom - 13))
 
     def _draw_hover(self, game):
         lines = []
-        if game.tool:
+        if game.tool == "demolish":
+            lines.append("Demolish   [LMB] click or drag over buildings to remove (50% refund)   [X] or [Esc] to stop")
+        elif game.tool == "belt":
+            n = len(game.belt_path)
+            if n:
+                lines.append(f"Belt preview: {n} tiles, {n * COSTS['belt']}   release to build, drag back to undo   [Esc] cancel")
+            else:
+                lines.append(f"Build Belt facing {'NESW'[game.build_dir]}   [LMB] click, or hold and drag a path (preview), release to build"
+                             "   [R] rotate  [Esc] cancel")
+        elif game.tool:
             if game.tool in ("miner", "wall", "tower"):
                 extra = {"miner": "   (miners push numbers out of all four sides)",
                          "tower": "   (ammo goes in through any side; range 10)"}.get(game.tool, "")
@@ -142,8 +158,12 @@ class Hud:
         elif game.selected_units:
             n = len(game.selected_units)
             lines.append(f"{n} unit{'s' if n > 1 else ''} selected   [RMB] move to a grid formation   [Shift+click] add   [Esc] deselect")
+        elif game.selected_structures:
+            n = len(game.selected_structures)
+            up = sum(c for c in (game.factory.upgrade_cost(s) for s in game.selected_structures) if c)
+            lines.append(f"{n} structures selected   [U] upgrade all for {numbers.fmt(up)}   [H] repair all   [Shift+drag] add   [Esc] deselect")
         else:
-            lines.append("[F1] help   [1-9] build tools  [R] rotate  [X] demolish  [U] upgrade  [Q] pick  [Space] pause  [ ] speed  [F3] debug")
+            lines.append("[F1] help   [1-9] build  [X] demolish  [R] rotate  [U] upgrade  [Q] pick  drag a box = select  [Space] pause  [ ] speed  [F3] debug")
         tx, ty = game.hover_tile
         s = game.factory.structure_at(tx, ty)
         info = f"tile ({tx}, {ty})"
@@ -238,6 +258,30 @@ class Hud:
             hint = "no feed sides here: level it up with [U]"
         blit(numbers.text(hint, 12, (170, 190, 170)), (x0 + 10, y0 + 164))
 
+    def _draw_group_panel(self, game):
+        """Drag-box selection: counts per kind, total upgrade / repair cost."""
+        group = game.selected_structures
+        w, h = self.screen.get_size()
+        pw, ph = 372, 118
+        x0, y0 = w - pw - 8, 8 + 24 + 22 * len(game.factory.targets) + 10
+        self._panel((x0, y0, pw, ph))
+        blit = self.screen.blit
+        counts = {}
+        for s in group:
+            counts[s.KIND] = counts.get(s.KIND, 0) + 1
+        kinds = ", ".join(f"{TOOL_NAMES.get(k, k.capitalize())} x{n}"
+                          for k, n in sorted(counts.items(), key=lambda kv: -kv[1]))
+        blit(numbers.text(f"{len(group)} structures selected", 15), (x0 + 10, y0 + 8))
+        blit(numbers.text(kinds, 13, (200, 220, 200)), (x0 + 10, y0 + 30))
+        levels = [s.level for s in group]
+        blit(numbers.text(f"levels {min(levels)} - {max(levels)}", 13, (200, 220, 200)), (x0 + 10, y0 + 50))
+        up = sum(c for c in (game.factory.upgrade_cost(s) for s in group) if c)
+        missing = sum(max(0, s.max_hp - s.hp) for s in group)
+        rep = int(missing * REPAIR_COST_PER_HP + 0.999) if missing else 0
+        blit(numbers.text(f"[U] upgrade all for {numbers.fmt(up)}   [H] repair all for {numbers.fmt(rep)}", 13, (255, 230, 120)),
+             (x0 + 10, y0 + 74))
+        blit(numbers.text("[Shift+drag] add more   [Esc] deselect", 12, (170, 190, 170)), (x0 + 10, y0 + 96))
+
     MINI_W, MINI_H, MINI_TILES = 220, 150, 96       # panel px and tiles shown across
 
     def _draw_minimap(self, game):
@@ -305,9 +349,10 @@ class Hud:
         self.screen.blit(surf, (w // 2 - surf.get_width() // 2, 14))
 
     HELP = [
-        "1-6 belt / miner / adder / subtract / multiply / divide     7 wall   8 tower   9 0 - spawners",
-        "LMB place (drag paints belts, they turn with the drag)   R rotate   X demolish (hold to sweep)   Q pick tool",
-        "click = select (panel on the right)   H repair   U upgrade (pay balance up to the next level)   RMB = cancel",
+        "1-6 belt / miner / adder / subtract / multiply / divide     7 wall   8 tower   9 0 - spawners     X demolish tool",
+        "LMB place; belts: hold and drag = transparent preview, release to build (drag back to undo)   R rotate   Q pick tool",
+        "X = demolish tool: click or drag over buildings (50% refund), X or Esc to stop.   Del = remove the hovered one",
+        "click = select (panel on the right); drag a box = select many (U upgrades / H repairs them all)   RMB = cancel",
         "wheel zoom   MMB drag / WASD pan (Shift fast)   Space pause   [ ] sim speed x1 x2 x4   F3 debug   F11 fullscreen",
         "Belts: items enter from behind or the sides; a belt pointing INTO another belt's front FEEDS it (levels it up).",
         "Machines: left side = A, right side = B, output in front, feed from behind.  Hub: deliver from any side = income.",
@@ -315,6 +360,7 @@ class Hud:
         "Spawners: click one to train a unit (costs balance); units walk to its gather point beside the hub.",
         "Units: click or drag a box to select (Shift adds), RMB moves them in a grid; RMB on a selected spawner = gather point.",
         "Targets pay a bonus for delivering the exact number. Waves come from the red edge arrow. Hub dead = game over.",
+        "Enemies shoot from 3-5 tiles and melee up close; each level costs 25% more than the last, no cap.",
         "F1 closes this help.",
     ]
 

@@ -1,5 +1,28 @@
 # STATUS
-_Last updated: 2026-09-11 (v5) by Claude_
+_Last updated: 2026-09-11 (v6) by Claude_
+
+## v6 (2026-09-11, evening): John's fourth round - demolish tool, group select, belt preview
+- X is a toggle tool ("Demolish", last toolbar button, 50% refund): click removes one structure, click-and-drag sweeps;
+  a fast drag walks every tile between mouse samples (`Game._tiles_between`, also used for wall/tower drag-placing, so
+  no more gaps). Red frame + refund over the hovered target. Del stays a one-shot. Holding X no longer sweeps.
+- Drag a box (no tool) over buildings: every structure inside joins `selected_structures` (Shift adds); U upgrades them
+  all in (y, x) order (skips the unaffordable, message says how many), H repairs them all; group panel with counts per
+  kind, level range, total upgrade/repair cost; thin yellow frames. A box around exactly one structure selects it for
+  the normal panel. Units and structures in the same box both get selected. Destroyed members drop out each frame.
+- Belt drag = preview: LMB down starts `belt_path`, dragging extends it (auto-turn, gap-filling, drag back to undo),
+  drawn as transparent shape-aware belt sprites tinted green (will build / turn an existing belt) or red (blocked),
+  with "N belts = cost" at the end; release builds it (`_commit_belt_path`: place new, turn existing belts on the path,
+  skip the rest; first blocking reason shown). A plain click still places one belt. Esc/tool change discards the path.
+- Tests 107 -> 110 (demolish tool click+drag+toggle, belt preview/undo/turn-existing, group select/upgrade/repair/prune).
+- Round 5 (same evening): (1) leveling is geometric and uncapped - level n -> n+1 costs 100 * 1.25^(n-1)
+  (100, 125, 156, 196, 244...), `leveling.threshold/level_cost/thresholds_passed` (closed form + drift fix), settings
+  LEVEL_BASE_COST / LEVEL_COST_GROWTH replace the 100*2^k table; (2) deposits spread out: at most one blob per chunk
+  (DEPOSIT_BLOB_CHANCE 0.45) and the digit is drawn with weights decay**(digit-1), decay 0.45 near the origin -> 0.8
+  far out, so 1 is always the most common and 9 the rarest (DEPOSIT_DECAY_*; the old 0-2 blobs + 6-9 ramp is gone);
+  (3) every enemy shoots AND melees: ENEMY_STATS shot_dmg/shot_range (grunt 1/4, brute 3/3, runner 1/5), fired while
+  advancing at the nearest unit else the nearest structure (`Combat.nearest_structure_in`, bounded scan), free, same
+  cooldown as melee; beams drawn in enemy orange with the number. Tests 110 -> 113.
+
 
 ## v5 (2026-09-11, afternoon): John's third round of play-test feedback, all implemented
 - Towers: TOWER_RANGE 6 -> 10; translucent range disc on hover/select and on the build ghost; red frame + "0" label when

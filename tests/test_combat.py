@@ -123,7 +123,8 @@ def test_tower_kills_with_ammo_and_holds_without():
     run(f, 60)
     assert e.dead and c.stats["kills"] == 1
     assert len(tower.ammo) == 0                           # 3 shots of 9 for 20 hp
-    assert c.beams == [] or all(b[6] == PLAYER for b in c.beams)
+    assert all(b[6] == PLAYER for b in c.beams if (b[0], b[1]) == (4.5, 0.5))   # tower beams
+    assert tower.hp < tower.max_hp                        # the grunt shot back while it lived
 
 
 def test_tower_range_and_level_damage():
@@ -141,6 +142,7 @@ def test_tower_range_and_level_damage():
 def test_ranged_shots_debit_balance_and_hold_when_broke():
     f, c = world(balance=3)
     u = c.spawn_unit("ranged", 5.5, 0.5)
+    u.hp = u.max_hp = 10 ** 6                                      # survives the grunt shooting back
     e = c.spawn_enemy("grunt", 8.5, 0.5)
     e.speed = 0.0
     run(f, 200)
@@ -361,3 +363,34 @@ def test_tower_takes_ammo_from_every_side():
     tower.ammo.clear()
     tower.ammo.extend([1] * 10)
     assert not tower.accept(9, LEFT, 0.0, f)               # full: the belt stalls instead
+
+
+def test_enemies_shoot_while_advancing_and_melee_in_contact():
+    f, c = world()
+    wall = f.place("wall", 6, 0, N, free=True)
+    e = c.spawn_enemy("grunt", 9.5, 0.5)                  # 3 tiles off: in shot range (4), not melee
+    e.speed = 0.0
+    run(f, 1)
+    assert wall.hp == wall.max_hp - e.shot_dmg and any(b[6] == ENEMY for b in c.beams)
+    run(f, e.period)
+    assert wall.hp == wall.max_hp - 2 * e.shot_dmg
+    far = c.spawn_enemy("brute", 20.5, 0.5)                # out of range: nothing to shoot
+    far.speed = 0.0
+    hp_wall = wall.hp
+    run(f, far.period + 1)
+    assert wall.hp == hp_wall - e.shot_dmg                 # only the grunt fired
+    # a player unit in range is preferred over the wall
+    u = c.spawn_unit("melee", 12.5, 0.5, rally=(12.5, 0.5))
+    u.speed = 0.0
+    hp_u, hp_wall = u.hp, wall.hp
+    run(f, e.period + 1)
+    assert u.hp < hp_u and wall.hp == hp_wall
+    # in contact the melee hit lands (bigger than the shot)
+    c.units.clear()
+    e.x, e.target = 7.5, wall
+    hp_wall = wall.hp
+    run(f, e.period + 1)
+    assert wall.hp == hp_wall - e.dmg and e.dmg > e.shot_dmg
+    # raid tiers scale the shot too
+    strong = c.spawn_enemy("grunt", 40.5, 40.5, mult=3)
+    assert strong.shot_dmg == 3 and strong.shot_range == 4

@@ -6,9 +6,11 @@ random.Random(f"{seed}:wave:{n}"), raids from (seed, region, raid ordinal).
 Lists iterate in spawn order; nearest searches tie-break on uid.
 
 Positions are float tile coordinates (tile (tx, ty) has centre (tx+.5, ty+.5)).
-Enemies are blocked by structures and attack whatever blocks them; player
-units walk over the base. Ranged/heavy unit shots debit balance by the fired
-value (hold fire when broke); melee and towers are free (towers eat ammo).
+Enemies are blocked by structures and melee whatever blocks them, and they
+also shoot (free) at the nearest unit or structure within shot_range while
+advancing; player units walk over the base. Ranged/heavy unit shots debit
+balance by the fired value (hold fire when broke); melee and towers are free
+(towers eat ammo).
 """
 import math
 import random
@@ -32,7 +34,8 @@ RETARGET_RADIUS = 40
 
 class Unit:
     __slots__ = ("uid", "side", "kind", "x", "y", "hp", "max_hp", "speed", "range", "dmg",
-                 "period", "timer", "shot", "target", "goal", "rally", "level", "owner", "dead")
+                 "period", "timer", "shot", "shot_dmg", "shot_range", "target", "goal", "rally",
+                 "level", "owner", "dead")
 
     def __init__(self, uid, side, kind, x, y, stats, mult=1.0, level=1, owner=None):
         self.uid = uid
@@ -45,7 +48,10 @@ class Unit:
         self.speed = stats["speed"]
         self.range = stats.get("range", ENEMY_ATTACK_RANGE)
         self.dmg = max(1, int(round(stats.get("dmg", 1) * mult)))
-        self.shot = stats.get("shot")          # ranged: base fired value (cost per shot)
+        self.shot = stats.get("shot")          # player ranged: base fired value (cost per shot)
+        shot_dmg = stats.get("shot_dmg")       # enemies: free ranged damage, fired while advancing
+        self.shot_dmg = None if shot_dmg is None else max(1, int(round(shot_dmg * mult)))
+        self.shot_range = stats.get("shot_range", 0)
         self.period = stats["period"]
         self.timer = 0
         self.target = None                     # Unit | Structure | NestSpec
@@ -262,6 +268,26 @@ class Combat:
                 best, best_d = (tx, ty), d
         return best
 
+    def nearest_structure_in(self, x, y, r):
+        """Nearest structure within r tiles of a point: scans the (2r+1)^2
+        tiles around it (cheap, bounded); ties break on (y, x)."""
+        structures = self.factory.structures
+        tx, ty = math.floor(x), math.floor(y)
+        rr = int(math.ceil(r))
+        best, best_key = None, None
+        for ny in range(ty - rr, ty + rr + 1):
+            for nx in range(tx - rr, tx + rr + 1):
+                s = structures.get((nx, ny))
+                if s is None:
+                    continue
+                d = math.hypot(nx + 0.5 - x, ny + 0.5 - y)
+                if d > r:
+                    continue
+                key = (d, ny, nx)
+                if best_key is None or key < best_key:
+                    best, best_key = s, key
+        return best
+
     def nearest_nest(self, x, y, max_dist):
         best, best_d = None, max_dist
         for key, spec in sorted(self.known_nests.items()):
@@ -335,6 +361,16 @@ class Combat:
         else:
             self.hit_nest(victim, dmg, src if value is not None else None, value)
         return True
+
+    def _shoot(self, e, victim):
+        """Enemy ranged fire (free): shot_dmg on a unit or a structure, with a beam."""
+        e.timer = e.period
+        src = (e.x, e.y)
+        if isinstance(victim, Unit):
+            self.hit_unit(victim, e.shot_dmg, src, e.shot_dmg, ENEMY)
+        else:
+            self.hit_structure(victim, e.shot_dmg)
+            self.beams.append([e.x, e.y, victim.x + 0.5, victim.y + 0.5, e.shot_dmg, BEAM_TTL, ENEMY])
 
     # ---- tick ---------------------------------------------------------------------
 
@@ -532,7 +568,15 @@ class Combat:
             elif dist_to_tiles(e.x, e.y, s.tiles()) <= e.range:
                 self._attack(e, s)
                 return
-        # 3. choose where to go
+        # 3. ranged fire while advancing: the nearest unit, else the nearest
+        #    structure, within shot range (free; melee still needs contact)
+        if e.shot_dmg is not None and e.timer <= 0 and e.shot_range > 0:
+            victim = self.nearest_unit(e.x, e.y, e.shot_range)
+            if victim is None:
+                victim = self.nearest_structure_in(e.x, e.y, e.shot_range)
+            if victim is not None:
+                self._shoot(e, victim)
+        # 4. choose where to go
         tx, ty = e.tile()
         if e.goal is not None:
             if f.structures.get(e.goal) is None:

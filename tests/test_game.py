@@ -194,3 +194,81 @@ def test_u_key_upgrades_hovered_structure(game):
     game.factory.rebuild_links()
     game.selected = w
     frames(game, 2)                                          # panel shows the upgrade line
+
+
+def test_x_is_a_demolish_tool_click_or_drag(game):
+    from settings import COSTS
+    frames(game, 1)
+    f = game.factory
+    f.terrain = None                                           # any tile is buildable
+    belts = [f.place("belt", x, 4, 1, free=True) for x in range(3, 9)]
+    bal = f.balance
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_x, mod=0, unicode="x"))
+    assert game.tool == "demolish"
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (3, 4))            # click: one belt gone, 50% back
+    assert f.structure_at(3, 4) is None and f.balance == bal + COSTS["belt"] // 2
+    _mouse(game, pygame.MOUSEMOTION, 1, (8, 4))                # fast drag skipping tiles: sweep fills the gaps
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (8, 4))
+    assert all(f.structure_at(x, 4) is None for x in range(3, 9))
+    frames(game, 1)                                            # cursor draws
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_x, mod=0, unicode="x"))
+    assert game.tool is None                                   # X again leaves the tool
+    game.set_tool("demolish")
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE, mod=0, unicode=""))
+    assert game.tool is None and game.running
+
+
+def test_belt_drag_previews_then_builds_on_release(game):
+    from settings import COSTS
+    from sim.structures import E, S, W
+    frames(game, 1)
+    f = game.factory
+    f.terrain = None
+    f.balance = 1000
+    game.set_tool("belt")
+    game.build_dir = E
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (4, -3))
+    _mouse(game, pygame.MOUSEMOTION, 1, (6, -3))               # skipped a tile: filled in
+    _mouse(game, pygame.MOUSEMOTION, 1, (6, -1))
+    assert len(f.belts) == 0 and f.balance == 1000             # nothing built yet
+    assert [(x, y, d) for x, y, d in game.belt_path] == [(4, -3, E), (5, -3, E), (6, -3, S), (6, -2, S), (6, -1, S)]
+    frames(game, 1)                                            # preview draws
+    _mouse(game, pygame.MOUSEMOTION, 1, (6, -2))               # drag back: last tile undone
+    assert len(game.belt_path) == 4 and game.build_dir == S
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (6, -2))
+    assert game.belt_path == [] and len(f.belts) == 4 and f.balance == 1000 - 4 * COSTS["belt"]
+    assert [f.structure_at(*t).direction for t in ((4, -3), (5, -3), (6, -3), (6, -2))] == [E, E, S, S]
+    # a plain click still places one belt; dragging from an existing belt turns it to follow
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (10, -3))
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (10, -3))
+    assert f.structure_at(10, -3).direction == S and len(f.belts) == 5
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (6, -2))
+    _mouse(game, pygame.MOUSEMOTION, 1, (5, -2))
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (5, -2))
+    assert f.structure_at(6, -2).direction == W and f.structure_at(5, -2).direction == W and len(f.belts) == 6
+
+
+def test_box_select_structures_upgrade_and_repair_all(game):
+    frames(game, 1)
+    f = game.factory
+    walls = [f.place("wall", x, 2, 0, free=True) for x in (3, 4, 5)]
+    f.balance = 250
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (2, 1), dx=4, dy=4)
+    _mouse(game, pygame.MOUSEMOTION, 1, (6, 3), dx=20, dy=20)
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (6, 3), dx=20, dy=20)
+    assert game.selected_structures == walls and game.selected is None
+    frames(game, 1)                                            # group panel + frames draw
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_u, mod=0, unicode="u"))
+    assert [w.level for w in walls] == [2, 2, 1] and f.balance == 50   # third one unaffordable
+    for w in walls:
+        f.damage(w, 50)
+    f.balance = 1000
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_h, mod=0, unicode="h"))
+    assert all(w.hp == w.max_hp for w in walls) and f.balance == 1000 - 3 * 10
+    f.remove(4, 2)
+    game.update(1 / 60)
+    assert game.selected_structures == [walls[0], walls[2]]   # demolished one dropped
+    # a box around a single structure selects it for the panel
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (2, 1), dx=4, dy=4)
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (3, 3), dx=20, dy=20)
+    assert game.selected is walls[0] and game.selected_structures == []

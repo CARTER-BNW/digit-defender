@@ -154,3 +154,35 @@ def test_nest_registry_roundtrip():
     assert reg.is_destroyed(3, 0)
     reg2 = nests.NestRegistry.from_dict(reg.to_dict())
     assert reg2.destroyed == {(3, 0)} and reg2.damage == {}
+
+
+def test_digit_rarity_is_monotone_and_eases_with_distance():
+    """1 is the most common digit and 9 the rarest at every distance; far
+    from the origin the spread flattens (but never inverts)."""
+    from world.generator import _pick_digit, digit_decay
+    from settings import DEPOSIT_DECAY_NEAR, DEPOSIT_DECAY_FAR
+    assert digit_decay(0) == DEPOSIT_DECAY_NEAR and digit_decay(10 ** 6) == DEPOSIT_DECAY_FAR
+    shares = {}
+    for dist in (0, 30):
+        rng = random.Random(7)
+        counts = [0] * 10
+        for _ in range(20000):
+            counts[_pick_digit(rng, dist)] += 1
+        for d in range(1, 9):
+            assert counts[d] > counts[d + 1], (dist, counts)
+        shares[dist] = counts[9] / 20000
+    assert shares[30] > 5 * shares[0]
+
+
+def test_deposits_are_spread_out():
+    """About DEPOSIT_BLOB_CHANCE blobs per chunk: well under 2% of tiles."""
+    from settings import DEPOSIT_BLOB_CHANCE, DEPOSIT_BLOB_SIZE
+    total = dep = 0
+    for cx in range(-12, 13):
+        for cy in range(-12, 13):
+            for tile in generate_chunk(SEED, cx, cy):
+                total += 1
+                dep += bool(tiles.deposit_value(tile))
+    density = dep / total
+    expected = DEPOSIT_BLOB_CHANCE * sum(DEPOSIT_BLOB_SIZE) / 2 / (CHUNK_SIZE * CHUNK_SIZE)
+    assert expected * 0.5 < density < expected * 1.6, (density, expected)

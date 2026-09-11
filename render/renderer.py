@@ -57,6 +57,9 @@ class Renderer:
             rstruct.draw_tower_ranges(screen, camera, factory, selected, getattr(game, "hover_tile", None))
             if selected is not None:
                 rstruct.draw_selection(screen, camera, selected)
+            group = getattr(game, "selected_structures", None)
+            if group:
+                rstruct.draw_group_selection(screen, camera, group)
             combat = factory.combat
             if combat is not None:
                 box = None
@@ -67,6 +70,10 @@ class Renderer:
             ghost = game.ghost() if hasattr(game, "ghost") else None
             if ghost is not None:
                 rstruct.draw_ghost(screen, camera, *ghost)
+            if getattr(game, "belt_path", None):
+                rstruct.draw_belt_preview(screen, camera, factory, game.belt_path)
+            if getattr(game, "tool", None) == "demolish":
+                rstruct.draw_demolish_cursor(screen, camera, factory, getattr(game, "hover_tile", None))
             if combat is not None:
                 rcombat.draw_offscreen_indicators(screen, camera, combat)
         if self.debug:

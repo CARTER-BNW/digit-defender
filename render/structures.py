@@ -15,9 +15,9 @@ from functools import lru_cache
 
 import pygame
 
-from settings import (COLORS, TEXT_MIN_ZOOM, TILE_SIZE, ITEM_SPACING, SPRITE_DIR,
+from settings import (COLORS, COSTS, TEXT_MIN_ZOOM, TILE_SIZE, ITEM_SPACING, SPRITE_DIR,
                       MINER_PULSE_TICKS, CHUNK_SIZE, TOWER_RANGE)
-from sim.structures import DIR_VEC, KINDS, ROLE_IN, ROLE_OUT, ROLE_FEED, BACK
+from sim.structures import DIR_VEC, KINDS, ROLE_IN, ROLE_OUT, ROLE_FEED, BACK, Belt
 from render import numbers
 
 ROLE_COLORS = {ROLE_IN: COLORS["side_input"], ROLE_OUT: COLORS["side_output"],
@@ -443,6 +443,69 @@ def draw_ghost(screen, camera, kind, x, y, direction, ok, cost):
     if tp >= 12:
         txt = numbers.text(str(cost), 14, COLORS["ghost_ok"] if ok else COLORS["ghost_bad"])
         screen.blit(txt, (sx + tp * cls.SIZE + 2, sy))
+
+
+def draw_belt_preview(screen, camera, factory, path):
+    """Transparent belts along the drag path (shapes follow the path), tinted
+    green where a belt will be built or turned and red where it cannot be,
+    plus the tile count and cost at the end of the path."""
+    if not path:
+        return
+    tp = camera.tile_px
+    ok_tint = pygame.Surface((tp, tp), pygame.SRCALPHA)
+    ok_tint.fill((*COLORS["ghost_ok"], 60))
+    bad_tint = pygame.Surface((tp, tp), pygame.SRCALPHA)
+    bad_tint.fill((*COLORS["ghost_bad"], 80))
+    new = 0
+    for i, (x, y, d) in enumerate(path):
+        in_sides = 0
+        if i > 0:
+            px, py = path[i - 1][0], path[i - 1][1]
+            if (px - x, py - y) in DIR_VEC:
+                in_sides = 1 << DIR_VEC.index((px - x, py - y))
+        spr = sprite("belt", d, tp, None, 1, in_sides | ((1 << d) << 4)).copy()
+        spr.set_alpha(150)
+        sx, sy = camera.tile_to_screen(x, y)
+        screen.blit(spr, (sx, sy))
+        s = factory.structure_at(x, y)
+        if isinstance(s, Belt):
+            ok = True
+        else:
+            ok = s is None and factory.can_place("belt", x, y, d)[0]
+            new += ok
+        screen.blit(ok_tint if ok else bad_tint, (sx, sy))
+    if tp >= 12:
+        x, y, _ = path[-1]
+        sx, sy = camera.tile_to_screen(x, y)
+        txt = numbers.text(f"{new} belts = {new * COSTS['belt']}", 14, COLORS["ghost_ok"])
+        screen.blit(txt, (sx + tp + 2, sy))
+
+
+def draw_demolish_cursor(screen, camera, factory, tile):
+    """Red frame around what the demolish tool would remove."""
+    if tile is None:
+        return
+    tp = camera.tile_px
+    s = factory.structure_at(*tile)
+    if s is not None:
+        r = s.SIZE // 2
+        sx, sy = camera.tile_to_screen(s.x - r, s.y - r)
+        size = tp * s.SIZE
+        pygame.draw.rect(screen, (255, 70, 70), (sx - 1, sy - 1, size + 2, size + 2), 2)
+        if tp >= 12:
+            screen.blit(numbers.text(f"+{int(s.cost * 0.5)}", 14, (255, 110, 110)), (sx + size + 2, sy))
+    else:
+        sx, sy = camera.tile_to_screen(*tile)
+        pygame.draw.rect(screen, (200, 70, 70), (sx, sy, tp, tp), 1)
+
+
+def draw_group_selection(screen, camera, structures):
+    """Thin frames around every structure of a drag-box selection."""
+    tp = camera.tile_px
+    for s in structures:
+        r = s.SIZE // 2
+        sx, sy = camera.tile_to_screen(s.x - r, s.y - r)
+        pygame.draw.rect(screen, (255, 255, 120), (sx, sy, tp * s.SIZE, tp * s.SIZE), 1)
 
 
 def draw_selection(screen, camera, s):

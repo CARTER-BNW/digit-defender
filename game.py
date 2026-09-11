@@ -69,10 +69,12 @@ class Game:
         self.build_dir = E
         self.selected = None
         self.selected_units = []             # player units under command (RMB = move)
+        self.selected_structures = []        # drag-box multi-select: [U] / [H] apply to all
         self.box_start = None                # screen pos where a LMB drag-select began
         self.box_end = None
         self.painting = False
         self.last_paint = None
+        self.belt_path = []                  # [[tx, ty, dir], ...] belt drag preview, built on release
         self.hover_tile = (0, 0)
         self.game_over = False
         self.paused = False
@@ -171,6 +173,8 @@ class Game:
             if event.button == 2:
                 self.dragging = False
             elif event.button == 1:
+                if self.belt_path:
+                    self._commit_belt_path()
                 self.painting = False
                 self.last_paint = None
                 self._end_box(event.pos)
@@ -199,9 +203,10 @@ class Game:
         if key == pygame.K_ESCAPE:
             if self.tool is not None:
                 self.set_tool(None)
-            elif self.selected is not None or self.selected_units:
+            elif self.selected is not None or self.selected_units or self.selected_structures:
                 self.selected = None
                 self.selected_units = []
+                self.selected_structures = []
             else:
                 self.result = "menu"
                 self.running = False
@@ -218,7 +223,7 @@ class Game:
             self.set_tool(None if self.tool == kind else kind)
         elif key == pygame.K_r:
             self.rotate()
-        elif key == pygame.K_x or key == pygame.K_DELETE:
+        elif key == pygame.K_DELETE:             # one-shot; [X] is the demolish tool
             self.demolish(self.hover_tile)
         elif key == pygame.K_q:
             self.pick()
@@ -246,8 +251,11 @@ class Game:
 
     def set_tool(self, kind):
         self.tool = kind
+        self.belt_path = []
+        self.painting = False
         if kind is not None:
             self.selected = None
+            self.selected_structures = []
 
     def rotate(self):
         if self.tool is not None:
@@ -274,13 +282,19 @@ class Game:
         if self.tool is not None:
             self.painting = True
             self.last_paint = tile
-            self.try_place(tile, verbose=True)
+            if self.tool == "belt":
+                self.belt_path = [[tile[0], tile[1], self.build_dir]]   # preview; built on release
+            elif self.tool == "demolish":
+                self.demolish(tile)
+            else:
+                self.try_place(tile, verbose=True)
             return
         shift = bool(pygame.key.get_mods() & pygame.KMOD_SHIFT)
         wx, wy = self.camera.screen_to_world(*pos)
         u = self.combat.unit_at(wx / TILE_SIZE, wy / TILE_SIZE)
         if u is not None:
             self.selected = None
+            self.selected_structures = []
             if not shift:
                 self.selected_units = [u]
             elif u in self.selected_units:
@@ -292,16 +306,20 @@ class Game:
         self.selected = s
         if s is not None:
             self.selected_units = []
+            self.selected_structures = []
             if isinstance(s, Spawner):
                 self.train(s)
             return
         if not shift:
             self.selected_units = []
+            self.selected_structures = []
         self.box_start = self.box_end = pos
 
     def _end_box(self, pos):
-        """Finish a drag-select: every player unit inside the box joins the
-        selection (a tiny box is just a click on empty ground)."""
+        """Finish a drag-select: player units inside the box join the unit
+        selection, structures inside join the structure selection (a lone
+        structure becomes the panel selection). A tiny box is just a click
+        on empty ground."""
         if self.box_start is None:
             return
         x0, y0 = self.box_start
@@ -316,8 +334,29 @@ class Game:
                 continue
             if ax <= u.x * TILE_SIZE <= bx and ay <= u.y * TILE_SIZE <= by:
                 self.selected_units.append(u)
+        tx0, ty0 = math.floor(ax / TILE_SIZE), math.floor(ay / TILE_SIZE)
+        tx1, ty1 = math.floor(bx / TILE_SIZE), math.floor(by / TILE_SIZE)
+        seen = {id(s) for s in self.selected_structures}
+        by_chunk = self.factory.by_chunk
+        for cy in range(ty0 // CHUNK_SIZE, ty1 // CHUNK_SIZE + 1):
+            for cx in range(tx0 // CHUNK_SIZE, tx1 // CHUNK_SIZE + 1):
+                for s in by_chunk.get((cx, cy), ()):
+                    if id(s) in seen:
+                        continue
+                    if any(tx0 <= tx <= tx1 and ty0 <= ty <= ty1 for tx, ty in s.tiles()):
+                        seen.add(id(s))
+                        self.selected_structures.append(s)
+        self.selected_structures.sort(key=lambda s: (s.y, s.x))
+        if len(self.selected_structures) == 1 and not self.selected_units:
+            self.selected = self.selected_structures[0]
+            self.selected_structures = []
+        parts = []
         if self.selected_units:
-            self.hud.message(f"{len(self.selected_units)} units selected   [RMB] move", 1.5)
+            parts.append(f"{len(self.selected_units)} units   [RMB] move")
+        if self.selected_structures:
+            parts.append(f"{len(self.selected_structures)} structures   [U] upgrade all   [H] repair all")
+        if parts:
+            self.hud.message("selected: " + "     ".join(parts), 1.8)
 
     def _right_click(self, pos):
         """Cancel the tool; else move the selected units / set the selected
@@ -339,6 +378,7 @@ class Game:
         else:
             self.selected = None
             self.selected_units = []
+            self.selected_structures = []
 
     def train(self, sp):
         """Queue one unit at a spawner (pays its unit cost)."""
@@ -361,22 +401,77 @@ class Game:
             self.hud.message("Tower placed: run a belt or a miner into any side for ammo", 3.5)
         return s
 
+    @staticmethod
+    def _tiles_between(a, b):
+        """Tiles from a (exclusive) to b (inclusive), one step at a time along
+        the larger remaining axis, so a fast drag never skips tiles."""
+        x, y = a
+        bx, by = b
+        while (x, y) != (bx, by):
+            dx, dy = bx - x, by - y
+            if abs(dx) >= abs(dy):
+                x += 1 if dx > 0 else -1
+            else:
+                y += 1 if dy > 0 else -1
+            yield (x, y)
+
     def _paint(self, tile):
-        """Drag-place: belts follow the drag direction (the previous belt turns
-        to point at the new tile); other kinds just repeat."""
+        """Drag with a tool held: belts extend the preview path; the demolish
+        tool sweeps; other kinds place on every tile crossed."""
         if tile == self.last_paint:
             return
-        last = self.last_paint
-        if self.tool == "belt" and last is not None:
-            dx, dy = tile[0] - last[0], tile[1] - last[1]
-            if (dx, dy) in DIR_VEC:
-                self.build_dir = DIR_VEC.index((dx, dy))
-                prev = self.factory.structure_at(*last)
-                if isinstance(prev, Belt) and prev.direction != self.build_dir:
-                    prev.direction = self.build_dir
-                    self.factory.dirty_links = True
-        self.try_place(tile)
+        last = self.last_paint if self.last_paint is not None else tile
+        if self.tool == "belt":
+            self._extend_belt_path(tile)
+        elif self.tool == "demolish":
+            for t in self._tiles_between(last, tile):
+                self.demolish(t)
+        else:
+            for t in self._tiles_between(last, tile):
+                self.try_place(t)
         self.last_paint = tile
+
+    def _extend_belt_path(self, tile):
+        """Grow the belt preview to `tile`: each belt turns to point at the
+        next; dragging back over the previous tile undoes the last one."""
+        path = self.belt_path
+        if not path:
+            path.append([tile[0], tile[1], self.build_dir])
+            return
+        if len(path) >= 2 and tile == (path[-2][0], path[-2][1]):
+            path.pop()
+            self.build_dir = path[-1][2]
+            return
+        for t in self._tiles_between((path[-1][0], path[-1][1]), tile):
+            d = DIR_VEC.index((t[0] - path[-1][0], t[1] - path[-1][1]))
+            path[-1][2] = d
+            path.append([t[0], t[1], d])
+            self.build_dir = d
+
+    def _commit_belt_path(self):
+        """Build the previewed belts: new belts are placed (cost checked per
+        tile), belts already on the path are turned to follow it, anything
+        else is skipped. Returns the number of belts built."""
+        path, self.belt_path = self.belt_path, []
+        built = 0
+        reason = None
+        for x, y, d in path:
+            s = self.factory.structure_at(x, y)
+            if isinstance(s, Belt):
+                if s.direction != d:
+                    s.direction = d
+                    self.factory.dirty_links = True
+                continue
+            ok, why = self.factory.can_place("belt", x, y, d)
+            if not ok:
+                if why != "occupied" and reason is None:
+                    reason = why
+                continue
+            if self.factory.place("belt", x, y, d) is not None:
+                built += 1
+        if reason is not None:
+            self.hud.message(reason)
+        return built
 
     def go_home(self):
         """Centre the camera on the hub."""
@@ -385,8 +480,30 @@ class Game:
         self.camera.x = (cx + 0.5) * TILE_SIZE
         self.camera.y = (cy + 0.5) * TILE_SIZE
 
+    def _group(self):
+        """Live structures of the drag-box selection."""
+        return [s for s in self.selected_structures if self.factory.structure_at(s.x, s.y) is s]
+
     def upgrade(self):
-        """[U]: pay balance to lift the selected/hovered structure one level."""
+        """[U]: pay balance to lift the selected/hovered structure one level
+        (every structure of a drag-box selection, in (y, x) order)."""
+        group = self._group()
+        if group:
+            done = skipped = total = 0
+            for s in group:
+                if self.factory.upgrade_cost(s) is None:
+                    continue
+                paid = self.factory.upgrade(s)
+                if paid:
+                    done += 1
+                    total += paid
+                else:
+                    skipped += 1
+            msg = f"Upgraded {done} structure{'s' if done != 1 else ''} for {total}"
+            if skipped:
+                msg += f"   ({skipped} skipped: not enough balance)"
+            self.hud.message(msg, 2)
+            return total
         target = self.selected or self.factory.structure_at(*self.hover_tile)
         if target is None:
             return 0
@@ -402,6 +519,11 @@ class Game:
         return paid
 
     def repair(self):
+        group = self._group()
+        if group:
+            total = sum(self.factory.repair(s) for s in group)
+            self.hud.message(f"Repaired for {total}" if total else "Nothing to repair (or not enough balance)", 1.5)
+            return total
         target = self.selected or self.factory.structure_at(*self.hover_tile)
         if target is None:
             return 0
@@ -430,9 +552,6 @@ class Game:
         # hover follows the camera too (keeps hover queries on-screen, so the
         # HUD never regenerates a chunk that streaming just dropped)
         self.hover_tile = self.camera.screen_to_tile(*pygame.mouse.get_pos())
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_x] and not self.hud.over_ui(pygame.mouse.get_pos()):
-            self.demolish(self.hover_tile)
         # links (belt shapes, miner outputs, machine targets) refresh right away
         # even while paused, so what you build looks and behaves connected
         if self.factory.dirty_links:
@@ -453,6 +572,12 @@ class Game:
         self.factory.events.clear()
         if self.selected_units and any(u.dead for u in self.selected_units):
             self.selected_units = [u for u in self.selected_units if not u.dead]
+        if self.selected_structures:
+            live = self._group()
+            if len(live) != len(self.selected_structures):
+                self.selected_structures = live
+        if self.selected is not None and self.factory.structure_at(self.selected.x, self.selected.y) is not self.selected:
+            self.selected = None                     # destroyed in combat
         if self.factory.hub_destroyed and not self.game_over:
             self.game_over = True
             self.set_tool(None)
@@ -512,8 +637,11 @@ class Game:
         pygame.display.flip()
 
     def ghost(self):
-        """(kind, tx, ty, dir, ok, cost) for the build preview, or None."""
-        if self.tool is None or self.hud.over_ui(pygame.mouse.get_pos()):
+        """(kind, tx, ty, dir, ok, cost) for the build preview, or None (no
+        tool, the demolish tool, a belt drag in progress, or over the UI)."""
+        if self.tool is None or self.tool == "demolish" or self.belt_path:
+            return None
+        if self.hud.over_ui(pygame.mouse.get_pos()):
             return None
         tx, ty = self.hover_tile
         ok, _ = self.factory.can_place(self.tool, tx, ty, self.build_dir)

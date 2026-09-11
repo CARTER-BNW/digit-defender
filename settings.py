@@ -60,7 +60,8 @@ MACHINE_BUFFER = 3                  # operand buffer depth per side
 TOWER_AMMO_MAX = 10                 # numbers a tower can hold
 
 # --- leveling -----------------------------------------------------------------
-LEVEL_THRESHOLDS = [100 * 2 ** k for k in range(20)]   # invested >= t -> level up
+LEVEL_BASE_COST = 100               # fed (or balance) to reach level 2
+LEVEL_COST_GROWTH = 1.25            # every further level costs 25% more than the last (John); no level cap
 RATE_STEP = 0.25                    # period = BASE_PERIOD / (1 + level * RATE_STEP)
 BASE_HP = {
     "belt": 20, "wall": 200, "miner": 60, "tower": 100, "hub": 1000,
@@ -71,11 +72,11 @@ BASE_HP = {
 # --- world gen ----------------------------------------------------------------
 WORLD_SEED = 1337
 SPAWN_CLEAR_RADIUS = 2              # deposit-free (2r+1)^2 clearing around the origin hub
-DEPOSIT_BLOBS_PER_CHUNK = (0, 2)    # inclusive range rolled per chunk
+DEPOSIT_BLOB_CHANCE = 0.45          # chance a chunk holds one deposit blob (spread out; John)
 DEPOSIT_BLOB_SIZE = (3, 7)          # tiles per blob, inclusive
-DEPOSIT_HIGH_BASE = 0.05            # chance a blob is 6-9 next to the origin...
-DEPOSIT_HIGH_PER_CHUNK = 0.02       # ...growing per chunk of Chebyshev distance...
-DEPOSIT_HIGH_MAX = 0.6              # ...up to this cap
+DEPOSIT_DECAY_NEAR = 0.45           # digit weight = decay ** (digit - 1): the higher the digit the rarer...
+DEPOSIT_DECAY_PER_CHUNK = 0.02      # ...the decay eases with Chebyshev chunk distance from the origin...
+DEPOSIT_DECAY_FAR = 0.8             # ...up to this cap (a 9 stays the rarest everywhere)
 NEST_REGION = 12                    # chunks per nest-region side (192 tiles)
 SAFE_REGIONS = 1                    # no nests within this Chebyshev region distance of origin
 NEST_CHANCE_PER_REGION = 0.3        # nest chance grows by this per region beyond SAFE_REGIONS
@@ -118,10 +119,12 @@ UNIT_STATS = {
     "melee":  {"hp": 60, "speed": 0.2,  "range": 1, "period": 15, "dmg": 3},
     "heavy":  {"hp": 120, "speed": 0.1, "range": 8, "period": 40, "shot": 100},
 }
+# Enemies both shoot and melee (John): dmg = melee in contact; shot_dmg at up to
+# shot_range tiles, fired while advancing (nearest unit first, else nearest structure).
 ENEMY_STATS = {
-    "grunt":  {"hp": 20, "speed": 0.12, "dmg": 2, "period": 15, "cost": 5},
-    "brute":  {"hp": 80, "speed": 0.08, "dmg": 8, "period": 25, "cost": 20},
-    "runner": {"hp": 10, "speed": 0.25, "dmg": 1, "period": 10, "cost": 4},
+    "grunt":  {"hp": 20, "speed": 0.12, "dmg": 2, "period": 15, "cost": 5, "shot_dmg": 1, "shot_range": 4},
+    "brute":  {"hp": 80, "speed": 0.08, "dmg": 8, "period": 25, "cost": 20, "shot_dmg": 3, "shot_range": 3},
+    "runner": {"hp": 10, "speed": 0.25, "dmg": 1, "period": 10, "cost": 4, "shot_dmg": 1, "shot_range": 5},
 }
 
 # --- colors (RGB) -------------------------------------------------------------
@@ -152,6 +155,7 @@ COLORS = {
     "multiplier": (60, 90, 190), "divider": (160, 60, 160),
     "spawner_ranged": (150, 120, 40), "spawner_melee": (150, 70, 40),
     "spawner_heavy": (90, 90, 40),
+    "demolish": (150, 55, 55),
     "enemy": (220, 40, 40),
     "unit": (60, 200, 220),
     "text": (240, 240, 240),

@@ -6,10 +6,14 @@ Layers, in order:
   1. ground: dark-green checkerboard, shade pair chosen by low-frequency
      simplex noise sampled every NOISE_STEP tiles on a GLOBAL grid and
      bilinear-upsampled (seamless across chunk borders).
-  2. deposits: per-chunk seeded blobs of one digit 1-9 (random walk). Low
-     digits everywhere; 6-9 rarer near the origin. Never inside the spawn
-     clearing. The four chunks touching the origin each carry a forced blob
-     (1, 2, 3 and a random 1-3) so the early game always works.
+  2. deposits: at most one seeded blob of a single digit 1-9 per chunk
+     (DEPOSIT_BLOB_CHANCE, random walk), so deposits are spread out. The
+     digit is drawn with geometric weights decay**(digit-1): the higher the
+     digit the rarer it is, everywhere; the decay eases with distance from
+     the origin so 6-9 turn up far out but never outnumber lower digits.
+     Never inside the spawn clearing. The four chunks touching the origin
+     each carry a forced blob (1, 2, 3 and a random 1-3) so the early game
+     always works.
   3. nests: stamped from sim.nests (pure region grid), over everything.
 
 No pygame here. Deposits are infinite, so terrain is never modified in play.
@@ -20,9 +24,8 @@ from functools import lru_cache
 import numpy as np
 from opensimplex import OpenSimplex
 
-from settings import (CHUNK_SIZE, SPAWN_CLEAR_RADIUS, DEPOSIT_BLOBS_PER_CHUNK,
-                      DEPOSIT_BLOB_SIZE, DEPOSIT_HIGH_BASE, DEPOSIT_HIGH_PER_CHUNK,
-                      DEPOSIT_HIGH_MAX)
+from settings import (CHUNK_SIZE, SPAWN_CLEAR_RADIUS, DEPOSIT_BLOB_CHANCE, DEPOSIT_BLOB_SIZE,
+                      DEPOSIT_DECAY_NEAR, DEPOSIT_DECAY_PER_CHUNK, DEPOSIT_DECAY_FAR)
 from world.tiles import DEPOSIT_BASE, NEST_GROUND, NEST_CORE, GROUND_PAIRS
 from sim.nests import nest_in_chunk, NEST_RADIUS
 
@@ -32,8 +35,7 @@ SHADE_THRESHOLD = 0.18        # |noise| beyond this picks the dark/light pair
 
 # forced early-game deposits: chunk -> digit (None = random 1..3)
 FORCED_BLOBS = {(0, 0): 1, (-1, 0): 2, (0, -1): 3, (-1, -1): None}
-LOW_WEIGHTS = ((1, 4), (2, 4), (3, 4), (4, 2), (5, 2))
-HIGH_DIGITS = (6, 7, 8, 9)
+DIGITS = tuple(range(1, 10))
 
 
 @lru_cache(maxsize=8)
@@ -80,12 +82,16 @@ def in_spawn_clearing(tx, ty):
     return abs(tx) <= SPAWN_CLEAR_RADIUS and abs(ty) <= SPAWN_CLEAR_RADIUS
 
 
+def digit_decay(dist):
+    """Weight ratio between digit d and d+1 at Chebyshev chunk distance dist."""
+    return min(DEPOSIT_DECAY_FAR, DEPOSIT_DECAY_NEAR + DEPOSIT_DECAY_PER_CHUNK * dist)
+
+
 def _pick_digit(rng, dist):
-    p_high = min(DEPOSIT_HIGH_MAX, DEPOSIT_HIGH_BASE + DEPOSIT_HIGH_PER_CHUNK * dist)
-    if rng.random() < p_high:
-        return rng.choice(HIGH_DIGITS)
-    digits, weights = zip(*LOW_WEIGHTS)
-    return rng.choices(digits, weights)[0]
+    """1 is the most common digit and 9 the rarest, at every distance; far
+    from the origin the gap narrows so high digits become findable."""
+    decay = digit_decay(dist)
+    return rng.choices(DIGITS, [decay ** (d - 1) for d in DIGITS])[0]
 
 
 def _deposits(seed, cx, cy, tiles):
@@ -95,7 +101,7 @@ def _deposits(seed, cx, cy, tiles):
     if (cx, cy) in FORCED_BLOBS:
         forced = FORCED_BLOBS[(cx, cy)]
         blobs.append(forced if forced is not None else rng.randint(1, 3))
-    for _ in range(rng.randint(*DEPOSIT_BLOBS_PER_CHUNK)):
+    if rng.random() < DEPOSIT_BLOB_CHANCE:
         blobs.append(_pick_digit(rng, dist))
     base_x, base_y = cx * CHUNK_SIZE, cy * CHUNK_SIZE
     for digit in blobs:

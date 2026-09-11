@@ -92,10 +92,12 @@ Digit Defender/
   - Checker base: `GROUND_A if (tx + ty) % 2 else GROUND_B`, tinted by low-frequency OpenSimplex
     noise bucketed into 2–3 shade pairs. Noise sampled every 4 tiles + bilinear upsample as in
     Pixel_Worlds (seamless borders).
-  - Deposits: per-chunk `random.Random(hash((seed, cx, cy, "dep")))` scatters 0–2 deposit blobs
-    (3–7 tiles, single value 1–9 per blob). Low digits common everywhere; 6–9 rarer and biased
-    farther from origin. Guarantee: chunks within radius 2 of origin contain at least one 1,
-    one 2, one 3 deposit total (early game always works).
+  - Deposits: per-chunk string-seeded rng places at most ONE blob (DEPOSIT_BLOB_CHANCE = 0.45;
+    3–7 tiles, single value 1–9), so deposits are spread out (John, 2026-09-11). The digit is
+    drawn with geometric weights decay**(digit-1): the higher the digit the rarer, at every
+    distance; decay eases from 0.45 near the origin to 0.8 far out so 6–9 become findable but
+    never outnumber lower digits. Guarantee: chunks within radius 2 of origin contain at least
+    one 1, one 2, one 3 deposit total (early game always works).
   - Spawn area: deposit-free 5×5 tile clearing at the origin for the hub.
   - Nests: region grid (§3.6) stamped into distant chunks.
 
@@ -246,7 +248,9 @@ Belts: head-on against direction = feed; side entry = merge (cargo); tail entry 
 Machines: back = feed; front = output (never accepts); left/right = operands.
 Hub: everything is cargo (income). Towers: every side = ammo, no feed sides (John, 2026-09-11;
 towers level through the balance upgrade `[U]` instead).
-- `leveling.py` pure functions: `level(kind, invested)` from threshold table (`100·2^k`);
+- `leveling.py` pure functions: `level(invested)` from geometric level costs — level n→n+1
+  costs `100·1.25^(n-1)` (100, 125, 156, ...), thresholds are the running sum, no level cap
+  (John, 2026-09-11; replaced the `100·2^k` table);
   `belt speed = BASE + invested/10000` (user's +0.01 per 100); miner/machine/tower/spawner
   period `= BASE_PERIOD / (1 + level * RATE_STEP)`; `max_hp = BASE_HP + invested` (fed total
   is the health bar; track `hp` separately so damage/repair work; repair costs balance at
@@ -270,6 +274,9 @@ towers level through the balance upgrade `[U]` instead).
 - v1 (Phase 5 start): greedy movement toward target (hub for waves, nearest structure for
   raids); when bumping a blocking structure, attack it. Walls work automatically as
   attack-priority speed bumps. No A*.
+- Every enemy also shoots (John, 2026-09-11): while advancing it fires `shot_dmg` at the nearest
+  player unit, else the nearest structure, within `shot_range` (3–5 tiles), free, on the same
+  cooldown as its melee; contact still lands the bigger melee hit. Walls still block bodies.
 - v2 (Phase 5 polish): single BFS **flow field from the hub** over the built-up bounding box
   + margin, costs: empty 1, wall 40, other structures 15; recomputed only when
   `dirty_flowfield` and at most every N ticks. All wave enemies share it. Enemies outside the

@@ -27,10 +27,13 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
 ## Health check (what "working" looks like)
 1. `python -m pytest -q` -> all green.
 2. `python main.py --world smoke --frames 120` -> window opens on a fresh world with the hub, exits 0, `saves/smoke/` written.
-3. In game: 1 = belt, 2 = miner (needs a deposit), 3-6 = machines, 7 = wall, 8 = tower, 9/0/- = spawners; R rotate,
-   LMB place (drag paints belts that auto-turn), X demolish (hold to sweep), Q pick, H repair, U upgrade (balance up to
-   the next level), click = select (panel on the right), click a spawner = train one unit, click / Shift+click / drag a
-   box = select units, RMB = move selected units (grid formation) or set a selected spawner's gather point or cancel,
+3. In game: 1 = belt, 2 = miner (needs a deposit), 3-6 = machines, 7 = wall, 8 = tower, 9/0/- = spawners, X = demolish
+   tool (click or drag over buildings, 50% refund; X/Esc leaves it; Del = one-shot); R rotate, LMB place (belts: hold
+   and drag = transparent preview path that auto-turns, release builds it, drag back undoes; other kinds place on every
+   tile crossed), Q pick, H repair, U upgrade (balance up to the next level), click = select (panel on the right), drag
+   a box = select every structure inside (U/H apply to all; group panel) and/or units, click a spawner = train one unit,
+   click / Shift+click / drag a box = select units, RMB = move selected units (grid formation) or set a selected
+   spawner's gather point or cancel,
    wheel zoom, MMB drag pan, WASD pan (Shift fast), F3 debug, Space pause, [ ] sim speed x1/x2/x4, F1 help overlay,
    Home or the HUB button = camera back to the hub, F6 spawn an enemy at the cursor, F7 trigger the next wave,
    F11 fullscreen, Esc = cancel tool / clear selection / menu (Esc in the menu = back into the game). Minimap bottom-right.
@@ -49,8 +52,8 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
   `structures.py` (cached sprites, batched blits, ghost/selection/health bars/range discs), `combat.py` (units, beams,
   selection rings, drag box), `numbers.py` (abbrev, fmt, text cache).
 - `ui/`: `hud.py` (balance, targets, wave timer, toolbar, hover line, structure panel, messages, game over), `menu.py`.
-- `game.py`: Game.load/save, event loop, fixed timestep (20 Hz, cap 4 ticks/frame), build mode, unit commands, autosave,
-  game over -> [L] reload.
+- `game.py`: Game.load/save, event loop, fixed timestep (20 Hz, cap 4 ticks/frame), build mode (belt preview path,
+  demolish tool, drag-box selection of structures and units), unit commands, autosave, game over -> [L] reload.
 
 ## Load-bearing decisions (do not re-litigate casually; rationale in PLAN.md)
 1. Structures live in `Factory.structures[(tx,ty)]` (+ `by_chunk` index for rendering), never in terrain chunks. Terrain
@@ -70,9 +73,11 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
    miners may be built on number tiles. Belt sprites are shape-aware (in_sides | out_sides -> straight/corner/T/cross).
    Belt items are `[value, progress, entry_rel]`; the third field is render-only (corner animation) and the sim never
    reads it; old two-field saves load as BACK.
-5. Leveling: thresholds 100*2^k; belt speed = 0.05 + invested*0.0001 tiles/tick (cap 0.5); periods /(1 + 0.25*levels);
-   max_hp = BASE_HP + invested. Repair costs 0.2/hp. `[U]` upgrade = pay (next threshold - invested) balance and feed it
-   (1 balance = 1 fed, the hub's own exchange rate) — idea.txt: balance is spent to create / improve / repair.
+5. Leveling: level n -> n+1 costs 100 * 1.25^(n-1) fed (100, 125, 156, 196, 244...), thresholds are the running sum
+   (`leveling.threshold`), NO level cap (John, round 5); belt speed = 0.05 + invested*0.0001 tiles/tick (cap 0.5);
+   periods /(1 + 0.25*levels); max_hp = BASE_HP + invested. Repair costs 0.2/hp. `[U]` upgrade = pay (next threshold -
+   invested) balance and feed it (1 balance = 1 fed, the hub's own exchange rate) — idea.txt: balance is spent to
+   create / improve / repair.
 6. Ranged/heavy unit shots debit balance by the fired value; hold fire when broke; melee free; towers eat belt ammo
    (dmg = value * (1 + 0.5*(level-1)), range TOWER_RANGE = 10). Spawners never spawn on their own: a click queues one unit
    (UNIT_COSTS 50/50/150, SPAWNER_QUEUE_MAX 9), one unit walks out per period (timer keeps counting while idle, so the
@@ -83,7 +88,9 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
    `wave.units` (uid, kind, pos, hp, level, owner spawner, slot); enemies still disperse on reload.
 7. Waves: first at 5 min, interval max(90 s, 240*0.97^n), budget 20*1.25^n, spawn ring = base bbox + 12 tiles (min radius
    30), direction pre-rolled (edge arrow in the last 60 s). Enemies use the hub flow field (walls 40, other structures 15)
-   when inside it, greedy otherwise; whatever blocks gets attacked.
+   when inside it, greedy otherwise; whatever blocks gets meleed. Every enemy also shoots while advancing (John, round
+   5): `shot_dmg` at the nearest unit, else the nearest structure (`Combat.nearest_structure_in`, a bounded tile scan),
+   within `shot_range` 3-5 tiles, same cooldown as melee, free; raid tiers scale shot_dmg like dmg.
 8. Nests: region grid 12 chunks, none within 1 region of origin, chance 0.3 per region ring beyond (cap 0.6), tier = ring;
    aggro when a structure is within 48 tiles -> raids every 45 s; core hp 500*tier, bounty 500*tier; destruction lives in
    NestRegistry (enemies.json), never in terrain; renderer draws rubble from the registry.
@@ -106,7 +113,10 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
   a single 3-miner cannot keep a tower stocked in long fights.
 - Item spacing is half a tile (2 per tile) so numbers do not overlap; belt throughput is 2 items/s at base speed.
 - Custom PNG sprites: assets/sprites/<kind>.png, 32x32 per tile (hub 96x96), facing left (see README).
-- Player units are not blocked by structures (by design for now); enemies only ever melee.
+- Player units are not blocked by structures (by design for now). Enemies shoot over walls (3-5 tiles); towers (10)
+  and ranged units (6) outrange them.
+- Deposits: at most one blob per chunk (chance 0.45), digit weights decay**(digit-1) with decay 0.45 near the origin
+  -> 0.8 far out (`world/generator.py`); re-probe the economy since 4-9 are now much rarer near the hub.
 - Combat stats (kills) are transient; the game-over line shows kills since load.
 - Phase 6 left: copy/paste blueprints, sounds, stats graphs, balance pass after a play test. Flow-field rebuild on very large bases
   (60k-tile cap) can cost ~200 ms when structures change during a wave (throttled to every 2 s).
