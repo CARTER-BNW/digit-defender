@@ -62,7 +62,7 @@ def draw_combat(screen, camera, combat, selected=None, selected_units=(), box=No
                 pygame.draw.rect(screen, (255, 255, 120), (gx - q, gy - q, 2 * q, 2 * q), 1)
         pygame.draw.rect(screen, color, (sx - r, sy - r, 2 * r, 2 * r), border_radius=max(1, r // 3))
         pygame.draw.rect(screen, (10, 40, 50), (sx - r, sy - r, 2 * r, 2 * r), 1, border_radius=max(1, r // 3))
-        if u.shot is not None and tp >= 12:
+        if tp >= 12:                                   # white centre dot on every unit (melee too, John)
             pygame.draw.circle(screen, (255, 255, 255), (sx, sy), max(1, r // 3))
         if u.hp < u.max_hp and tp >= 8:
             _bar(screen, sx - r, sy - r - 5, 2 * r, u.hp / u.max_hp, COLORS["hp_bar"])
