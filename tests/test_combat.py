@@ -4,7 +4,7 @@ import math
 
 from settings import (TICK_RATE, WAVE_FIRST_S, WAVE_BUDGET_BASE, WAVE_BUDGET_GROWTH,
                       WAVE_MIN_RADIUS, ENEMY_STATS, UNIT_STATS, TOWER_RANGE, NEST_BOUNTY,
-                      SPAWNER_QUEUE_MAX, UNIT_COSTS, GATHER_HUB_OFFSET, FLOW_COST_WALL)
+                      SPAWNER_QUEUE_MAX, UNIT_COSTS, GATHER_HUB_GAP, FLOW_COST_WALL)
 from sim.factory import Factory
 from sim.combat import Combat, wave_budget, wave_interval_ticks, spiral_slots, ENEMY, PLAYER
 from sim.pathing import FlowField, greedy_step
@@ -36,8 +36,8 @@ def test_greedy_bumps_wall_then_reaches_hub():
     assert f.structure_at(6, 0) is wall
     run(f, 2000)
     assert f.structure_at(6, 0) is None               # chewed through
-    assert f.hub.hp < f.hub.max_hp                     # now hitting the hub
-    assert e.x < 3.0
+    assert f.hub.hp < f.hub.max_hp                     # now hitting the HQ (its edge is at x = 2)
+    assert e.x < 4.5
 
 
 def test_hub_death_sets_game_over_flag():
@@ -114,8 +114,8 @@ def test_wave_budget_interval_and_spawn_ring():
 
 def test_tower_kills_with_ammo_and_holds_without():
     f, c = world()
-    tower = f.place("tower", 4, 0, N, free=True)
-    e = c.spawn_enemy("grunt", 4.5, 3.5)
+    tower = f.place("tower", 20, 0, N, free=True)         # away from the HQ (the grunt shoots the nearest)
+    e = c.spawn_enemy("grunt", 20.5, 3.5)
     e.speed = 0.0                                         # sit still in range
     run(f, 50)
     assert e.hp == e.max_hp                               # no ammo, no shots
@@ -123,7 +123,7 @@ def test_tower_kills_with_ammo_and_holds_without():
     run(f, 60)
     assert e.dead and c.stats["kills"] == 1
     assert len(tower.ammo) == 0                           # 3 shots of 9 for 20 hp
-    assert all(b[6] == PLAYER for b in c.beams if (b[0], b[1]) == (4.5, 0.5))   # tower beams
+    assert all(b[6] == PLAYER for b in c.beams if (b[0], b[1]) == (20.5, 0.5))   # tower beams
     assert tower.hp < tower.max_hp                        # the grunt shot back while it lived
 
 
@@ -205,8 +205,10 @@ def test_spawner_trains_only_queued_units_and_charges_for_them():
 
 def test_units_gather_beside_the_hub_in_a_grid():
     f, c = world()
-    sp = f.place("spawner_ranged", 12, 1, S, free=True)    # east of the hub
-    assert sp.rally_point(f) == (GATHER_HUB_OFFSET + 0.5, 0.5)
+    sp = f.place("spawner_ranged", 12, 1, S, free=True)    # east of the HQ
+    gx, gy = sp.rally_point(f)
+    assert (gx, gy) == (f.hub.SIZE // 2 + GATHER_HUB_GAP + 0.5, 0.5)    # two tiles clear of the HQ edge
+    assert (math.floor(gx), math.floor(gy)) not in f.structures
     for _ in range(5):
         sp.enqueue(f)
     run(f, sp.period * 4 + 2)
@@ -215,7 +217,7 @@ def test_units_gather_beside_the_hub_in_a_grid():
     assert len(set(slots)) == 5                            # one tile each, never stacked
     assert all(s[0] % 1 == 0.5 and s[1] % 1 == 0.5 for s in slots)   # tile centres
     assert all((math.floor(s[0]), math.floor(s[1])) not in f.structures for s in slots)
-    assert max(math.hypot(s[0] - 3.5, s[1] - 0.5) for s in slots) <= 1.5   # compact
+    assert max(math.hypot(s[0] - gx, s[1] - gy) for s in slots) <= 1.5   # compact
     run(f, 400)
     assert all((u.x, u.y) == u.rally for u in c.units)     # arrived exactly on the grid
     # move the group: new compact grid around the target, still one per tile
@@ -443,3 +445,31 @@ def test_home_camp_is_known_from_the_start_and_wakes_when_built_near():
     assert (home.rx, home.ry) in c.active_nests
     run(f, 10 * TICK_RATE + 5)
     assert c.stats["raids"] >= 1 and all(e.shot_dmg for e in c.enemies)
+
+
+def test_attackers_spread_over_distinct_tiles_instead_of_stacking():
+    f, c = world()
+    e = c.spawn_enemy("brute", 20.5, 10.5)
+    e.speed, e.shot_dmg, e.dmg = 0.0, None, 0
+    e.hp = e.max_hp = 10 ** 6
+    for _ in range(4):
+        c.spawn_unit("melee", 12.5, 10.5)                      # same spot, same target
+    run(f, 300)
+    tiles = {(math.floor(u.x), math.floor(u.y)) for u in c.units}
+    assert len(tiles) == 4                                     # one tile each
+    assert all(u.dist_to(e.x, e.y) <= u.range + 1e-9 for u in c.units)   # all in reach
+    assert all(c._at_post(u) for u in c.units) and e.hp < e.max_hp
+    # enemies attacking a wall line fan out along it and never slip through it
+    f2, c2 = world()
+    c2.use_flow = False
+    walls = [f2.place("wall", 6, y, N, free=True) for y in range(-4, 5)]
+    for w in walls:
+        w.hp = 10 ** 6
+    for _ in range(4):
+        en = c2.spawn_enemy("grunt", 14.5, 0.5)
+        en.shot_dmg = None
+    run(f2, 400)
+    tiles = {(math.floor(en.x), math.floor(en.y)) for en in c2.enemies}
+    assert len(tiles) == 4 and all(t[0] >= 7 for t in tiles), tiles
+    assert all(en.target in walls for en in c2.enemies)
+    assert sum(10 ** 6 - w.hp for w in walls) > 0             # the wall line is being chewed

@@ -9,7 +9,7 @@ Run `python main.py` (or `run.bat`). Tests: `python -m pytest -q`.
 ## Custom sprites
 Drop PNGs into `assets/sprites/` named after the structure kind: `belt.png`, `miner.png`, `adder.png`,
 `subtractor.png`, `multiplier.png`, `divider.png`, `wall.png`, `tower.png`, `spawner_ranged.png`,
-`spawner_melee.png`, `spawner_heavy.png`, `hub.png`. Size: **32x32 px** per tile (`hub.png` is 96x96).
+`spawner_melee.png`, `spawner_heavy.png`, `hub.png`. Size: **32x32 px** per tile (`hub.png` is 192x192: the HQ is 6x6).
 Draw everything facing **left** (a belt flows to the left, a machine outputs to the left; miners, walls
 and towers have no facing); the game rotates for the other directions and scales for every zoom level.
 Pure white (255, 255, 255) and pure magenta (255, 0, 255) are treated as transparent, so a Paint white

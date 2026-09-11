@@ -27,12 +27,13 @@ level, speed/rate and max_hp; hp only moves when a level-up raises max_hp.
             balance upgrade) — John, 2026-09-11
 Every structure has to_dict()/from_dict() from day one (save/load).
 """
+import math
 from collections import deque
 
 from settings import (COSTS, ITEM_SPACING, MINER_BASE_PERIOD, MACHINE_BASE_PERIOD,
                       MACHINE_BUFFER, TOWER_AMMO_BASE, TOWER_AMMO_PER_LEVEL, TOWER_RANGE, TOWER_BASE_PERIOD,
                       TOWER_DMG_LEVEL_MULT, SPAWNER_BASE_PERIOD, SPAWNER_QUEUE_MAX,
-                      UNIT_COSTS, GATHER_HUB_OFFSET)
+                      UNIT_COSTS, GATHER_HUB_GAP)
 from sim import leveling
 
 N, E, S, W = 0, 1, 2, 3
@@ -80,12 +81,22 @@ class Structure:
     def level(self):
         return leveling.level(self.invested)
 
-    def tiles(self):
+    def origin(self):
+        """Top-left tile of the footprint: SIZE // 2 up and left of the
+        anchor, so a 3x3 spans -1..1 around it and a 6x6 spans -3..2."""
         r = self.SIZE // 2
-        if r == 0:
+        return self.x - r, self.y - r
+
+    def centre(self):
+        """Footprint centre in tile units (floats)."""
+        ox, oy = self.origin()
+        return ox + self.SIZE / 2, oy + self.SIZE / 2
+
+    def tiles(self):
+        if self.SIZE == 1:
             return [(self.x, self.y)]
-        return [(self.x + dx, self.y + dy)
-                for dy in range(-r, r + 1) for dx in range(-r, r + 1)]
+        ox, oy = self.origin()
+        return [(ox + dx, oy + dy) for dy in range(self.SIZE) for dx in range(self.SIZE)]
 
     def front_tile(self):
         dx, dy = DIR_VEC[self.direction]
@@ -151,7 +162,7 @@ class Belt(Structure):
     `entry` is the relative side (BACK/LEFT/RIGHT) the item came in through;
     render-only (the item is drawn entering from that edge), never read by
     the sim."""
-    __slots__ = ("items", "feeders", "in_sides", "outputs", "out_sides", "rr")
+    __slots__ = ("items", "feeders", "in_sides", "outputs", "out_sides", "rr", "split")
     KIND = "belt"
     HAS_OUTPUT = True
     SIDE_ROLES = (ROLE_OUT, ROLE_IN, ROLE_IN, ROLE_IN)
@@ -164,6 +175,7 @@ class Belt(Structure):
         self.outputs = []      # [(structure, rel, world_dir), ...] rebuilt with links
         self.out_sides = 0     # bitmask of WORLD sides items leave through (render shapes)
         self.rr = 0            # round-robin cursor over outputs (saved: keeps splits deterministic)
+        self.split = False     # [T]: forced T-junction, branches into side belts even if they have their own feed
 
     @property
     def speed(self):
@@ -230,6 +242,8 @@ class Belt(Structure):
         d["items"] = [list(it) for it in self.items]
         if self.rr:
             d["rr"] = self.rr
+        if self.split:
+            d["split"] = True
         return d
 
     def _load_extra(self, d):
@@ -237,6 +251,7 @@ class Belt(Structure):
         self.items = [[int(it[0]), float(it[1]), int(it[2]) if len(it) > 2 else BACK]
                       for it in d.get("items", [])]
         self.rr = int(d.get("rr", 0))
+        self.split = bool(d.get("split", False))
 
 
 class Miner(Structure):
@@ -395,10 +410,11 @@ class Divider(MathMachine):
 
 
 class Hub(Structure):
-    """3x3, anchored at its centre. Everything delivered is income."""
+    """6x6 (John), anchored at (x, y) with the footprint spanning -3..2
+    around it. Everything delivered is income."""
     __slots__ = ()
     KIND = "hub"
-    SIZE = 3
+    SIZE = 6
     SIDE_ROLES = (ROLE_IN, ROLE_IN, ROLE_IN, ROLE_IN)
 
     def accept(self, value, rel, overshoot, factory):
@@ -535,11 +551,12 @@ class Spawner(Structure):
             fx, fy = self.front_tile()
             dx, dy = DIR_VEC[self.direction]
             return (fx + 0.5 + dx, fy + 0.5 + dy)
-        dx, dy = self.x - hub.x, self.y - hub.y
-        r = GATHER_HUB_OFFSET
+        hx, hy = hub.centre()
+        dx, dy = self.x + 0.5 - hx, self.y + 0.5 - hy
+        r = hub.SIZE / 2 + GATHER_HUB_GAP                 # clear of the HQ edge by the gap
         if abs(dx) >= abs(dy):
-            return (hub.x + (r if dx >= 0 else -r) + 0.5, hub.y + 0.5)
-        return (hub.x + 0.5, hub.y + (r if dy >= 0 else -r) + 0.5)
+            return (math.floor(hx + (r if dx >= 0 else -r)) + 0.5, math.floor(hy) + 0.5)
+        return (math.floor(hx) + 0.5, math.floor(hy + (r if dy >= 0 else -r)) + 0.5)
 
     def tick(self, factory):
         if self.timer > 0:

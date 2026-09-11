@@ -241,7 +241,7 @@ class Hud:
         if s is not None:
             info += f"   {DISPLAY_NAMES.get(s.KIND, s.KIND)}  Lv {s.level}  fed {numbers.fmt(s.invested)}  hp {numbers.fmt(s.hp)}/{numbers.fmt(s.max_hp)}"
             if isinstance(s, Belt):
-                info += f"  speed {s.speed * 20:.2f} t/s  items {len(s.items)}"
+                info += f"  speed {s.speed * 20:.2f} t/s  items {len(s.items)}  [T] split {'FORCED' if s.split else 'auto'}"
             elif isinstance(s, Miner):
                 info += f"  every {s.period / 20:.2f}s"
             elif isinstance(s, MathMachine):
@@ -284,7 +284,8 @@ class Hud:
         blit(numbers.text(f"hp {numbers.fmt(s.hp)} / {numbers.fmt(s.max_hp)}", 13), (bx + 4, by - 1))
         # rate line
         if isinstance(s, Belt):
-            rate = f"speed {s.speed:.4f} tiles/tick  ({s.speed * TICK_RATE:.2f} tiles/s)   items {len(s.items)}"
+            rate = (f"speed {s.speed * TICK_RATE:.2f} tiles/s   items {len(s.items)}   "
+                    f"[T] T-junction {'FORCED' if s.split else 'auto'}")
         elif isinstance(s, Miner):
             rate = f"mines a {s.value} every {s.period} ticks ({s.period / TICK_RATE:.2f} s) out of every side"
         elif isinstance(s, MathMachine):
@@ -296,7 +297,7 @@ class Hud:
                 rate = f"range {s.range}   NO AMMO: run a belt or a miner into any side"
         elif isinstance(s, Spawner):
             nxt = f"next in {s.timer / TICK_RATE:.1f} s" if s.queue else f"{s.period / TICK_RATE:.0f} s per unit"
-            rate = f"[click] train {s.UNIT} for {s.unit_cost}   queue {s.queue}   {nxt}"
+            rate = f"[click] or [C] train {s.UNIT} for {s.unit_cost}   queue {s.queue}   {nxt}"
         elif isinstance(s, Hub):
             rate = "everything delivered here is income"
         else:
@@ -363,7 +364,7 @@ class Hud:
         blit(numbers.text(f"[U] upgrade all for {numbers.fmt(up)}   [H] repair all for {numbers.fmt(rep)}", 13, (255, 230, 120)),
              (x0 + 10, y0 + 74))
         n_sp = sum(1 for s in group if isinstance(s, Spawner))
-        rally = f"[RMB] gather point for {n_sp} spawner{'s' if n_sp > 1 else ''}   " if n_sp else ""
+        rally = f"[C] queue a unit at each of {n_sp} spawner{'s' if n_sp > 1 else ''}   [RMB] gather point   " if n_sp else ""
         blit(numbers.text(f"{rally}[Shift+drag] add more   [Esc] deselect", 12, (170, 190, 170)), (x0 + 10, y0 + 96))
 
     MINI_W, MINI_H, MINI_TILES = 440, 300, 128      # panel px (2x, John) and tiles shown across
@@ -439,6 +440,7 @@ class Hud:
         "LMB place; belts: hold and drag = preview, release to build; Shift = straight run + square corner; R while",
         "dragging turns every belt (twice = the line runs backwards); drag back to undo.   R rotate   Q pick tool",
         "Drag off the MIDDLE of a line to branch it (T-junction); from its END the last belt turns; backwards reverses.",
+        "T on a belt = forced T-junction: it splits into every side belt pointing away, even one with its own feed.",
         "X = demolish tool: click or drag over buildings (50% refund), X or Esc to stop.   Del = remove the hovered one",
         "click = select (panel on the right); drag a box = select many (U upgrades / H repairs them all)   RMB = cancel",
         "wheel zoom   MMB drag / WASD pan (Shift fast)   Space pause   [ ] sim speed x1 x2 x4   F3 debug   F11 fullscreen",
@@ -446,9 +448,9 @@ class Hud:
         "Machines: every side but the front is an input (left = A, right = B, back = the emptier one); output in front.",
         "HQ: deliver from any side = income.  Feed sides (yellow) level belts/walls/spawners; U levels anything.",
         "Towers (range 10): run a belt or put a miner beside one, any side; it fires those numbers. Red frame = no ammo.",
-        "Spawners: click one to train a unit (costs balance); units walk to its gather point beside the HQ.",
-        "Units: click or drag a box to select (Shift adds), RMB moves them in a grid; RMB with spawners selected (one or a",
-        "boxed group) = their gather point; their idle units regroup there.",
+        "Spawners: click one (or press C with one or a boxed group selected) to train a unit (costs balance); new units",
+        "walk to its gather point beside the HQ. RMB with spawners selected = gather point for units trained from then on.",
+        "Units: click or drag a box to select (Shift adds), RMB moves them in a grid. Attackers each take their own tile.",
         "Targets: deliver the shown amount of that number for the bonus; the slot then levels up (bigger number and amount).",
         "Waves come from the red edge arrow. HQ destroyed = game over.",
         "An enemy camp always sits about 100 tiles from the HQ (dark-red edge arrow, minimap): it is quiet until you",

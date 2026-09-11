@@ -72,6 +72,9 @@ tests must keep their tiles clear of the right column (x >= 932 px) and the mini
 ## Load-bearing decisions (do not re-litigate casually; rationale in PLAN.md)
 1. Structures live in `Factory.structures[(tx,ty)]` (+ `by_chunk` index for rendering), never in terrain chunks. Terrain
    unloads freely; the factory always simulates (verified: a line 40 chunks away ran while its chunk was unloaded).
+   Footprints: `origin()` = anchor - SIZE//2, `tiles()` = origin + range(SIZE)^2, `centre()` = origin + SIZE/2. The HQ is
+   6x6 (John, round 12): anchor (0,0), tiles -3..2, SPAWN_CLEAR_RADIUS 4 keeps a deposit-free ring; older saves drop
+   anything the bigger HQ covers (`Factory._drop_hub_overlaps`). Default gather point = HQ edge + GATHER_HUB_GAP (2).
 2. Fixed timestep 20 ticks/s; render 60 fps; MAX_TICKS_PER_FRAME = 4, leftover time dropped.
 3. Deterministic sim: belts update downstream-first (`belts_ordered`, rebuilt only when `dirty_links`), typed lists sorted
    by (y, x), no free-running RNG anywhere (targets/waves/raids are string-seeded by ordinal). Acid test in
@@ -85,8 +88,10 @@ tests must keep their tiles clear of the right column (x >= 932 px) and the mini
    Miners (John, 2026-09-11) push into every adjacent cargo input, never into feed sides, no facing. Belt outputs = the front
    target plus, for a STRAIGHT (back-fed) belt only, belts beside it that point straight away and have no cargo source of
    their own; items alternate evenly over outputs (implicit splitter; `rr` cursor saved). Corners/merges never branch and
-   a belt already fed by its own line is never stolen as a branch (John, round 3: parallel lines stay separate). Only
-   miners may be built on number tiles. Belt sprites are shape-aware (in_sides | out_sides -> straight/corner/T/cross).
+   a belt already fed by its own line is never stolen as a branch (John, round 3: parallel lines stay separate) — UNLESS
+   the junction belt has `split` set ([T] key, saved): then it branches into every side belt pointing away, even a fed
+   one (John, round 12: a split feeding a merge = two T-junctions; the auto rule cannot tell that layout from the
+   parallel-lines one, so the player decides per belt). Only miners may be built on number tiles. Belt sprites are shape-aware (in_sides | out_sides -> straight/corner/T/cross).
    Belt items are `[value, progress, entry_rel]`; the third field is render-only (corner animation) and the sim never
    reads it; old two-field saves load as BACK.
 5. Leveling: level n -> n+1 costs 100 * 1.25^(n-1) fed (100, 125, 156, 196, 244...), thresholds are the running sum
@@ -101,8 +106,15 @@ tests must keep their tiles clear of the right column (x >= 932 px) and the mini
    (UNIT_COSTS 50/50/150, SPAWNER_QUEUE_MAX 9), one unit walks out per period (timer keeps counting while idle, so the
    first click after a pause trains at once). Units take grid slots: `Combat.slot_near` / `gather` spiral tile centres out
    from the gather point, skipping structure tiles and other units' slots (one unit per tile, compact grid); default gather
-   point = GATHER_HUB_OFFSET (3) tiles from the hub centre on the spawner's side; units walk along grid lines (row/column,
-   larger axis first, re-centre only to turn), when chasing enemies and nests too (John, round 6).
+   point = HQ edge + GATHER_HUB_GAP on the spawner's side; units walk along grid lines (row/column, larger axis first,
+   re-centre only to turn), when chasing enemies and nests too (John, round 6). Setting a spawner's gather point (RMB,
+   one or a boxed group) affects only units trained from then on (John, round 12); [C] queues one unit at the selected
+   spawner or at every spawner in the group. Attack posts (round 12, no stacking): `Combat.claim_post` gives every
+   attacker its own tile within range of its victim (a unit's position, or a structure's tiles plus the tiles of
+   structures touching it so a crowd fans out along a wall), free of structures and other attackers, reachable in a
+   straight line (`_clear_line`, so enemies never slip through a wall), at most POST_MAX_SHIFT (3) from where it stands;
+   player units walk to it along the grid (`_engage`), enemies shuffle to it (`_hold_post`). Melee ranges are 1.5 so
+   the 8 tiles around a target all count. `_posts` is rebuilt every tick from live units (uid order: deterministic).
    Hub alert: `Factory.hub_hit_tick` / `hub_under_attack()` (HUB_ALERT_S = 3 s after a hub hit) drives a pulsing red
    double frame around the hub (render/structures.draw_hub_alert) and a red screen frame + "HUB UNDER ATTACK" (hud). Player units are saved in meta
    `wave.units` (uid, kind, pos, hp, level, owner spawner, slot); enemies still disperse on reload.

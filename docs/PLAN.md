@@ -144,7 +144,9 @@ class Spawner(Structure):   # kind: 'ranged'|'melee'|'heavy'; spawns Units on a 
 ```
 
 Multi-tile handling: `Factory.structures` maps **every occupied tile** to the object; the
-object stores its anchor. Only Hub is multi-tile (3×3).
+object stores its anchor; `origin()` = anchor − SIZE//2, `tiles()` = origin + range(SIZE)²,
+`centre()` = origin + SIZE/2 (works for even sizes). Only Hub is multi-tile: 6×6 spanning
+−3..2 around its anchor (John, 2026-09-11; was 3×3).
 
 ### 2.3 Factory and the tick (`sim/factory.py`)
 
@@ -430,8 +432,9 @@ pause/speed controls, balance pass.
 7. **Fixed-timestep death spiral**: cap 4 ticks/frame, drop the remainder.
 8. **Generator purity**: gameplay never writes terrain (nest death via registry) or saves
    and regeneration diverge.
-9. **Multi-tile hub**: all 9 tiles map to the Hub, removed together; belt `next` resolution
-   accepts any hub tile.
+9. **Multi-tile hub**: all 36 tiles map to the Hub, removed together; belt `next` resolution
+   accepts any hub tile. Saves from the 3×3 days: `Factory._drop_hub_overlaps` removes anything
+   the bigger HQ now covers.
 10. **Huge numbers**: abbreviation from day one; consider scientific display > 1e12.
 11. **hp vs invested**: hp and max_hp move only on level-ups (John dropped the original
     "feeding heals" coupling on 2026-09-11); repair is the only heal. Test that a level-up

@@ -56,6 +56,14 @@ _Last updated: 2026-09-11 (v6) by Claude_
   2x (440x300, 128 tiles across, click to recentre), toolbar centred left of the minimap, off-screen arrows drawn by
   the HUD on top of panels (the camp arrow was hidden under the old minimap), `over_ui` covers every panel. Tower ammo
   buffer 20 + 10 per level (`Tower.ammo_max`), panel shows ammo n/max. Tests adjusted for the new UI rects.
+- Round 12 (same evening): (1) HQ 6x6 - footprints generalised (origin/tiles/centre for even sizes), tiles -3..2,
+  SPAWN_CLEAR_RADIUS 4, camera/home/gather use hub.centre(), old saves drop covered structures, hub.png now 192x192.
+  (2) [T] on a belt = forced T-junction (`Belt.split`, saved): splits into side belts pointing away even if fed - John's
+  up-line + south-fed corner layout (two T's) is impossible under the auto rule, which cannot be told apart from the
+  parallel-lines case he did not want. (3) Attack posts: attackers on both sides claim distinct tiles around their
+  victim (`claim_post` / `_engage` / `_hold_post`, line-of-sight so enemies never cross a wall, crowds fan out along a
+  wall line via `_structure_points`); melee ranges 1.5. (4) [C] queues a unit at the selected spawner or every spawner
+  in a boxed group; RMB gather points no longer move units already out. Tests 126 -> 128.
 
 
 ## v5 (2026-09-11, afternoon): John's third round of play-test feedback, all implemented

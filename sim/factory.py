@@ -327,16 +327,18 @@ class Factory:
         # their own. A belt that merely starts beside a line is a branch (that
         # is how T-junctions are made); the corner of a parallel line, or the
         # old tail left beside a turned belt, is not (John, 2026-09-11).
+        # A belt with `split` set ([T]) branches into EVERY side belt pointing away,
+        # even one with its own feed (John: a split into a merge = two T-junctions).
         for b in self.belts:
             outs = []
             if b.next is not None:
                 outs.append((b.next, b.next_rel, b.direction))
-            if id(b) not in side_fed:
+            if b.split or id(b) not in side_fed:
                 for rel in (LEFT, RIGHT):
                     d = (b.direction + rel) % 4
                     dx, dy = DIR_VEC[d]
                     nb = structures.get((b.x + dx, b.y + dy))
-                    if isinstance(nb, Belt) and nb.direction == d and id(nb) not in pushed:
+                    if isinstance(nb, Belt) and nb.direction == d and (b.split or id(nb) not in pushed):
                         outs.append((nb, BACK, d))
             b.outputs = outs
             b.feeders = []
@@ -426,4 +428,25 @@ class Factory:
             economy.top_up(seed, f.targets, TARGET_COUNT)      # older saves carried fewer slots
         f.stats.update(d.get("stats", {}))
         load_structure_records(f, d.get("structures", {}))
+        f._drop_hub_overlaps()
         return f
+
+    def _drop_hub_overlaps(self):
+        """Saves from before the 6x6 HQ may hold structures on tiles the HQ
+        now covers: drop them and give the HQ its tiles back."""
+        hub = self.hub
+        if hub is None:
+            return
+        hub_tiles = set(hub.tiles())
+        for s in list(self.all_structures()):
+            if s is not hub and any(t in hub_tiles for t in s.tiles()):
+                self._unregister(s)
+        for t in hub_tiles:
+            self.structures[t] = hub
+        self.dirty_links = True
+
+    def toggle_split(self, b):
+        """[T]: flip a belt's forced T-junction flag (links rebuild)."""
+        b.split = not b.split
+        self.dirty_links = True
+        return b.split

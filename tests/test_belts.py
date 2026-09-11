@@ -355,3 +355,30 @@ def test_parallel_line_corner_does_not_split_its_neighbour():
     f.place("belt", 2, -1, N, free=True)
     f.rebuild_links()
     assert [o[2] for o in top[2].outputs] == [E, N]
+
+
+def test_forced_t_junction_splits_into_a_belt_with_its_own_feed():
+    """John's layout: an up line at x=-12; (-11,1) comes up into the corner
+    (-11,0) which turns east. By default the corner keeps its own feed and
+    the line does not split; [T] on (-12,0) forces the split: two T's."""
+    f = factory()
+    for y in range(3, -3, -1):
+        f.place("belt", -12, y, N, free=True)
+    f.place("belt", -11, 1, N, free=True)
+    corner = f.place("belt", -11, 0, E, free=True)
+    f.place("belt", -10, 0, E, free=True)
+    f.rebuild_links()
+    j = f.structure_at(-12, 0)
+    assert [o[2] for o in j.outputs] == [N]                  # auto rule: no split
+    assert f.toggle_split(j) is True
+    f.rebuild_links()
+    assert [o[2] for o in j.outputs] == [N, E]               # forced: split into the corner
+    assert corner.in_sides == (1 << W) | (1 << S)            # the corner is a merge T now
+    assert j.out_sides == (1 << N) | (1 << E)                # and the junction a split T
+    from sim.structures import Belt
+    d = j.to_dict()
+    assert d["split"] is True and Belt.from_dict(d).split
+    assert "split" not in corner.to_dict()
+    f.toggle_split(j)
+    f.rebuild_links()
+    assert [o[2] for o in j.outputs] == [N]

@@ -253,7 +253,7 @@ def test_box_select_structures_upgrade_and_repair_all(game):
     f = game.factory
     walls = [f.place("wall", x, 2, 0, free=True) for x in (3, 4, 5)]
     f.balance = 250
-    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (2, 1), dx=4, dy=4)
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (3, 1), dx=4, dy=4)     # box clear of the 6x6 HQ (x <= 2)
     _mouse(game, pygame.MOUSEMOTION, 1, (6, 3), dx=20, dy=20)
     _mouse(game, pygame.MOUSEBUTTONUP, 1, (6, 3), dx=20, dy=20)
     assert game.selected_structures == walls and game.selected is None
@@ -269,7 +269,7 @@ def test_box_select_structures_upgrade_and_repair_all(game):
     game.update(1 / 60)
     assert game.selected_structures == [walls[0], walls[2]]   # demolished one dropped
     # a box around a single structure selects it for the panel
-    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (2, 1), dx=4, dy=4)
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (3, 1), dx=4, dy=4)
     _mouse(game, pygame.MOUSEBUTTONUP, 1, (3, 3), dx=20, dy=20)
     assert game.selected is walls[0] and game.selected_structures == []
 
@@ -332,24 +332,24 @@ def test_drag_off_the_middle_of_a_line_makes_a_t_not_a_corner(game):
     f = game.factory
     f.terrain = None
     f.balance = 1000
-    line = [f.place("belt", x, -2, E, free=True) for x in range(2, 7)]
+    line = [f.place("belt", x, -2, E, free=True) for x in range(3, 8)]   # clear of the 6x6 HQ (x <= 2)
     game.set_tool("belt")
     game.build_dir = E
-    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (4, -2))           # start ON the middle belt...
-    _mouse(game, pygame.MOUSEMOTION, 1, (4, -3))               # ...and drag up one tile
-    _mouse(game, pygame.MOUSEBUTTONUP, 1, (4, -3))
-    mid, branch = f.structure_at(4, -2), f.structure_at(4, -3)
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (5, -2))           # start ON the middle belt...
+    _mouse(game, pygame.MOUSEMOTION, 1, (5, -3))               # ...and drag up one tile
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (5, -3))
+    mid, branch = f.structure_at(5, -2), f.structure_at(5, -3)
     assert mid is line[2] and mid.direction == E               # the line keeps flowing
     assert branch.direction == N
     game.update(1 / 60)                                        # links rebuild
     assert [o[2] for o in mid.outputs] == [E, N]               # T: straight on + the new branch
-    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (6, -2))           # from the END the last belt turns
-    _mouse(game, pygame.MOUSEMOTION, 1, (6, 0))
-    _mouse(game, pygame.MOUSEBUTTONUP, 1, (6, 0))
-    assert line[4].direction == S and f.structure_at(6, -1).direction == S
-    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (3, -2))           # backwards over the line: reversed
-    _mouse(game, pygame.MOUSEMOTION, 1, (2, -2))
-    _mouse(game, pygame.MOUSEBUTTONUP, 1, (2, -2))
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (7, -2))           # from the END the last belt turns
+    _mouse(game, pygame.MOUSEMOTION, 1, (7, 0))
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (7, 0))
+    assert line[4].direction == S and f.structure_at(7, -1).direction == S
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (4, -2))           # backwards over the line: reversed
+    _mouse(game, pygame.MOUSEMOTION, 1, (3, -2))
+    _mouse(game, pygame.MOUSEBUTTONUP, 1, (3, -2))
     assert line[1].direction == W and line[0].direction == W
 
 
@@ -361,13 +361,19 @@ def test_right_click_sets_gather_point_for_a_boxed_group_of_spawners(game):
     b = f.place("spawner_ranged", 5, 2, 2, free=True)
     ua = game.combat.spawn_unit("melee", 3.5, 7.5, owner=a, rally=(3.5, 7.5))     # outside the box
     ub = game.combat.spawn_unit("ranged", 5.5, 7.5, owner=b, rally=(5.5, 7.5))
-    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (2, 1), dx=4, dy=4)   # box both spawners
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (3, 1), dx=4, dy=4)   # box both spawners (clear of the HQ)
     _mouse(game, pygame.MOUSEMOTION, 1, (6, 2), dx=20, dy=20)
     _mouse(game, pygame.MOUSEBUTTONUP, 1, (6, 2), dx=20, dy=20)
     assert game.selected_structures == [a, b] and game.selected_units == []
     frames(game, 1)                                                # flags for both draw
     _mouse(game, pygame.MOUSEBUTTONDOWN, 3, (9, 6))
     assert a.rally == b.rally == (9.5, 6.5)
-    assert ua.rally != ub.rally                                    # their units regroup there, one tile each
-    assert all(abs(u.rally[0] - 9.5) <= 1 and abs(u.rally[1] - 6.5) <= 1 for u in (ua, ub))
+    assert ua.rally == (3.5, 7.5) and ub.rally == (5.5, 7.5)        # units already out stay put (John)
     assert game.selected_structures == [a, b]                      # the group stays selected
+    game.factory.balance = 1000
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_c, mod=0, unicode="c"))
+    assert a.queue == 1 and b.queue == 1                           # [C] queues one at every selected spawner
+    game.selected_structures = []
+    game.selected = a
+    game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_c, mod=0, unicode="c"))
+    assert a.queue == 2 and b.queue == 1

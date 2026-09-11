@@ -46,14 +46,14 @@ def test_hub_delivery_credits_face_value_via_any_hub_tile():
     f = Factory(seed=1, balance=0)
     for t in f.targets:
         t.value = 10 ** 9            # keep bonuses out of this test
-    f.create_hub(0, 0)
+    f.create_hub(0, 0)                                    # 6x6: tiles -3..2
     # belt pointing at a hub corner tile from the north-east
-    b = f.place("belt", 1, -2, S, free=True)
+    b = f.place("belt", 2, -4, S, free=True)
     b.items.append([7, 0.99])
     f.tick()
     assert f.balance == 7 and not b.items and f.stats["delivered"] == 7
     # miner straight into the hub's west edge
-    m = f.place("miner", -2, 1, E, free=True, value=9)
+    m = f.place("miner", -4, 1, E, free=True, value=9)
     for _ in range(41):
         f.tick()
     assert f.balance == 16
@@ -111,9 +111,12 @@ def test_hub_is_permanent():
     f = Factory(seed=1)
     hub = f.create_hub(0, 0)
     assert f.remove(1, 1) is None and f.rotate(0, 0) is None
-    assert f.structure_at(-1, -1) is hub and f.structure_at(1, 1) is hub
-    assert len([k for k, v in f.structures.items() if v is hub]) == 9
+    assert f.structure_at(-3, -3) is hub and f.structure_at(2, 2) is hub
+    assert f.structure_at(3, 0) is None and f.structure_at(-4, 0) is None
+    assert len([k for k, v in f.structures.items() if v is hub]) == 36      # 6x6 (John)
+    assert hub.origin() == (-3, -3) and hub.centre() == (0.0, 0.0)
     assert f.can_place("belt", 0, 0, E) == (False, "occupied")
+    assert f.can_place("belt", 2, -3, E) == (False, "occupied")
 
 
 def test_factory_roundtrip_preserves_economy_state():

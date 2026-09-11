@@ -49,7 +49,8 @@ class Game:
         self.autosave_s = AUTOSAVE_S
         self.autosave_t = 0.0
         w, h = screen.get_size()
-        self.camera = Camera(w, h, x=TILE_SIZE / 2, y=TILE_SIZE / 2)   # hub centre
+        hx, hy = self.factory.hub.centre() if self.factory.hub is not None else (0.5, 0.5)
+        self.camera = Camera(w, h, x=hx * TILE_SIZE, y=hy * TILE_SIZE)   # HQ centre
         cam = (meta or {}).get("camera")
         if cam:
             self.camera.x, self.camera.y = float(cam[0]), float(cam[1])
@@ -236,6 +237,10 @@ class Game:
             self.repair()
         elif key == pygame.K_u:
             self.upgrade()
+        elif key == pygame.K_t:
+            self.toggle_split()
+        elif key == pygame.K_c:
+            self.train_selected()
         elif key == pygame.K_HOME:
             self.go_home()
         elif key == pygame.K_SPACE:
@@ -404,18 +409,38 @@ class Game:
             self.combat.gather(live, gx, gy)
             self.hud.message(f"Moving {len(live)} unit{'s' if len(live) > 1 else ''}", 1.0)
         elif spawners:
-            # one gather point for every selected spawner; their idle units regroup there
+            # one gather point for every selected spawner; only units trained from
+            # now on use it (John: units already out stay where they are)
             point = (math.floor(gx) + 0.5, math.floor(gy) + 0.5)
-            ids = {id(s) for s in spawners}
             for sp in spawners:
                 sp.rally = point
-            self.combat.gather([u for u in self.combat.units if id(u.owner) in ids], *point)
             n = len(spawners)
-            self.hud.message("Gather point set" if n == 1 else f"Gather point set for {n} spawners", 1.2)
+            self.hud.message(("Gather point set" if n == 1 else f"Gather point set for {n} spawners")
+                             + " (for new units)", 1.5)
         else:
             self.selected = None
             self.selected_units = []
             self.selected_structures = []
+
+    def train_selected(self):
+        """[C]: queue one unit at the selected spawner, or at every spawner of
+        the drag-box selection (John)."""
+        spawners = [s for s in self._group() if isinstance(s, Spawner)]
+        if not spawners and isinstance(self.selected, Spawner):
+            spawners = [self.selected]
+        if not spawners:
+            self.hud.message("[C] queues units: select a spawner (or box several) first", 1.5)
+            return 0
+        queued, err = 0, None
+        for sp in spawners:
+            e = sp.enqueue(self.factory)
+            if e:
+                err = e
+            else:
+                queued += 1
+        msg = f"Queued {queued} unit{'s' if queued != 1 else ''}" + (f"   ({err})" if err else "")
+        self.hud.message(msg, 1.5)
+        return queued
 
     def train(self, sp):
         """Queue one unit at a spawner (pays its unit cost)."""
@@ -543,9 +568,29 @@ class Game:
     def go_home(self):
         """Centre the camera on the hub."""
         hub = self.factory.hub
-        cx, cy = (hub.x, hub.y) if hub is not None else (0, 0)
-        self.camera.x = (cx + 0.5) * TILE_SIZE
-        self.camera.y = (cy + 0.5) * TILE_SIZE
+        cx, cy = hub.centre() if hub is not None else (0.5, 0.5)
+        self.camera.x = cx * TILE_SIZE
+        self.camera.y = cy * TILE_SIZE
+
+    def toggle_split(self):
+        """[T]: force (or release) a T-junction on the selected / hovered
+        belt(s): a forced belt branches into every side belt pointing away,
+        even one that already has its own feed."""
+        belts = [s for s in self._group() if isinstance(s, Belt)]
+        if not belts:
+            target = self.selected or self.factory.structure_at(*self.hover_tile)
+            if isinstance(target, Belt):
+                belts = [target]
+        if not belts:
+            self.hud.message("[T] works on belts: hover or select one", 1.5)
+            return 0
+        state = not belts[0].split
+        for b in belts:
+            b.split = state
+        self.factory.dirty_links = True
+        n = len(belts)
+        self.hud.message(f"T-junction {'forced' if state else 'released'} on {n} belt{'s' if n > 1 else ''}", 1.5)
+        return n
 
     def _group(self):
         """Live structures of the drag-box selection."""

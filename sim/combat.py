@@ -20,13 +20,14 @@ from settings import (TICK_RATE, UNIT_STATS, ENEMY_STATS, WAVE_FIRST_S, WAVE_INT
                       WAVE_BUDGET_GROWTH, WAVE_SPAWN_MARGIN, WAVE_MIN_RADIUS, WAVE_MIX,
                       UNIT_AGGRO_TILES, UNIT_LEVEL_MULT, ENEMY_ATTACK_RANGE, FLOW_REFRESH_TICKS,
                       NEST_AGGRO_TILES, NEST_RAID_PERIOD_S, NEST_RAID_SIZE, NEST_BOUNTY,
-                      NEST_REGION, CHUNK_SIZE, GATHER_MAX_RING)
+                      NEST_REGION, CHUNK_SIZE, GATHER_MAX_RING, POST_MAX_SHIFT)
 from sim.pathing import FlowField, greedy_step, dist_to_tiles
 from sim import nests as nestmod
 from sim.structures import Structure, Spawner
 
 ENEMY, PLAYER = 0, 1
 BEAM_TTL = 6
+NEIGHBOURS4 = ((0, -1), (1, 0), (0, 1), (-1, 0))
 NEST_SCAN_TICKS = 100
 NEST_FIRST_RAID_S = 10
 RETARGET_RADIUS = 40
@@ -35,7 +36,7 @@ RETARGET_RADIUS = 40
 class Unit:
     __slots__ = ("uid", "side", "kind", "x", "y", "hp", "max_hp", "speed", "range", "dmg",
                  "period", "timer", "shot", "shot_dmg", "shot_range", "target", "goal", "rally",
-                 "level", "owner", "dead")
+                 "level", "owner", "dead", "post")
 
     def __init__(self, uid, side, kind, x, y, stats, mult=1.0, level=1, owner=None):
         self.uid = uid
@@ -60,6 +61,7 @@ class Unit:
         self.level = level
         self.owner = owner                     # spawner (player units)
         self.dead = False
+        self.post = None                       # (tx, ty) tile claimed while attacking (no stacking)
 
     def tile(self):
         return math.floor(self.x), math.floor(self.y)
@@ -137,6 +139,7 @@ class Combat:
         self.known_nests = {}                  # (rx, ry) -> NestSpec near the base (alive)
         self.stats = {"kills": 0, "losses": 0, "waves": 0, "shot_cost": 0, "raids": 0}
         self._last_scan = -NEST_SCAN_TICKS
+        self._posts = {}                       # (tx, ty) -> uid of the attacker standing there
         if units:
             self._load_units(units)
         if wave and "next_uid" in wave:
@@ -236,6 +239,69 @@ class Combat:
     def unit_at(self, x, y, radius=0.6):
         """Nearest live player unit within radius tiles of a point, or None."""
         return self.nearest_unit(x, y, radius)
+
+    # ---- attack posts (attackers never stack) ---------------------------------------
+
+    @staticmethod
+    def _clear_line(x0, y0, x1, y1, blocked):
+        """True when no structure tile lies on the straight walk from one
+        point to the other (sampled every half tile)."""
+        if blocked is None:
+            return True
+        d = math.hypot(x1 - x0, y1 - y0)
+        n = max(1, int(d / 0.5))
+        for i in range(1, n + 1):
+            t = i / n
+            if (math.floor(x0 + (x1 - x0) * t), math.floor(y0 + (y1 - y0) * t)) in blocked:
+                return False
+        return True
+
+    def release_post(self, u):
+        if u.post is not None:
+            if self._posts.get(u.post) == u.uid:
+                del self._posts[u.post]
+            u.post = None
+
+    def claim_post(self, u, points, radius, blocked=None):
+        """A tile for u to fight from: within `radius` of one of the target's
+        points (tile centres / a unit's position), free of structures and of
+        other attackers, reachable in a straight line, at most POST_MAX_SHIFT
+        from where u stands; the nearest such tile (ties by (y, x)). Keeps
+        the current post while it still qualifies. None when nothing fits."""
+        cur = u.post
+        if cur is not None and self._posts.get(cur) == u.uid:
+            cx, cy = cur[0] + 0.5, cur[1] + 0.5
+            if any(math.hypot(cx - px, cy - py) <= radius for px, py in points):
+                return cur
+        self.release_post(u)
+        rr = int(math.ceil(radius))
+        best, best_key = None, None
+        seen = {(math.floor(px), math.floor(py)) for px, py in points}   # never stand on the victim
+        for px, py in points:
+            tx, ty = math.floor(px), math.floor(py)
+            for ny in range(ty - rr, ty + rr + 1):
+                for nx in range(tx - rr, tx + rr + 1):
+                    if (nx, ny) in seen:
+                        continue
+                    seen.add((nx, ny))
+                    if (nx, ny) in self._posts or (blocked is not None and (nx, ny) in blocked):
+                        continue
+                    cx, cy = nx + 0.5, ny + 0.5
+                    if not any(math.hypot(cx - qx, cy - qy) <= radius for qx, qy in points):
+                        continue
+                    shift = math.hypot(cx - u.x, cy - u.y)
+                    if shift > POST_MAX_SHIFT:
+                        continue
+                    key = (shift, ny, nx)
+                    if (best_key is None or key < best_key) and self._clear_line(u.x, u.y, cx, cy, blocked):
+                        best, best_key = (nx, ny), key
+        if best is not None:
+            self._posts[best] = u.uid
+            u.post = best
+        return best
+
+    def _at_post(self, u):
+        return u.post is not None and u.x == u.post[0] + 0.5 and u.y == u.post[1] + 0.5
 
     # ---- queries ------------------------------------------------------------------
 
@@ -387,6 +453,7 @@ class Combat:
                 (f.dirty_flowfield and t - self.flow.built_tick >= FLOW_REFRESH_TICKS)):
             self.flow.build(f, t)
             f.dirty_flowfield = False
+        self._posts = {u.post: u.uid for u in self.units + self.enemies if not u.dead and u.post is not None}
         for u in self.units:
             if not u.dead:
                 self._unit_ai(u)
@@ -537,30 +604,40 @@ class Combat:
             u.timer -= 1
         e = self.nearest_enemy(u.x, u.y, UNIT_AGGRO_TILES)
         if e is not None:
-            if u.dist_to(e.x, e.y) <= u.range:
-                self._attack(u, e)
-            else:
-                self._walk_grid(u, e.x, e.y)           # chase along the grid too
+            self._engage(u, [(e.x, e.y)], u.range, e)
             return
         spec = self.nearest_nest(u.x, u.y, UNIT_AGGRO_TILES)
         if spec is not None:
-            cx, cy = spec.tx + 0.5, spec.ty + 0.5
-            if u.dist_to(cx, cy) <= max(u.range, 1.5):
-                self._attack(u, spec)
-            else:
-                self._walk_grid(u, cx, cy)
+            self._engage(u, [(spec.tx + 0.5, spec.ty + 0.5)], max(u.range, 1.5), spec)
             return
+        self.release_post(u)
         if u.rally is not None and (u.x != u.rally[0] or u.y != u.rally[1]):
             self._walk_grid(u, *u.rally)
+
+    def _engage(self, u, points, radius, victim):
+        """Fight from a post: strike whenever the victim is in range, and walk
+        (along the grid) to a free post around it so attackers never stack.
+        With no post available, close in on the victim directly."""
+        in_range = any(u.dist_to(px, py) <= radius for px, py in points)
+        if in_range:
+            self._attack(u, victim)
+        post = self.claim_post(u, points, radius)
+        if post is not None:
+            if not self._at_post(u):
+                self._walk_grid(u, post[0] + 0.5, post[1] + 0.5)
+        elif not in_range:
+            px, py = points[0]
+            self._walk_grid(u, px, py)
 
     def _enemy_ai(self, e):
         f = self.factory
         if e.timer > 0:
             e.timer -= 1
-        # 1. a player unit in reach gets hit first
+        # 1. a player unit in reach gets hit first (from a free post around it)
         u = self.nearest_unit(e.x, e.y, e.range)
         if u is not None:
             self._attack(e, u)
+            self._hold_post(e, [(u.x, u.y)])
             return
         # 2. current structure target still standing and in reach?
         s = e.target
@@ -570,7 +647,9 @@ class Combat:
                 s = None
             elif dist_to_tiles(e.x, e.y, s.tiles()) <= e.range:
                 self._attack(e, s)
+                self._hold_post(e, self._structure_points(s))
                 return
+        self.release_post(e)
         # 3. ranged fire while advancing: the nearest unit, else the nearest
         #    structure, within shot range (free; melee still needs contact)
         if e.shot_dmg is not None and e.timer <= 0 and e.shot_range > 0:
@@ -596,6 +675,28 @@ class Combat:
         if blocker is not None:
             e.target = blocker
         self._move_toward(e, step[0] + 0.5, step[1] + 0.5)
+
+    def _hold_post(self, e, points):
+        """An attacking enemy shuffles to a free tile around its victim
+        (never through a structure) so a crowd spreads out instead of stacking."""
+        post = self.claim_post(e, points, e.range, self.factory.structures)
+        if post is not None and not self._at_post(e):
+            self._move_toward(e, post[0] + 0.5, post[1] + 0.5)
+
+    def _structure_points(self, s):
+        """Tile centres of s plus of the structures touching it, so a crowd
+        fans out along a wall line (each enemy re-targets the segment it
+        ends up next to)."""
+        structures = self.factory.structures
+        tiles = list(s.tiles())
+        own = set(tiles)
+        extra = []
+        for tx, ty in tiles:
+            for dx, dy in NEIGHBOURS4:
+                t = (tx + dx, ty + dy)
+                if t not in own and t in structures and t not in extra:
+                    extra.append(t)
+        return [(tx + 0.5, ty + 0.5) for tx, ty in tiles + extra]
 
     def _hub_step(self, tx, ty):
         step = self.flow.next_step(tx, ty) if (self.use_flow and self.flow.built) else None

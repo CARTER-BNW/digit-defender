@@ -73,7 +73,7 @@ BASE_HP = {
 
 # --- world gen ----------------------------------------------------------------
 WORLD_SEED = 1337
-SPAWN_CLEAR_RADIUS = 2              # deposit-free (2r+1)^2 clearing around the origin hub
+SPAWN_CLEAR_RADIUS = 4              # deposit-free (2r+1)^2 clearing around the origin: the 6x6 HQ (-3..2) plus a ring
 DEPOSIT_BLOB_CHANCE = 0.45          # chance a chunk holds one deposit blob (spread out; John)
 DEPOSIT_BLOB_SIZE = (3, 7)          # tiles per blob, inclusive
 DEPOSIT_DECAY_NEAR = 0.45           # digit weight = decay ** (digit - 1): the higher the digit the rarer...
@@ -105,9 +105,10 @@ SPAWNER_QUEUE_MAX = 9               # units a spawner can hold in its queue
 UNIT_COSTS = {"ranged": 50, "melee": 50, "heavy": 150}   # balance per queued unit (idea.txt)
 UNIT_LEVEL_MULT = 0.25              # unit hp/dmg * (1 + mult * (spawner level - 1))
 UNIT_AGGRO_TILES = 12               # units chase enemies this close
-GATHER_HUB_OFFSET = 3               # default gather point: this many tiles from the hub centre
+GATHER_HUB_GAP = 2                  # default gather point: this many tiles clear of the HQ edge
 GATHER_MAX_RING = 24                # formation slots spiral out at most this far
-ENEMY_ATTACK_RANGE = 1.2            # tiles (melee contact)
+POST_MAX_SHIFT = 3.0                # attackers spread to a free tile at most this far from where they stand
+ENEMY_ATTACK_RANGE = 1.5            # tiles (melee contact, diagonals included so 8 attackers fit around a tile)
 FLOW_COST_WALL = 40
 FLOW_COST_STRUCT = 15
 FLOW_MARGIN = 12                    # tiles around the structure bounding box
@@ -120,7 +121,7 @@ WAVE_MIX = {"grunt": 60, "runner": 25, "brute": 15}   # weights; brutes from wav
 # melee is free (docs/PLAN.md section 0, rule 6).
 UNIT_STATS = {
     "ranged": {"hp": 30, "speed": 0.15, "range": 6, "period": 20, "shot": 1},
-    "melee":  {"hp": 60, "speed": 0.2,  "range": 1, "period": 15, "dmg": 3},
+    "melee":  {"hp": 60, "speed": 0.2,  "range": 1.5, "period": 15, "dmg": 3},
     "heavy":  {"hp": 120, "speed": 0.1, "range": 8, "period": 40, "shot": 100},
 }
 # Enemies both shoot and melee (John): dmg = melee in contact; shot_dmg at up to
