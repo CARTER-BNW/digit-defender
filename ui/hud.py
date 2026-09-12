@@ -63,8 +63,13 @@ class Hud:
         self._alert_surf = None     # red screen frame (hub under attack), cached per size
         self.hub_button = pygame.Rect(8, 72, 120, 26)
         self.btn = BTN              # toolbar button size in use (buttons())
-        self.panel_rect = None      # the top-left structure / group panel this frame (None = none shown)
+        self.panel_rect = None      # the structure / group panel this frame (None = none shown)
         self.wave_rect = pygame.Rect(0, 0, 0, 0)
+        self.portrait = False       # h > w (a rotated phone): panels stack, the toolbar wraps, the minimap sits above it
+        self.minimap_hidden = False # a click on the minimap folds it into a "Map" button (config "minimap")
+        self.overlay_top = None     # top of the Android button rows above the toolbar (mobile touch.layout sets it)
+        self.column_bottom = 0      # bottom of the right column (balance / targets / HQ button / hints)
+        self.content_bottom = 0     # bottom of the column and the structure panel (portrait: the rest goes under)
 
     def message(self, text, ttl=2.5):
         self.messages = [m for m in self.messages if m[0] != text]
@@ -91,19 +96,26 @@ class Hud:
     # ---- layout --------------------------------------------------------------
 
     def buttons(self):
+        """Toolbar rects: one row centred left of the minimap, or two rows of
+        seven across the width on a rotated phone (portrait)."""
         w, h = self.screen.get_size()
         n = len(TOOLS)
-        avail = w - self.MINI_W - 16                  # centred in the space left of the minimap
+        portrait = h > w
+        per_row = (n + 1) // 2 if portrait else n
+        rows = -(-n // per_row)
+        avail = (w - 16) if portrait else (w - self.MINI_W - 16)   # landscape: the space left of the minimap
         want = int(round(BTN * prefs.button_scale))   # menu Settings "Button size"
-        btn = max(40, min(want, (avail - 16 - (n - 1) * GAP) // n))
+        btn = max(40, min(want, (avail - 16 - (per_row - 1) * GAP) // per_row))
         self.btn = btn
-        total = n * btn + (n - 1) * GAP
+        total = per_row * btn + (per_row - 1) * GAP
         x0 = max(8, (avail - total) // 2)
-        y0 = h - btn - 10
+        height = rows * btn + (rows - 1) * GAP
+        y0 = h - height - 10
         out = []
         for i, (kind, key) in enumerate(TOOLS):
-            out.append((pygame.Rect(x0 + i * (btn + GAP), y0, btn, btn), kind, key))
-        self.toolbar_rect = pygame.Rect(x0 - 8, y0 - 8, total + 16, btn + 16)
+            r, c = divmod(i, per_row)
+            out.append((pygame.Rect(x0 + c * (btn + GAP), y0 + r * (btn + GAP), btn, btn), kind, key))
+        self.toolbar_rect = pygame.Rect(x0 - 8, y0 - 8, total + 16, height + 16)
         return out
 
     def over_ui(self, pos):
@@ -117,16 +129,23 @@ class Hud:
         if self.hub_button.collidepoint(pos):
             game.go_home()
             return True
-        if self.minimap_rect.collidepoint(pos) and self._mini_origin is not None:
-            tx0, ty0, scale = self._mini_origin
-            game.camera.x = (tx0 + (pos[0] - self.minimap_rect.x) / scale) * TILE_SIZE
-            game.camera.y = (ty0 + (pos[1] - self.minimap_rect.y) / scale) * TILE_SIZE
+        if self.minimap_rect.collidepoint(pos):       # John: a click folds the minimap into a Map button, and back
+            self.minimap_hidden = not self.minimap_hidden
             return True
         for rect, kind, _ in self.buttons():
             if rect.collidepoint(pos):
                 game.set_tool(None if game.tool == kind else kind)
                 return True
         return self.over_ui(pos)
+
+    def minimap_recentre(self, pos, game):
+        """Right click on the minimap: look at that spot (a left click folds it)."""
+        if self.minimap_hidden or self._mini_origin is None or not self.minimap_rect.collidepoint(pos):
+            return False
+        tx0, ty0, scale = self._mini_origin
+        game.camera.x = (tx0 + (pos[0] - self.minimap_rect.x) / scale) * TILE_SIZE
+        game.camera.y = (ty0 + (pos[1] - self.minimap_rect.y) / scale) * TILE_SIZE
+        return True
 
     # ---- drawing -------------------------------------------------------------
 
@@ -135,7 +154,8 @@ class Hud:
         f = game.factory
         w, h = screen.get_size()
         p, T = self.px, self.text                     # layout px / text scaled by the text size
-        col = p(self.COL_W)
+        self.portrait = h > w
+        col = min(p(self.COL_W), w - 16)
         x = w - col - 8
         # right column, top to bottom: balance (centred), targets, HQ button, hints
         bal = pygame.Rect(x, 8, col, p(58))
@@ -167,13 +187,15 @@ class Hud:
             self._draw_hints(game, x, hb.bottom + 6, col)
         else:
             self.hints_rect = pygame.Rect(0, 0, 0, 0)
+        self.column_bottom = max(hb.bottom, self.hints_rect.bottom)
+        self._draw_toolbar(game)                      # first: in portrait the minimap sits above it
         self._draw_minimap(game)
-        self._draw_toolbar(game)
         self.panel_rect = None
         if game.selected is not None:
             self._draw_panel(game, game.selected)
         elif game.selected_structures:
             self._draw_group_panel(game)
+        self.content_bottom = max(self.column_bottom, self.panel_rect.bottom if self.panel_rect else 0)
         self._draw_wave(game)       # after the panel: big text makes the panel wide, the timer moves aside
         rcombat.draw_offscreen_indicators(screen, game.camera, game.combat)   # on top of the panels
         self._draw_hub_alert(game)
@@ -249,7 +271,8 @@ class Hud:
         lines = []
         for text in self._hint_lines(game):
             lines.extend(self._wrap(text, size, col - 16))
-        room = self.screen.get_height() - self.MINI_H - 16 - y - p(12)
+        h = self.screen.get_height()
+        room = (h // 2 if self.portrait else h - self.MINI_H - 16) - y - p(12)
         lines = lines[:room // lh] if room >= lh else []
         if not lines:                                   # big text on a small window: no room, no panel
             self.hints_rect = pygame.Rect(0, 0, 0, 0)
@@ -345,20 +368,18 @@ class Hud:
     def _draw_panel(self, game, s):
         """Selected-structure panel: level, invested, next threshold, hp,
         rate, buffers, actions. Every number comes from sim.leveling."""
-        p, T = self.px, self.text
-        ph = p(190)
-        x0, y0 = 8, 8                                   # top left (John)
-        rows = []                                       # (dy, surface); the panel grows to the widest line
+        rows = []                                       # (gap, text, size, color) | ("bar", height): see _draw_rows
         name = DISPLAY_NAMES.get(s.KIND, s.KIND)
         facing = "" if s.KIND in ("miner", "wall", "hub", "tower", "bridge") else f"  facing {'NESW'[s.direction]}"
-        rows.append((p(8), T(f"{name}  ({s.x}, {s.y}){facing}", 15)))
-        rows.append((p(28), T(f"Level {s.level}", 22, (255, 230, 120))))
+        rows.append((0, f"{name}  ({s.x}, {s.y}){facing}", 15, COLORS["text"]))
+        rows.append((2, f"Level {s.level}", 22, (255, 230, 120)))
         nxt = leveling.next_threshold(s.invested)
         if nxt is None:
             nxt_txt = "max level"
         else:
             nxt_txt = f"next at {numbers.fmt(nxt)}  ({numbers.fmt(nxt - s.invested)} to go)"
-        rows.append((p(56), T(f"fed {numbers.fmt(s.invested)}   {nxt_txt}", 14, (200, 220, 200))))
+        rows.append((2, f"fed {numbers.fmt(s.invested)}   {nxt_txt}", 14, (200, 220, 200)))
+        rows.append(("bar", 12))                        # hp bar
         # rate line
         if isinstance(s, Belt):
             rate = (f"speed {s.speed * TICK_RATE:.2f} tiles/s   items {len(s.items)}   "
@@ -385,7 +406,7 @@ class Hud:
             rate = "everything delivered here is income"
         else:
             rate = "blocks enemies; joins neighbouring walls; the number is its level"
-        rows.append((p(100), T(rate, 13, (200, 220, 200))))
+        rows.append((6, rate, 13, (200, 220, 200)))
         # actions
         missing = s.max_hp - s.hp
         repair = f"[H] repair {int(missing * REPAIR_COST_PER_HP + 0.999)}" if missing > 0 else "[H] repair (full)"
@@ -394,30 +415,62 @@ class Hud:
         refund = int(COSTS.get(s.KIND, 0) * 0.5)
         rot = "" if s.KIND in ("miner", "wall", "tower", "bridge") else "[R] rotate   "
         actions = f"{rot}[Del] demolish +{refund}   {repair}" if not isinstance(s, Hub) else "the HQ cannot be moved"
-        rows.append((p(124), T(f"{upgrade}   {actions}", 13, (255, 230, 120))))
+        rows.append((6, f"{upgrade}   {actions}", 13, (255, 230, 120)))
         if isinstance(s, Spawner):
             roles = f"alive {game.combat.count_units_of(s)}   [RMB] on the map = gather point (new and idle units)"
         else:
             roles = "sides F/R/B/L: " + " / ".join(str(r) for r in type(s).SIDE_ROLES)
-        rows.append((p(146), T(roles, 12, (170, 190, 170))))
+        rows.append((6, roles, 12, (170, 190, 170)))
         if ROLE_FEED in type(s).SIDE_ROLES:
             hint = "feed sides level it up too: belt numbers into a yellow side"
         else:
             hint = "no feed sides here: level it up with [U]"
-        rows.append((p(164), T(hint, 12, (170, 190, 170))))
-        pw = max(p(372), max(r.get_width() for _, r in rows) + 20)
-        self.panel_rect = pygame.Rect(x0, y0, pw, ph)
+        rows.append((2, hint, 12, (170, 190, 170)))
+        bar = self._draw_rows(rows)
+        if bar is not None:                             # hp bar under the fed line
+            bx, by, bw, bh = bar
+            pygame.draw.rect(self.screen, COLORS["hp_bar_bg"], (bx, by, bw, bh))
+            frac = max(0.0, min(1.0, s.hp / s.max_hp)) if s.max_hp else 0
+            pygame.draw.rect(self.screen, COLORS["hp_bar"] if frac > 0.5 else (230, 160, 60) if frac > 0.25 else (230, 70, 60),
+                             (bx, by, int(bw * frac), bh))
+            self.screen.blit(self.text(f"hp {numbers.fmt(s.hp)} / {numbers.fmt(s.max_hp)}", 13), (bx + 4, by - 1))
+
+    def _draw_rows(self, rows):
+        """Draw a panel of rows: top left in landscape, under the right column
+        on a rotated phone. A (gap, text, size, color) row is wrapped when it
+        is wider than the room (the column's left edge / the screen); a
+        ("bar", height) row reserves a strip and its rect (x, y, w, h) is
+        returned. Sets panel_rect."""
+        p = self.px
+        w = self.screen.get_width()
+        x0 = 8
+        y0 = self.column_bottom + 6 if self.portrait else 8
+        max_w = (w - 16) if self.portrait else max(p(372), self.rects["balance"].left - 16)
+        pad, edge = 10, p(8)
+        items, bar = [], None
+        y, widest = edge, 0
+        for row in rows:
+            if row[0] == "bar":
+                y += p(6)
+                bar = (y, p(row[1]))
+                y += p(row[1]) + p(2)
+                continue
+            gap, text, size, color = row
+            y += p(gap)
+            px_size = prefs.tsize(size)
+            surf = numbers.text(text, px_size, color)
+            lines = [surf] if surf.get_width() <= max_w - 2 * pad else \
+                [numbers.text(line, px_size, color) for line in self._wrap(text, px_size, max_w - 2 * pad)]
+            for line in lines:
+                items.append((y, line))
+                widest = max(widest, line.get_width())
+                y += line.get_height() - 2                # the outline adds 2 px: keep the lines tight
+        pw = min(max_w, max(p(372), widest + 2 * pad))
+        self.panel_rect = pygame.Rect(x0, y0, pw, y + edge)
         self._panel(self.panel_rect)
-        blit = self.screen.blit
-        for dy, surf in rows:
-            blit(surf, (x0 + 10, y0 + dy))
-        # hp bar (drawn over the panel, under the rate line)
-        bx, by, bw, bh = x0 + 10, y0 + p(80), pw - 20, p(12)
-        pygame.draw.rect(self.screen, COLORS["hp_bar_bg"], (bx, by, bw, bh))
-        frac = max(0.0, min(1.0, s.hp / s.max_hp)) if s.max_hp else 0
-        pygame.draw.rect(self.screen, COLORS["hp_bar"] if frac > 0.5 else (230, 160, 60) if frac > 0.25 else (230, 70, 60),
-                         (bx, by, int(bw * frac), bh))
-        blit(T(f"hp {numbers.fmt(s.hp)} / {numbers.fmt(s.max_hp)}", 13), (bx + 4, by - 1))
+        for dy, surf in items:
+            self.screen.blit(surf, (x0 + pad, y0 + dy))
+        return (x0 + pad, y0 + bar[0], pw - 2 * pad, bar[1]) if bar is not None else None
 
     def _draw_hub_alert(self, game):
         """Pulsing red frame along the screen edges while the hub takes damage."""
@@ -436,65 +489,76 @@ class Hud:
         self._alert_surf.set_alpha(int(60 + 170 * pulse))
         self.screen.blit(self._alert_surf, (0, 0))
         txt = self.text("HQ UNDER ATTACK", 22, (255, 90, 90))
-        self.screen.blit(txt, (w // 2 - txt.get_width() // 2, self.px(46)))
+        y = self.content_bottom + self.px(12) if self.portrait else self.px(46)
+        self.screen.blit(txt, (w // 2 - txt.get_width() // 2, y))
 
     def _draw_group_panel(self, game):
         """Drag-box selection: counts per kind, total upgrade / repair /
         demolish figures, and what [C] would cost at the spawners inside."""
         group = game.selected_structures
-        p, T = self.px, self.text
-        x0, y0 = 8, 8                                   # top left, like the single panel
-        rows = []                                       # (dy, surface); the panel grows to the widest line
+        rows = []                                       # (gap, text, size, color): see _draw_rows
         counts = {}
         for s in group:
             counts[s.KIND] = counts.get(s.KIND, 0) + 1
         kinds = ", ".join(f"{DISPLAY_NAMES.get(k, k.capitalize())} x{n}"
                           for k, n in sorted(counts.items(), key=lambda kv: -kv[1]))
-        rows.append((p(8), T(f"{len(group)} structures selected", 15)))
-        rows.append((p(30), T(kinds, 13, (200, 220, 200))))
+        rows.append((0, f"{len(group)} structures selected", 15, COLORS["text"]))
+        rows.append((4, kinds, 13, (200, 220, 200)))
         levels = [s.level for s in group]
-        rows.append((p(50), T(f"levels {min(levels)} - {max(levels)}", 13, (200, 220, 200))))
+        rows.append((4, f"levels {min(levels)} - {max(levels)}", 13, (200, 220, 200)))
         up = sum(c for c in (game.factory.upgrade_cost(s) for s in group) if c)
         missing = sum(max(0, s.max_hp - s.hp) for s in group)
         rep = int(missing * REPAIR_COST_PER_HP + 0.999) if missing else 0
         refund = sum(int(COSTS.get(s.KIND, 0) * 0.5) for s in group)
-        rows.append((p(74), T(f"[U] upgrade all for {numbers.fmt(up)}   [H] repair all for {numbers.fmt(rep)}   "
-                              f"[Del] demolish all +{numbers.fmt(refund)}", 13, (255, 230, 120))))
+        rows.append((8, f"[U] upgrade all for {numbers.fmt(up)}   [H] repair all for {numbers.fmt(rep)}   "
+                        f"[Del] demolish all +{numbers.fmt(refund)}", 13, (255, 230, 120)))
         spawners = [s for s in group if isinstance(s, Spawner)]
-        dy = p(96)
         if spawners:
             n_sp = len(spawners)
-            rows.append((dy, T(f"[C] train a unit at each of {n_sp} spawner{'s' if n_sp > 1 else ''} for "
-                               f"{unit_cost_summary(spawners)}   [RMB] gather point", 12, (255, 230, 120))))
-            dy += p(18)
-        rows.append((dy, T("[Shift+drag] add more   [Esc] deselect", 12, (170, 190, 170))))
-        pw = max(p(372), max(r.get_width() for _, r in rows) + 20)
-        self.panel_rect = pygame.Rect(x0, y0, pw, dy + p(22))
-        self._panel(self.panel_rect)
-        for off, surf in rows:
-            self.screen.blit(surf, (x0 + 10, y0 + off))
+            rows.append((6, f"[C] train a unit at each of {n_sp} spawner{'s' if n_sp > 1 else ''} for "
+                            f"{unit_cost_summary(spawners)}   [RMB] gather point", 12, (255, 230, 120)))
+        rows.append((6, "[Shift+drag] add more   [Esc] deselect", 12, (170, 190, 170)))
+        self._draw_rows(rows)
 
     MINI_W, MINI_H, MINI_TILES = 440, 300, 128      # panel px (2x, John) and tiles shown across
 
     def _draw_minimap(self, game):
+        """Bottom right; on a rotated phone above the toolbar and the Android
+        button rows. Folded (minimap_hidden) it is a "Map" button in the
+        corner the map would fill."""
         w, h = self.screen.get_size()
-        x0, y0 = w - self.MINI_W - 8, h - self.MINI_H - 8
-        self.minimap_rect = pygame.Rect(x0, y0, self.MINI_W, self.MINI_H)
-        if game.frame - self._minimap_frame >= 6 or self._minimap is None:
+        mw, mh = min(self.MINI_W, w - 16), self.MINI_H
+        if self.portrait:
+            above = self.toolbar_rect.top if self.overlay_top is None else min(self.toolbar_rect.top, self.overlay_top)
+            x0, y0 = w - mw - 8, above - 8 - mh
+        else:
+            x0, y0 = w - mw - 8, h - mh - 8
+        if self.minimap_hidden:
+            bw, bh = self.px(120), self.px(26)
+            self.minimap_rect = pygame.Rect(x0 + mw - bw, y0 + mh - bh, bw, bh)
+            self._minimap = None
+            pygame.draw.rect(self.screen, COLORS["panel"], self.minimap_rect, border_radius=4)
+            pygame.draw.rect(self.screen, COLORS["panel_border"], self.minimap_rect, 1, border_radius=4)
+            label = self.text("Map", 14)
+            self.screen.blit(label, (self.minimap_rect.centerx - label.get_width() // 2,
+                                     self.minimap_rect.centery - label.get_height() // 2))
+            return
+        self.minimap_rect = pygame.Rect(x0, y0, mw, mh)
+        if game.frame - self._minimap_frame >= 6 or self._minimap is None or self._minimap.get_size() != (mw, mh):
             self._minimap_frame = game.frame
-            self._minimap = self._build_minimap(game)
+            self._minimap = self._build_minimap(game, mw, mh)
         self.screen.blit(self._minimap, (x0, y0))
-        pygame.draw.rect(self.screen, COLORS["panel_border"], (x0, y0, self.MINI_W, self.MINI_H), 1)
+        pygame.draw.rect(self.screen, COLORS["panel_border"], (x0, y0, mw, mh), 1)
 
-    def _build_minimap(self, game):
-        surf = pygame.Surface((self.MINI_W, self.MINI_H))
+    def _build_minimap(self, game, mw, mh):
+        surf = pygame.Surface((mw, mh))
         surf.fill((14, 26, 16))
         cam = game.camera
-        scale = self.MINI_W / self.MINI_TILES              # px per tile
+        scale = mw / self.MINI_TILES                        # px per tile
         ccx, ccy = cam.x / TILE_SIZE, cam.y / TILE_SIZE     # camera centre in tiles
         tx0 = ccx - self.MINI_TILES / 2
-        ty0 = ccy - (self.MINI_H / scale) / 2
-        tiles_h = self.MINI_H / scale
+        ty0 = ccy - (mh / scale) / 2
+        tiles_h = mh / scale
         self._mini_origin = (tx0, ty0, scale)
 
         def to_px(tx, ty):
@@ -543,11 +607,17 @@ class Hud:
         surf = self.text(text, 20, (255, 90, 90) if urgent else (220, 230, 220))
         sw, ph = surf.get_width(), self.px(32)
         x, y = w // 2 - sw // 2, 8
-        pr = self.panel_rect
-        if pr is not None and x - 10 < pr.right + 6:      # a wide structure panel (big text): step aside
-            x = pr.right + 16
-            if x + sw + 16 > self.rects["balance"].left:  # no room beside it: under it
-                x, y = w // 2 - sw // 2, pr.bottom + 6
+        col_left = self.rects["balance"].left
+        if self.portrait:                                 # rotated phone: top left beside the column, else under it all
+            x = 18                                        # the panel starts at 8
+            if x + sw + 16 > col_left:
+                x, y = w // 2 - sw // 2, self.content_bottom + 6
+        else:
+            pr = self.panel_rect
+            if pr is not None and x - 10 < pr.right + 6:  # a wide structure panel (big text): step aside
+                x = pr.right + 16
+                if x + sw + 16 > col_left:                # no room beside it: under it
+                    x, y = w // 2 - sw // 2, pr.bottom + 6
         self.wave_rect = pygame.Rect(x - 10, y, sw + 20, ph)
         self._panel(self.wave_rect)
         self.screen.blit(surf, (x, y + (ph - surf.get_height()) // 2))
@@ -566,6 +636,7 @@ class Hud:
         "the selected building(s) (a boxed group too), else the one under the cursor.",
         "click = select (panel on the right); drag a box = select many (U upgrades / H repairs them all)   RMB = cancel",
         "wheel zoom   MMB drag / WASD pan (Shift fast)   Space pause   [ ] sim speed x1 x2 x4   F3 debug   F11 fullscreen",
+        "Minimap: click it to fold it into a Map button (click the button to unfold); right-click the minimap to look there.",
         "Belts: items enter from behind or the sides; a belt pointing INTO another belt's front FEEDS it (levels it up).",
         "Machines: every side but the front is an input (left = A, right = B, back = the emptier one); output in front.",
         "HQ: deliver from any side = income.  Feed sides (yellow) level belts/walls/spawners; U levels anything.",
@@ -620,11 +691,18 @@ class Hud:
 
     def _draw_messages(self):
         w = self.screen.get_width()
-        y = max(self.px(80), self.wave_rect.bottom + self.px(40))   # under the wave timer, wherever it went
+        if self.portrait:                                  # under the column, the panel and the timer
+            y = max(self.content_bottom, self.wave_rect.bottom) + self.px(16)
+        else:
+            y = max(self.px(80), self.wave_rect.bottom + self.px(40))   # under the wave timer, wherever it went
+        size = prefs.tsize(18)
         for text, ttl in self.messages:
-            surf = self.text(text, 18, (255, 220, 120))
-            if ttl < 0.6:
-                surf = surf.copy()
-                surf.set_alpha(int(255 * ttl / 0.6))
-            self.screen.blit(surf, (w // 2 - surf.get_width() // 2, y))
-            y += self.px(24)
+            surf = numbers.text(text, size, (255, 220, 120))
+            lines = [surf] if surf.get_width() <= w - 16 else \
+                [numbers.text(line, size, (255, 220, 120)) for line in self._wrap(text, size, w - 16)]
+            for surf in lines:                          # a narrow (portrait) screen: wrapped, never cut off
+                if ttl < 0.6:
+                    surf = surf.copy()
+                    surf.set_alpha(int(255 * ttl / 0.6))
+                self.screen.blit(surf, (w // 2 - surf.get_width() // 2, y))
+                y += self.px(24)

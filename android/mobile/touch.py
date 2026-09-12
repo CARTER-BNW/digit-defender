@@ -319,6 +319,7 @@ class TouchLayer:
             out.append((pygame.Rect(x, y, bw, bh), label, action))
             x += bw + gap
         self.buttons = out
+        hud.overlay_top = min(r.top for r, _, _ in out) if out else None   # portrait: the minimap goes above the rows
         return out
 
     def hit(self, pos):

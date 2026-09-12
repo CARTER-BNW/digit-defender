@@ -6,8 +6,11 @@ with the touch layer (mobile.touch) on top of the untouched Game / Menu.
 
 --desktop runs the phone layout in a window on the PC: the mouse acts as one
 finger (left button = tap / drag / long press), wheel and the other buttons
-stay native. On the phone the display is a logical 720-px-high canvas scaled
-to the screen (pygame.SCALED), so the HUD keeps its desktop layout.
+stay native. On the phone the display is a logical canvas 720 px along its
+short side, scaled to the screen (pygame.SCALED): 1616x720 landscape, 720x1616
+portrait on a Pixel 9a. The app follows the phone's rotation (SDL orientation
+hint); fit_display() re-creates the canvas when the window's aspect flips and
+the HUD lays itself out for portrait (ui.hud: stacked panels, two toolbar rows).
 """
 import argparse
 import os
@@ -24,11 +27,15 @@ from ui.menu import Menu
 from game import Game
 from .touch import TouchLayer, STATE, FINGER_EVENTS
 
-LOGICAL_H = 720
-MIN_LOGICAL_W = 1180                  # narrower and the toolbar + minimap would not fit
+LOGICAL_H = 720                       # landscape: 720 px high, the width from the aspect
+LOGICAL_W_PORTRAIT = 720              # portrait: 720 px wide, the height from the aspect
+MIN_LOGICAL_W = 1180                  # landscape: narrower and the toolbar + minimap would not fit
 DEFAULT_DESKTOP_SIZE = (1616, 720)    # a Pixel 9a's 2424x1080 at 1.5x
+ORIENTATIONS = "LandscapeLeft LandscapeRight Portrait PortraitUpsideDown"   # SDL hint: rotate with the phone
 
 MOUSE_EVENTS = (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION, pygame.MOUSEWHEEL)
+RESIZE_EVENTS = tuple(getattr(pygame, name) for name in ("WINDOWSIZECHANGED", "WINDOWRESIZED", "VIDEORESIZE")
+                      if hasattr(pygame, name))
 K_AC_BACK = getattr(pygame, "K_AC_BACK", -1)
 BACKGROUND_EVENTS = tuple(getattr(pygame, name) for name in
                           ("APP_WILLENTERBACKGROUND", "APP_DIDENTERBACKGROUND", "APP_TERMINATING")
@@ -49,6 +56,7 @@ class MobileGame(Game):
     SDL mirrors from touches are dropped, fingers drive everything. False
     (--desktop): the left mouse button acts as a finger."""
     touch_only = True
+    fit_flags = pygame.SCALED | pygame.FULLSCREEN   # the phone's canvas; tests pass 0 (dummy driver)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -57,10 +65,25 @@ class MobileGame(Game):
         orig = self.hud.over_ui
         self.hud.over_ui = lambda pos, _o=orig: _o(pos) or self.touch.hit(pos)
         self._mouse_finger = False
+        self.touch.layout()                     # hud.overlay_top before the first frame (portrait minimap spot)
 
     def dispatch(self, ev):
         """The desktop handler (what the touch layer feeds)."""
         Game.handle_event(self, ev)
+
+    def refit(self):
+        """The phone was rotated: a new logical canvas for the new aspect;
+        camera, renderer, HUD and the finger position follow."""
+        before = self.screen.get_size()
+        new = fit_display(self.screen, self.fit_flags)
+        if new is not self.screen or new.get_size() != before:   # pygame may resize the surface in place
+            self.screen = new
+            self.renderer.screen = new
+            self.hud.screen = new
+            self.camera.resize(*new.get_size())
+            STATE["last_pos"] = (new.get_width() // 2, new.get_height() // 2)
+            self.touch.cancel_drag()
+        return new
 
     def handle_event(self, ev):
         t = ev.type
@@ -68,6 +91,9 @@ class MobileGame(Game):
             self.touch.handle(ev)
             return
         if t == pygame.MULTIGESTURE:
+            return
+        if t in RESIZE_EVENTS:
+            self.refit()
             return
         if t in BACKGROUND_EVENTS:
             self.background_save()
@@ -107,6 +133,8 @@ class MobileGame(Game):
 
     def update(self, dt):
         self.touch.update(dt)                   # long press before the frame acts on it
+        if self.frame % 30 == 0:                # a rotation SDL did not report as an event
+            self.refit()
         super().update(dt)
 
     def draw(self):
@@ -125,6 +153,11 @@ class MobileGame(Game):
 
 class MobileMenu(Menu):
     fullscreen_toggle = False               # the phone is always fullscreen: no Settings row for it
+
+    def _tick(self):
+        if MobileGame.touch_only:           # the phone may rotate while the menu is up
+            fit_display(pygame.display.get_surface(), MobileGame.fit_flags)
+        return super()._tick()
 
     def _toggle_fullscreen(self):
         self.config["fullscreen"] = True
@@ -177,17 +210,44 @@ def uninstall_patches():
 
 # ---- display --------------------------------------------------------------------
 
+def logical_size(nw, nh):
+    """Logical canvas for a native window: 720 px along the short side, the
+    long side from the aspect (landscape at least MIN_LOGICAL_W wide)."""
+    if nh > nw:
+        scale = nw / LOGICAL_W_PORTRAIT if nw > 0 else 1.0
+        return (LOGICAL_W_PORTRAIT, max(LOGICAL_W_PORTRAIT, int(round(nh / scale))))
+    scale = nh / LOGICAL_H if nh > 0 else 1.0
+    return (max(MIN_LOGICAL_W, int(round(nw / scale))), LOGICAL_H)
+
+
+def fit_display(current, flags=pygame.SCALED | pygame.FULLSCREEN):
+    """The window's aspect flipped (the phone was rotated): re-create the
+    logical canvas for it. Returns the surface to draw on: a new one, or
+    `current` when nothing changed or set_mode failed."""
+    try:
+        ww, wh = pygame.display.get_window_size()
+    except pygame.error:
+        return current
+    if ww <= 0 or wh <= 0 or (wh > ww) == (current.get_height() > current.get_width()):
+        return current
+    size = logical_size(ww, wh)
+    try:
+        screen = pygame.display.set_mode(size, flags)
+    except pygame.error as exc:
+        print(f"[mobile] relayout to {size[0]}x{size[1]} failed ({exc})")
+        return current
+    print(f"[mobile] window {ww}x{wh} -> logical {size[0]}x{size[1]}")
+    return screen
+
+
 def open_display(args, android):
     if android and not args.desktop:
         info = pygame.display.Info()
         nw, nh = info.current_w, info.current_h
-        if nw < nh:
-            nw, nh = nh, nw
-        scale = nh / LOGICAL_H if nh > 0 else 1.0
-        lw = max(MIN_LOGICAL_W, int(round(nw / scale)))
+        size = logical_size(nw, nh)
         try:
-            screen = pygame.display.set_mode((lw, LOGICAL_H), pygame.SCALED | pygame.FULLSCREEN)
-            print(f"[mobile] display {nw}x{nh} -> logical {lw}x{LOGICAL_H} (scaled {scale:.2f}x)")
+            screen = pygame.display.set_mode(size, pygame.SCALED | pygame.FULLSCREEN)
+            print(f"[mobile] display {nw}x{nh} -> logical {size[0]}x{size[1]}")
             return screen
         except pygame.error as exc:
             print(f"[mobile] SCALED display failed ({exc}); using the native resolution")
@@ -218,6 +278,7 @@ def main(argv=None):
     touch_only = android and not args.desktop
     if android:
         os.environ.setdefault("SDL_ANDROID_TRAP_BACK_BUTTON", "1")   # back = Escape, never kills the app
+        os.environ.setdefault("SDL_IOS_ORIENTATIONS", ORIENTATIONS)  # SDL_HINT_ORIENTATIONS: follow the rotation
     MobileGame.touch_only = touch_only
     pygame.init()
     numbers.reset()
@@ -260,6 +321,7 @@ def main(argv=None):
             game.autosave_s = args.autosave
         result = game.run(max_frames=args.frames)
         config["last_world"] = meta["slug"]
+        config["minimap"] = not game.hud.minimap_hidden
         persistence.save_config(config)
         if result == "reload":
             continue

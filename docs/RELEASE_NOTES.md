@@ -1,5 +1,24 @@
 # Release notes
 
+## v0.3.0 - portrait mode and a fold-away minimap (2026-09-12)
+
+**Android:** `digitdefender-0.3.0-arm64-v8a-debug.apk` (Android 7.0 or newer, 64-bit phones). Installs over
+0.2.0 and keeps the saves. **Windows:** `DigitDefender-0.3.0-win64.zip` (unzip, run `DigitDefender.exe`;
+SmartScreen: "More info", then "Run anyway").
+
+### New
+- Portrait mode on the phone: the app follows the phone's rotation (pin one with the phone's rotation lock).
+  In portrait the panels stack under the balance and targets, the toolbar wraps into two rows of seven, and
+  the minimap sits above the button row; landscape is unchanged.
+- Minimap: tap (click) it to fold it into a "Map" button in its corner, tap the button to unfold it. A long
+  press (right click) on the minimap looks at that spot. The folded state is remembered between sessions.
+- Long messages wrap on a narrow screen, and panel lines wrap to the room at the bigger text sizes.
+
+### Known issues
+- Everything listed under v0.2.0, plus: the rotation was only exercised on the PC (the phone was away when
+  this build was made). If the screen comes up letterboxed or squashed after a rotation, rotate back and
+  forth once or restart the app, and please report it with the phone model.
+
 ## v0.2.0 - first public test build (2026-09-12)
 
 Digit Defender is a factory-builder crossed with base defence on an endless grid: mine the digits 1-9,

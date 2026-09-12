@@ -64,7 +64,29 @@ make the button and text adjustable in menu. no zoom buttons, I can pinch. in me
     README.txt + VERSION in the folder); `world/persistence.ROOT` = the exe's folder when frozen so saves and
     config.json sit next to DigitDefender.exe. The zip is attached to release v0.2.0; README.md and
     docs/RELEASE_NOTES.md gained the Windows steps; CLAUDE.md's release recipe includes the zip.
-- **Open:** John to install 0.2.0 (release page or `sync.py install run`) and re-test; at the extreme Settings
+- Round 3 (same day, "can there be a portrait mode, option click on the Minimap to hide it into a button then
+  click on it again to show it. Update the release"), release v0.3.0 (tests 170 -> 178):
+  - `ui/hud.py`: `portrait` (h > w) layout - `buttons()` wraps the toolbar to two rows of seven across the width;
+    the structure / group panels go under the right column at full width through the new `_draw_rows` (rows as
+    (gap, text, size, color) / ("bar", h), lines wider than the room wrapped; landscape caps the panel at the
+    column's left edge); wave timer top left or under everything; messages wrap to the width and, in portrait,
+    sit under the content; hints limited to the upper half; the minimap sits above the toolbar and above the
+    Android button rows (`overlay_top`). `minimap_hidden`: click = fold into a "Map" button (120x26 in the
+    minimap's corner), click = unfold; `minimap_recentre` = right click looks there (`Game._right_click`);
+    config key "minimap" via `Game.apply_config`, saved by main.py / entry.py. Help line added.
+  - `android/mobile/entry.py`: `SDL_IOS_ORIENTATIONS` hint (all four) so SDL requests FULL_SENSOR;
+    `logical_size(nw, nh)` = 720 px on the short side (1616x720 / 720x1616 on the Pixel 9a); `fit_display` +
+    `MobileGame.refit` (resize events, every 30 frames) and `MobileMenu._tick` re-create the SCALED canvas when
+    the window's aspect flips (size comparison: pygame resizes the surface in place); `buildozer.spec`
+    `orientation` lists all four. `touch.layout` publishes `hud.overlay_top`; MobileGame runs one layout at init.
+  - Tests: `tests/test_portrait.py` (8: two toolbar rows, stacked panels, wrapped panel lines at 150%, minimap
+    fold / unfold / right-click look, config state, `logical_size`, `refit` with a mocked window size, a phone
+    tap folding the minimap in portrait); three test_game right clicks moved off the minimap area. 178 green.
+  - Verification: headless 720x1616 screenshots (idle, spawner panel under the column, folded Map button with the
+    belt tool, 150% text + hints, help, game over) and landscape with the folded button. NOT verified on the
+    phone (away): the rotation path (SDL hint + refit) is the first thing to check when it is back.
+- **Open:** John to install 0.3.0 (release page or `sync.py install run`) and check the rotation on the device;
+  at the extreme Settings
   (180% + 200%) the timer / messages sit under the button rows; "waves paused" leaves camp raids alone (ask if he
   wants both); tester issues on GitHub; economy / Phase 4 checkbox / Phase 6 leftovers as before.
 

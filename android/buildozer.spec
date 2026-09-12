@@ -8,11 +8,12 @@ source.dir = app
 source.include_exts = py,png,jpg,jpeg,ttf,otf,txt,json
 source.exclude_dirs = tests,saves,__pycache__,docs
 source.exclude_patterns = crash.log,config.json*
-version = 0.2.0
+version = 0.3.0
 # pygame = pygame-ce 2.5.8 via the local recipe in p4a-recipes/ (the stock recipe's pygame 2.1.0 cannot build on Python 3.14)
 requirements = python3,pygame,numpy,opensimplex
 p4a.local_recipes = ./p4a-recipes
-orientation = landscape
+# every orientation: the app follows the phone's rotation (SDL hint in mobile/entry.py; portrait HUD in ui/hud.py)
+orientation = landscape, portrait, landscape-reverse, portrait-reverse
 fullscreen = 1
 icon.filename = icon.png
 presplash.filename = presplash.png

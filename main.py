@@ -67,6 +67,7 @@ def main(argv=None):
         result = game.run(max_frames=args.frames)
         config["last_world"] = meta["slug"]
         config["fullscreen"] = game.fullscreen
+        config["minimap"] = not game.hud.minimap_hidden
         persistence.save_config(config)
         if result == "reload":
             continue                                  # Game.load re-reads the last save

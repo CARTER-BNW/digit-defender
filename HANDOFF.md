@@ -26,6 +26,23 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
   for 32-bit phones at the cost of a long first build and a bigger APK). PC testers get
   `DigitDefender-0.2.0-win64.zip` from the same release: `python build_pc.py` (PyInstaller one-folder app,
   assets bundled, saves/config next to the exe because `persistence.ROOT` follows `sys.executable` when frozen).
+- **Phone round 3 (2026-09-12, release v0.3.0):** portrait mode + fold-away minimap. `ui/hud.py` lays out for
+  h > w: the right column stays top right, the structure / group panel goes UNDER it full width (`_draw_rows`
+  wraps lines wider than the room, also used in landscape so big text never reaches the column), the wave
+  timer sits top left (or under everything when it does not fit), messages wrap and go under the content,
+  the toolbar wraps to 2 x 7, the minimap sits above the toolbar and above the Android rows (`overlay_top`,
+  set by touch.layout each frame; MobileGame.__init__ runs one layout so the first frame is right).
+  `minimap_hidden` (config "minimap", `Game.apply_config`, saved by main/entry): a click folds the minimap
+  into a 120x26 "Map" button in its corner, a click on the button unfolds it; a RIGHT click on the minimap
+  looks there (`Hud.minimap_recentre`, first thing in `Game._right_click`; three test_game right clicks moved
+  off the minimap area). Android: `SDL_IOS_ORIENTATIONS` hint (= SDL_HINT_ORIENTATIONS) lists all four
+  orientations so SDL requests FULL_SENSOR; buildozer `orientation` lists all four; `entry.logical_size`
+  puts 720 px on the short side; `fit_display` / `MobileGame.refit` re-create the SCALED canvas when
+  `pygame.display.get_window_size()` flips aspect (resize events + every 30 frames; pygame may resize the
+  surface in place, so refit compares sizes); `MobileMenu._tick` does the same in the menu. **Rotation is
+  only PC-verified** (headless 720x1616 + a mocked window size); the phone was away - first thing to check
+  on the device (`adb shell settings put system accelerometer_rotation 1`, then physically rotate; or
+  `adb shell settings put system user_rotation 1` with accelerometer_rotation 0).
 - **Android copy (2026-09-12, STATUS v9):** `android/` = the untouched desktop game + `android/mobile/` (touch
   layer: tap / long press / drags / pinch / two-finger tap + on-screen hotkey buttons; `entry.py` is the APK's
   main), packaged by python-for-android inside the WSL distro `dd-android` (Ubuntu on `D:\WSL`, everything on
@@ -313,8 +330,9 @@ tests must keep their tiles clear of the right column (x >= 932 px) and the mini
    Esc / Del / Pick / HQ / zoom buttons. Expect follow-ups on the same lines (which button shows when, the sizes,
    whether "waves paused" should also stop camp raids). Change the touch layer or the desktop code, then
    `/android_update_copy` (sync -> build -> install -> run -> logs); the desktop code stays the master and
-   `android/app/` is never edited by hand. APK 0.2.0 was built while his phone was away: install it with
-   `python android\sync.py install run` when it is plugged in again (or he installs it from the GitHub release).
+   `android/app/` is never edited by hand. APK 0.3.0 (portrait + minimap fold) was built while his phone was
+   away: install it with `python android\sync.py install run` when it is plugged in again (or he installs it
+   from the GitHub release), then verify the rotation on the device (see the phone round 3 bullet).
    Testers' reports arrive as GitHub issues on CARTER-BNW/digit-defender; new builds = a new release
    (CLAUDE.md "Releases for testers").
 1. Expect the next round of play-test feedback (John gives tile coordinates / screenshots, usually from the Test Lab):

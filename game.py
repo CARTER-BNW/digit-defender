@@ -100,6 +100,7 @@ class Game:
         pause (the text / button scales live in ui.prefs)."""
         self.show_hints = bool(config.get("hints", True))
         self.combat.waves_paused = bool(config.get("waves_paused", False))
+        self.hud.minimap_hidden = not bool(config.get("minimap", True))   # folded into its Map button
 
     # ---- persistence -----------------------------------------------------
 
@@ -499,7 +500,10 @@ class Game:
 
     def _right_click(self, pos):
         """Cancel the tool; else move the selected units / set the selected
-        spawner's gather point at the cursor; else clear the selection."""
+        spawner's gather point at the cursor; else clear the selection. On
+        the minimap: look at that spot (a left click folds the minimap)."""
+        if self.hud.minimap_recentre(pos, self):
+            return
         if self.tool is not None:
             self.set_tool(None)
             return

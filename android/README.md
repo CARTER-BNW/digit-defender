@@ -29,8 +29,11 @@ later builds take a few minutes.
   through `p4a-recipes/pygame`, NDK r28c, targetSdk 36 (Android 16's Play Protect refuses sideloaded APKs
   targeting 33), predictive back disabled in the manifest (`manifest_application_args.xml`) so the Back key
   reaches the game. docs/GOTCHAS.md explains each of those.
-- Logical canvas: 720 px high, width from the screen aspect (Pixel 9a: 1616x720), scaled up by SDL
-  (`pygame.SCALED`), so the HUD keeps its desktop layout. Landscape only, immersive fullscreen.
+- Logical canvas: 720 px along the short side, the long side from the screen aspect (Pixel 9a: 1616x720
+  landscape, 720x1616 portrait), scaled up by SDL (`pygame.SCALED`). The app follows the phone's rotation
+  (SDL orientation hint set in `mobile/entry.py`; `fit_display()` re-creates the canvas when the aspect
+  flips) and the HUD lays itself out for portrait (panels stacked under the right column, two toolbar
+  rows, the minimap above the button row). Immersive fullscreen.
 - Saves and config: `/data/data/org.johncarter.digitdefender/files/digit_defender/` (survive updates;
   an uninstall deletes them). `adb shell run-as org.johncarter.digitdefender ls files/digit_defender/saves`.
 - The app saves when it goes to the background and every 60 s; the Back button acts as Escape
@@ -47,6 +50,9 @@ later builds take a few minutes.
 | two-finger drag | pan (also while a tool is active) |
 | pinch | zoom in / out one step per 22% change, anchored at the pinch |
 | two-finger tap | middle click: patrol between the rally point and the tap (units selected) |
+| tap the minimap | fold it into a **Map** button in its corner; tap the button to unfold it (remembered) |
+| hold on the minimap, lift | look at that spot |
+| rotate the phone | portrait or landscape layout |
 | Back button | Escape |
 
 On-screen buttons sit in one row just above the toolbar and appear only while they can do

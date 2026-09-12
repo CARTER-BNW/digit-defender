@@ -107,9 +107,9 @@ def test_rally_right_click_on_selected_spawner(game):
     frames(game, 1)
     sp = game.factory.place("spawner_melee", 4, 4, 2, free=True)
     game.selected = sp
-    pos = game.camera.tile_to_screen(9, 9)
+    pos = game.camera.tile_to_screen(-9, -9)              # clear of the minimap (a right click there looks around)
     game.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=3, pos=(pos[0] + 16, pos[1] + 16)))
-    assert sp.rally is not None and abs(sp.rally[0] - 9.5) < 0.01 and abs(sp.rally[1] - 9.5) < 0.01
+    assert sp.rally is not None and abs(sp.rally[0] + 8.5) < 0.01 and abs(sp.rally[1] + 8.5) < 0.01
     game.selected = None
     game.set_tool("belt")
     game.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=3, pos=(10, 10)))
@@ -161,8 +161,8 @@ def test_click_spawner_trains_and_units_are_commanded(game):
     _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (3, 6))
     _mouse(game, pygame.MOUSEBUTTONUP, 1, (3, 6))
     assert game.selected_units == [u] and game.selected is None
-    _mouse(game, pygame.MOUSEBUTTONDOWN, 3, (9, 2))
-    assert u.rally == (9.5, 2.5)
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 3, (-9, 2))       # clear of the minimap (a right click there looks around)
+    assert u.rally == (-8.5, 2.5)
     # drag a box on empty ground around two units
     v = game.combat.spawn_unit("melee", 8.5, 8.5)
     _mouse(game, pygame.MOUSEBUTTONDOWN, 1, (2, 5), dx=2, dy=2)
@@ -174,8 +174,8 @@ def test_click_spawner_trains_and_units_are_commanded(game):
     # RMB on a selected spawner sets its gather point (tile centre)
     game.selected_units = []
     game.selected = sp
-    _mouse(game, pygame.MOUSEBUTTONDOWN, 3, (9, 9))
-    assert sp.rally == (9.5, 9.5)
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 3, (-9, 9))
+    assert sp.rally == (-8.5, 9.5)
     # Esc clears a unit selection before it leaves to the menu
     game.selected_units = [u]
     game.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE, mod=0, unicode=""))
@@ -410,8 +410,8 @@ def test_right_click_sets_gather_point_for_a_boxed_group_of_spawners(game):
     _mouse(game, pygame.MOUSEBUTTONUP, 1, (6, 2), dx=20, dy=20)
     assert game.selected_structures == [a, b] and game.selected_units == []
     frames(game, 1)                                                # flags for both draw
-    _mouse(game, pygame.MOUSEBUTTONDOWN, 3, (9, 6))
-    assert a.rally == b.rally == (9.5, 6.5)
+    _mouse(game, pygame.MOUSEBUTTONDOWN, 3, (-9, 6))       # clear of the minimap (a right click there looks around)
+    assert a.rally == b.rally == (-8.5, 6.5)
     assert ua.rally == (3.5, 7.5) and ub.rally == (5.5, 7.5)        # units already out stay put (John)
     assert game.selected_structures == [a, b]                      # the group stays selected
     game.factory.balance = 1000

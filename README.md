@@ -20,6 +20,8 @@ Written in Python with pygame-ce. Runs on a PC from source and on Android as an 
 4. Controls: [android/README.md](android/README.md) (tap, hold, drag, pinch, two-finger tap, the button
    row above the toolbar). The in-game **Help** button lists the rules; **Menu > Settings** has text and
    button sizes, info hints and a switch to pause the enemy waves while you learn the factory side.
+   Play in landscape or portrait: rotate the phone and the layout re-flows. Tap the minimap to fold it
+   into a button, tap the button to bring it back.
 5. Feedback: open a GitHub issue with what you did, what you expected, what happened, your phone model
    and Android version, and a screenshot if you have one.
 
