@@ -16,12 +16,16 @@ missing or corrupt, so a process kill never loses more than one save.
 import json
 import os
 import random
+import sys
 import time
 from pathlib import Path
 
 from settings import CHUNK_SIZE, SAVE_VERSION
 
-ROOT = Path(__file__).resolve().parent.parent
+if getattr(sys, "frozen", False):                 # PyInstaller build (build_pc.py): next to the exe
+    ROOT = Path(sys.executable).resolve().parent
+else:
+    ROOT = Path(__file__).resolve().parent.parent
 _saves_dir = ROOT / "saves"
 CONFIG_PATH = ROOT / "config.json"
 DEFAULT_CONFIG = {"fullscreen": False, "last_world": None, "hints": True,

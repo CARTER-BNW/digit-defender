@@ -23,7 +23,9 @@ New-session bootstrap. Read this, then docs/PLAN.md (design authority), docs/PHA
   the Box button stays as the explicit way. The repo is public on GitHub (CARTER-BNW/digit-defender) with release
   v0.2.0 (APK attached, notes in docs/RELEASE_NOTES.md, tester-facing README.md) - John: "so people can test".
   The APK needs Android 7.0+ (minapi 24) on a 64-bit phone (arm64 only; add `armeabi-v7a` to `android.archs`
-  for 32-bit phones at the cost of a long first build and a bigger APK).
+  for 32-bit phones at the cost of a long first build and a bigger APK). PC testers get
+  `DigitDefender-0.2.0-win64.zip` from the same release: `python build_pc.py` (PyInstaller one-folder app,
+  assets bundled, saves/config next to the exe because `persistence.ROOT` follows `sys.executable` when frozen).
 - **Android copy (2026-09-12, STATUS v9):** `android/` = the untouched desktop game + `android/mobile/` (touch
   layer: tap / long press / drags / pinch / two-finger tap + on-screen hotkey buttons; `entry.py` is the APK's
   main), packaged by python-for-android inside the WSL distro `dd-android` (Ubuntu on `D:\WSL`, everything on

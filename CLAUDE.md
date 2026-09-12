@@ -34,6 +34,7 @@ Design is finalized and approved — @docs/PLAN.md is the authority.
 ## Architecture map
 Add one line per file as files are created, stating what that file owns (layout: @docs/PLAN.md §1).
 - `main.py` — entry point: pygame init, config, menu loop; `--world NAME [--seed]` skips the menu, `--frames N` auto-quit, `--autosave S`, `--fullscreen`
+- `build_pc.py` — Windows test build: PyInstaller one-folder app + `dist/DigitDefender-<ver>-win64.zip` (version from android/VERSION; assets bundled; `world/persistence.ROOT` = the exe's folder when frozen)
 - `settings.py` — every tunable (grid, timestep, zoom, economy, belts, leveling, gen, combat, colors); pygame-free
 - `conftest.py` — forces SDL dummy drivers so pytest runs headless
 - `world/tiles.py` — tile-id registry (ground shades 0-5, DEPOSIT_1..9 = 11..19, NEST_GROUND/CORE) + predicates
@@ -70,8 +71,9 @@ Add one line per file as files are created, stating what that file owns (layout:
 - Phase gates: don't start the next phase until the current phase's checkpoints are verified (`/phase-gate`).
 - End of session: new vN entry in @STATUS.md, refresh HANDOFF.md, commit and push (`/session-wrap`). Remote:
   https://github.com/CARTER-BNW/digit-defender (public since 2026-09-12 so testers can grab the APK; John's call).
-- Releases for testers: `python android\sync.py sync build --version X.Y.Z`, add a section to @docs/RELEASE_NOTES.md,
-  commit, then `gh release create vX.Y.Z android/bin/digitdefender-X.Y.Z-arm64-v8a-debug.apk --title ... --notes-file ...`.
+- Releases for testers: `python android\sync.py sync build --version X.Y.Z` (APK) and `python build_pc.py` (Windows zip),
+  add a section to @docs/RELEASE_NOTES.md, commit, then `gh release create vX.Y.Z android/bin/digitdefender-X.Y.Z-arm64-v8a-debug.apk
+  dist/DigitDefender-X.Y.Z-win64.zip --title ... --notes-file ...`.
 - Android copy: after desktop changes John wants on the phone, run `/android_update_copy` (the desktop code is the master; only `android/mobile/` is phone-specific).
 - Never commit data dumps, logs, saves/, or secrets — .gitignore covers these; keep it that way.
 

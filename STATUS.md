@@ -59,6 +59,11 @@ make the button and text adjustable in menu. no zoom buttons, I can pinch. in me
     github.com/CARTER-BNW/digit-defender created public with `gh`, release v0.2.0 with the APK attached
     (`python android\sync.py sync build --version 0.2.0`). The phone was gone before the build finished: 0.2.0 is
     not on it yet.
+  - "and the repo and release for the pc ver?": `build_pc.py` (new) = PyInstaller one-folder Windows build +
+    `dist/DigitDefender-0.2.0-win64.zip` (assets bundled, numba/tkinter/pytest excluded, icon from android/icon.png,
+    README.txt + VERSION in the folder); `world/persistence.ROOT` = the exe's folder when frozen so saves and
+    config.json sit next to DigitDefender.exe. The zip is attached to release v0.2.0; README.md and
+    docs/RELEASE_NOTES.md gained the Windows steps; CLAUDE.md's release recipe includes the zip.
 - **Open:** John to install 0.2.0 (release page or `sync.py install run`) and re-test; at the extreme Settings
   (180% + 200%) the timer / messages sit under the button rows; "waves paused" leaves camp raids alone (ask if he
   wants both); tester issues on GitHub; economy / Phase 4 checkbox / Phase 6 leftovers as before.

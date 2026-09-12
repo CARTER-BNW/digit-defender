@@ -10,7 +10,11 @@ landscape. It is a sideloaded test build, not from the Play Store: allow "instal
 you open it with and accept the Play Protect warning ("Install anyway"). Updates install over the previous
 version and keep the saves.
 
-**PC:** clone the repo, `pip install -r requirements.txt`, `python main.py` (Python 3.12).
+**Windows:** `DigitDefender-0.2.0-win64.zip`: unzip anywhere, run `DigitDefender.exe`. It is an unsigned test
+build, so SmartScreen warns: "More info", then "Run anyway". Saves and settings are written next to the exe.
+Windows 10/11, 64-bit. Linux and macOS: run from source.
+
+**From source (any OS):** clone the repo, `pip install -r requirements.txt`, `python main.py` (Python 3.12).
 
 ### What is in this build
 - Factory: miners on digit deposits, belts drawn by dragging (auto-turning preview, merges, forced T-splits,

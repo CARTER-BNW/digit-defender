@@ -23,8 +23,16 @@ Written in Python with pygame-ce. Runs on a PC from source and on Android as an 
 5. Feedback: open a GitHub issue with what you did, what you expected, what happened, your phone model
    and Android version, and a screenshot if you have one.
 
-## Play on a PC (from source)
+## Play on Windows (testers)
+Download `DigitDefender-<version>-win64.zip` from the
+[Releases page](https://github.com/CARTER-BNW/digit-defender/releases), unzip it anywhere and run
+`DigitDefender.exe`. SmartScreen warns about an unknown publisher on an unsigned test build: "More info",
+then "Run anyway". Saves and settings are written next to the exe, so keep the folder together; a newer
+build can replace the folder (copy `saves/` across). F1 in the game shows the controls and rules.
+
+## Play from source (Windows, Linux, macOS)
 Python 3.12. `pip install -r requirements.txt`, then `python main.py` (world menu) or `run.bat`.
+`python build_pc.py` makes the Windows zip above (PyInstaller, one-folder app).
 `python main.py --world NAME` skips the menu; `python main.py --testworld` (or the menu entry "Test lab")
 opens a hand-built world with every part and junction type laid out around the HQ (`world/testworld.py`
 has the legend). F1 shows the controls and rules in the game. Tests: `python -m pytest -q`.
